@@ -35,3 +35,6 @@ DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "Europe/Moscow")
 TOKENS_DIR = "./tokens"
 os.makedirs(TOKENS_DIR, exist_ok=True)
 
+# Web App
+WEB_APP_URL = os.getenv("WEB_APP_URL")  # HTTPS URL веб-приложения (GitHub Pages)
+

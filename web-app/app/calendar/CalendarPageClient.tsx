@@ -29,27 +29,28 @@ export function CalendarPageClient() {
 
   const loadEvents = async () => {
     try {
-      const monthStart = startOfMonth(selectedDate)
-      const monthEnd = endOfMonth(selectedDate)
-
-      const response = await fetch(
-        `/api/events?from=${format(monthStart, "yyyy-MM-dd")}&to=${format(monthEnd, "yyyy-MM-dd")}`
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        setEvents(data.events || [])
+      // Для статического экспорта используем Telegram Web App API или localStorage
+      const storedEvents = localStorage.getItem("tracy_events")
+      if (storedEvents) {
+        const parsedEvents = JSON.parse(storedEvents)
+        setEvents(parsedEvents)
 
         // Count events by date
         const counts: Record<string, number> = {}
-        data.events?.forEach((event: Event) => {
+        parsedEvents.forEach((event: Event) => {
           const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
           counts[dateKey] = (counts[dateKey] || 0) + 1
         })
         setEventsByDate(counts)
+      } else {
+        // Если нет данных, показываем пустой календарь
+        setEvents([])
+        setEventsByDate({})
       }
     } catch (error) {
       console.error("Failed to load events:", error)
+      setEvents([])
+      setEventsByDate({})
     } finally {
       setLoading(false)
     }

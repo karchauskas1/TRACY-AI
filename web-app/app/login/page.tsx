@@ -1,37 +1,38 @@
 "use client"
 
 import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Script from "next/script"
 
 declare global {
   interface Window {
+    Telegram?: {
+      WebApp: any
+    }
     onTelegramAuth?: (user: any) => void
   }
 }
 
 export default function LoginPage() {
+  const router = useRouter()
   const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
 
   useEffect(() => {
-    window.onTelegramAuth = async (user: any) => {
-      try {
-        const response = await fetch("/api/auth/telegram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(user),
-        })
-
-        if (response.ok) {
-          window.location.href = "/calendar"
-        } else {
-          alert("Ошибка авторизации")
-        }
-      } catch (error) {
-        console.error("Auth error:", error)
-        alert("Ошибка авторизации")
-      }
+    // Если открыто через Telegram Web App, сразу переходим в календарь
+    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+      const tg = (window as any).Telegram.WebApp
+      tg.ready()
+      router.push("/calendar")
+      return
     }
-  }, [])
+
+    // Иначе показываем виджет авторизации
+    window.onTelegramAuth = (user: any) => {
+      // Сохраняем данные пользователя в localStorage
+      localStorage.setItem("telegram_user", JSON.stringify(user))
+      router.push("/calendar")
+    }
+  }, [router])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">

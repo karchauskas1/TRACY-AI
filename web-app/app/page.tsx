@@ -1,21 +1,27 @@
-import { redirect } from "next/navigation"
-import { cookies } from "next/headers"
-import { getSession } from "@/lib/auth"
-import { NextRequest } from "next/server"
+"use client"
 
-export default async function HomePage() {
-  const cookieStore = await cookies()
-  const request = new NextRequest("http://localhost", {
-    headers: {
-      cookie: cookieStore.toString(),
-    },
-  })
-  const session = await getSession(request)
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 
-  if (!session) {
-    redirect("/login")
-  }
+export default function HomePage() {
+  const router = useRouter()
 
-  redirect("/calendar")
+  useEffect(() => {
+    // Проверяем, открыто ли приложение через Telegram Web App
+    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+      router.push("/calendar")
+    } else {
+      router.push("/login")
+    }
+  }, [router])
+
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-2xl font-semibold">TRACY</h1>
+        <p className="mt-2 text-muted-foreground">Загрузка...</p>
+      </div>
+    </div>
+  )
 }
 
