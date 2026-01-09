@@ -27,13 +27,13 @@ export default function HomePage() {
           photo_url: user.photo_url,
         }))
       }
-      // Сразу переходим в календарь без авторизации
-      router.push("/calendar")
+      // Сразу переходим на главный экран "Личный ассистент"
+      router.push("/assistant")
     } else {
       // Проверяем, есть ли сохраненный пользователь
       const savedUser = localStorage.getItem("telegram_user")
       if (savedUser) {
-        router.push("/calendar")
+        router.push("/assistant")
       } else {
         router.push("/login")
       }

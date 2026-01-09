@@ -256,9 +256,6 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Кнопка для настроек уведомлений
     keyboard.append([InlineKeyboardButton("Уведомления", callback_data="settings_notifications")])
     
-    # Кнопка для режима "Встречи и резюме"
-    keyboard.append([InlineKeyboardButton("📝 Встречи и резюме", callback_data="meetings_mode")])
-    
     # Кнопка для открытия веб-приложения (Telegram Web App, только если URL валидный и не localhost)
     web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
     # Telegram не принимает localhost для inline кнопок, поэтому добавляем только для реальных доменов

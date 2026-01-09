@@ -168,14 +168,13 @@ export function CalendarPageClient() {
       {/* Top Header - как на скриншоте */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex h-14 items-center justify-between px-4">
-          {/* Left: Close button and profile */}
+          {/* Left: Back button and profile */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleClose}
-              className="text-foreground hover:text-muted-foreground transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <Link href="/assistant">
+              <button className="text-foreground hover:text-muted-foreground transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </Link>
             {user?.photo_url && (
               <img
                 src={user.photo_url}
@@ -183,9 +182,11 @@ export function CalendarPageClient() {
                 className="h-8 w-8 rounded-full"
               />
             )}
-            <button className="px-3 py-1.5 rounded-full bg-card border border-border text-sm font-medium hover:bg-accent transition-colors">
-              <span className="text-primary">TRACY</span>
-            </button>
+            <Link href="/assistant">
+              <button className="px-3 py-1.5 rounded-full bg-card border border-border text-sm font-medium hover:bg-accent transition-colors">
+                <span className="text-primary">TRACY</span>
+              </button>
+            </Link>
           </div>
           
           {/* Right: Settings */}
