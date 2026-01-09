@@ -202,7 +202,9 @@ class MeetingProcessor:
                 return await self._transcribe_with_google(audio_io, language)
         
         except Exception as e:
-            logger.error(f"Ошибка расшифровки аудио: {e}", exc_info=True)
+            logger.error(f"Критическая ошибка расшифровки аудио: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     def _format_transcript_with_timestamps(self, transcript: str, segments: List[Dict]) -> str:
@@ -256,15 +258,49 @@ class MeetingProcessor:
     async def _transcribe_with_google(self, audio_io: io.BytesIO, language: str) -> Optional[Dict]:
         """Fallback расшифровка через Google Speech Recognition."""
         try:
-            # Конвертируем в WAV
-            audio_io.seek(0)
-            audio_data = AudioSegment.from_file(audio_io, format="ogg")
+            logger.info("Начинаю расшифровку через Google Speech Recognition...")
             
+            # Пробуем определить формат и конвертируем в WAV
+            audio_io.seek(0)
+            
+            # Поддерживаемые форматы для pydub
+            supported_formats = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
+            audio_data = None
+            
+            for fmt in supported_formats:
+                try:
+                    audio_io.seek(0)
+                    audio_data = AudioSegment.from_file(audio_io, format=fmt)
+                    logger.info(f"Определен формат для Google Speech: {fmt}")
+                    break
+                except Exception as e:
+                    logger.debug(f"Формат {fmt} не подошел: {e}")
+                    continue
+            
+            # Если не удалось определить, пробуем автоопределение
+            if audio_data is None:
+                try:
+                    audio_io.seek(0)
+                    logger.info("Пробую автоопределение формата для Google Speech...")
+                    audio_data = AudioSegment.from_file(audio_io)
+                    logger.info("Формат определен автоматически для Google Speech")
+                except Exception as e:
+                    logger.error(f"Не удалось определить формат аудио для Google Speech: {e}")
+                    return None
+            
+            # Конвертируем в WAV для Google Speech Recognition
             wav_io = io.BytesIO()
             audio_data.export(wav_io, format="wav")
             wav_io.seek(0)
             
+            # Проверяем, что recognizer инициализирован
+            if not hasattr(self, 'recognizer') or self.recognizer is None:
+                logger.error("recognizer не инициализирован в MeetingProcessor")
+                import speech_recognition as sr
+                self.recognizer = sr.Recognizer()
+            
             # Используем WAV для распознавания
+            logger.info("Начинаю распознавание через Google Speech Recognition...")
             with sr.AudioFile(wav_io) as source:
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio = self.recognizer.record(source)
@@ -274,6 +310,8 @@ class MeetingProcessor:
                 language=language if language != "ru" else "ru-RU"
             )
             
+            logger.info(f"Распознавание завершено. Длина текста: {len(text)} символов")
+            
             return {
                 'transcript': text,
                 'raw_text': text,
@@ -281,8 +319,16 @@ class MeetingProcessor:
                 'duration': len(audio_data) / 1000.0,
                 'language': language
             }
+        except sr.UnknownValueError:
+            logger.warning("Google Speech Recognition не смог распознать речь")
+            return None
+        except sr.RequestError as e:
+            logger.error(f"Ошибка запроса к Google Speech Recognition: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Ошибка расшифровки через Google: {e}")
+            logger.error(f"Критическая ошибка расшифровки через Google: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     async def generate_meeting_summary(self, transcript: str, raw_text: str, language: str = "ru") -> Optional[str]:

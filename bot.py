@@ -1067,9 +1067,18 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
         
+        # Проверяем, что meeting_processor инициализирован
+        if not meeting_processor:
+            logger.error("meeting_processor не инициализирован")
+            await update.message.reply_text(
+                "❌ Ошибка инициализации. Попробуй перезапустить бота."
+            )
+            return
+        
         # Получаем настройки пользователя
         user = db.get_or_create_user(user_id)
         language = user.get('locale', 'ru_RU').split('_')[0]  # Извлекаем язык
+        logger.info(f"Язык для расшифровки: {language}")
         
         # Отправляем подтверждение о получении файла
         await update.message.reply_text(
@@ -1079,23 +1088,45 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # Расшифровываем аудио
         logger.info("Начинаю расшифровку аудио для встречи...")
-        transcription_result = await meeting_processor.transcribe_meeting_audio(audio_file, language)
+        try:
+            transcription_result = await meeting_processor.transcribe_meeting_audio(audio_file, language)
+            logger.info(f"Расшифровка завершена. Результат: {transcription_result is not None}")
+        except Exception as e:
+            logger.error(f"Ошибка при расшифровке аудио: {e}", exc_info=True)
+            await update.message.reply_text(
+                f"❌ Ошибка при расшифровке аудиозаписи: {str(e)}\n\n"
+                "Попробуй еще раз или отправь аудио в другом формате."
+            )
+            return
         
         if not transcription_result:
+            logger.warning("transcription_result пустой")
             await update.message.reply_text(
                 "Не удалось расшифровать аудиозапись. Проверь формат файла и попробуй еще раз."
             )
             return
         
+        logger.info(f"Расшифровка успешна. Длина транскрипта: {len(transcription_result.get('transcript', ''))}")
+        
         # Генерируем резюме
         logger.info("Генерирую резюме встречи...")
-        summary = await meeting_processor.generate_meeting_summary(
-            transcription_result.get('transcript', ''),
-            transcription_result.get('raw_text', ''),
-            language
-        )
+        try:
+            summary = await meeting_processor.generate_meeting_summary(
+                transcription_result.get('transcript', ''),
+                transcription_result.get('raw_text', ''),
+                language
+            )
+            logger.info(f"Резюме сгенерировано. Результат: {summary is not None}")
+        except Exception as e:
+            logger.error(f"Ошибка при генерации резюме: {e}", exc_info=True)
+            await update.message.reply_text(
+                f"❌ Ошибка при создании резюме: {str(e)}\n\n"
+                "Попробуй еще раз."
+            )
+            return
         
         if not summary:
+            logger.warning("summary пустой")
             await update.message.reply_text(
                 "Не удалось создать резюме. Попробуй еще раз."
             )
