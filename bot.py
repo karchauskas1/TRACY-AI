@@ -414,7 +414,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if google_connected:
                 # Предлагаем отключить
-                keyboard = [[InlineKeyboardButton("Отключить Google Calendar", callback_data="disconnect_google")]]
+                keyboard = [
+                    [InlineKeyboardButton("Отключить Google Calendar", callback_data="disconnect_google")],
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]
+                ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.edit_message_text(
                     "✅ Google Calendar уже подключен.\n\n"
@@ -428,10 +431,13 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     auth_url = calendar.get_authorization_url()
                     
                     # Создаем кнопку для перехода по ссылке
-                    keyboard = [[InlineKeyboardButton(
-                        "🔗 Открыть ссылку авторизации",
-                        url=auth_url
-                    )]]
+                    keyboard = [
+                        [InlineKeyboardButton(
+                            "🔗 Открыть ссылку авторизации",
+                            url=auth_url
+                        )],
+                        [InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]
+                    ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     await query.edit_message_text(
@@ -449,16 +455,22 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data['waiting_google_url'] = True
                 except Exception as e:
                     logger.error(f"Ошибка инициализации Google Calendar OAuth: {e}", exc_info=True)
+                    keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
                     await query.edit_message_text(
                         f"❌ Ошибка подключения Google Calendar.\n\n"
                         f"Проверь настройки GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET.\n"
-                        f"Ошибка: {str(e)}"
+                        f"Ошибка: {str(e)}",
+                        reply_markup=reply_markup
                     )
         except Exception as e:
             logger.error(f"Ошибка в settings_google: {e}", exc_info=True)
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 "❌ Произошла ошибка при обработке запроса.\n"
-                "Попробуй снова через /settings"
+                "Попробуй снова через /settings",
+                reply_markup=reply_markup
             )
     
     elif data == "menu_show":
@@ -514,6 +526,9 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
         
+        # Кнопка "Назад" в меню
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")])
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -554,7 +569,9 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Короче, ты просто говоришь, что нужно, а я организую твой график и напомню! 😉"""
         
-        await query.edit_message_text(help_text, parse_mode="Markdown")
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(help_text, reply_markup=reply_markup, parse_mode="Markdown")
         return
     
     elif data == "settings_icloud":
@@ -564,7 +581,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             icloud_connected = any(c['provider'] == 'icloud' for c in connections)
             
             if icloud_connected:
-                keyboard = [[InlineKeyboardButton("Отключить iCloud Calendar", callback_data="disconnect_icloud")]]
+                keyboard = [
+                    [InlineKeyboardButton("Отключить iCloud Calendar", callback_data="disconnect_icloud")],
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]
+                ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.edit_message_text(
                     "✅ iCloud Calendar уже подключен.\n\n"
@@ -576,12 +596,17 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("⏳ Генерирую подробную инструкцию...")
                 # Генерируем подробную инструкцию через AI для лучшего понимания
                 instructions = await generate_icloud_instructions(user_id, context)
-                await query.edit_message_text(instructions)
+                keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(instructions, reply_markup=reply_markup)
         except Exception as e:
             logger.error(f"Ошибка в settings_icloud: {e}", exc_info=True)
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 "❌ Произошла ошибка при обработке запроса.\n"
-                "Попробуй снова через /settings"
+                "Попробуй снова через /settings",
+                reply_markup=reply_markup
             )
     
     elif data == "disconnect_google":
@@ -592,12 +617,18 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if google_connection:
                 # Удаляем подключение
                 db.deactivate_calendar_connection(user_id, 'google', google_connection.get('calendar_id', 'primary'))
-                await query.edit_message_text("✅ Google Calendar отключен.")
+                keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text("✅ Google Calendar отключен.", reply_markup=reply_markup)
             else:
-                await query.edit_message_text("Google Calendar не был подключен.")
+                keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text("Google Calendar не был подключен.", reply_markup=reply_markup)
         except Exception as e:
             logger.error(f"Ошибка отключения Google Calendar: {e}", exc_info=True)
-            await query.edit_message_text("❌ Ошибка при отключении Google Calendar.")
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("❌ Ошибка при отключении Google Calendar.", reply_markup=reply_markup)
     
     elif data == "disconnect_icloud":
         try:
@@ -607,17 +638,26 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if icloud_connection:
                 # Удаляем подключение
                 db.deactivate_calendar_connection(user_id, 'icloud', icloud_connection.get('calendar_id', ''))
-                await query.edit_message_text("✅ iCloud Calendar отключен.")
+                keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text("✅ iCloud Calendar отключен.", reply_markup=reply_markup)
             else:
-                await query.edit_message_text("iCloud Calendar не был подключен.")
+                keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text("iCloud Calendar не был подключен.", reply_markup=reply_markup)
         except Exception as e:
             logger.error(f"Ошибка отключения iCloud Calendar: {e}", exc_info=True)
-            await query.edit_message_text("❌ Ошибка при отключении iCloud Calendar.")
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("❌ Ошибка при отключении iCloud Calendar.", reply_markup=reply_markup)
     
     elif data == "settings_notifications":
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
             "Настройки уведомлений:\n\n"
-            "В разработке. Сейчас все подтверждения отправляются в Telegram."
+            "В разработке. Сейчас все подтверждения отправляются в Telegram.",
+            reply_markup=reply_markup
         )
     
     elif data == "mode_planner":
@@ -625,7 +665,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_meeting_audio'] = False
         await query.answer("Переключено в режим планировщика")
         
-        keyboard = [[InlineKeyboardButton("🎤 Режим расшифровки встреч", callback_data="mode_meeting_transcribe")]]
+        keyboard = [
+            [InlineKeyboardButton("🎤 Режим расшифровки встреч", callback_data="mode_meeting_transcribe")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -645,7 +688,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_meeting_audio'] = True
         await query.answer("Переключено в режим расшифровки встреч")
         
-        keyboard = [[InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]]
+        keyboard = [
+            [InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -658,10 +704,33 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
+    elif data == "meeting_back_to_summary":
+        # Возврат к резюме встречи
+        meeting_data = context.user_data.get('last_meeting_data')
+        if meeting_data:
+            summary = meeting_data.get('summary', 'Резюме недоступно')
+            keyboard = [
+                [InlineKeyboardButton("📄 Показать полный текст встречи", callback_data="meeting_full_transcript")],
+                [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
+                [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")],
+                [InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                f"📋 **Резюме встречи**\n\n{summary}\n\n"
+                "💡 Режим расшифровки встреч активен. Отправь следующее аудио для расшифровки или выбери действие выше.",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.answer("Нет данных о последней встрече.", show_alert=True)
+        return
+    
     elif data == "meetings_mode":
         # Вход в режим "Встречи и резюме"
         keyboard = [
-            [InlineKeyboardButton("📝 Сделать резюме встречи", callback_data="meeting_create_summary")]
+            [InlineKeyboardButton("📝 Сделать резюме встречи", callback_data="meeting_create_summary")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -676,10 +745,14 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Переходим в режим ожидания аудио
         context.user_data['waiting_meeting_audio'] = True
         
+        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="meetings_mode")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await query.edit_message_text(
             "🎤 **Создание резюме встречи**\n\n"
             "Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
-            "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме."
+            "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.",
+            reply_markup=reply_markup
         )
     
     elif data.startswith("meeting_") and data != "meeting_create_summary":
@@ -721,13 +794,24 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 meeting_data.get('language', 'ru')
             )
             
+            keyboard = [
+                [InlineKeyboardButton("📄 Показать полный текст", callback_data="meeting_full_transcript")],
+                [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")],
+                [InlineKeyboardButton("⬅️ Назад к резюме", callback_data="meeting_back_to_summary")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
             if extended_summary:
                 await query.message.reply_text(
                     f"📋 **Расширенное резюме**\n\n{extended_summary}",
+                    reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
             else:
-                await query.message.reply_text("Не удалось создать расширенное резюме. Попробуй еще раз.")
+                await query.message.reply_text(
+                    "Не удалось создать расширенное резюме. Попробуй еще раз.",
+                    reply_markup=reply_markup
+                )
         
         elif data == "meeting_create_events":
             # Создать события из встречи
@@ -767,13 +851,27 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     except Exception as e:
                         logger.error(f"Ошибка создания события из встречи: {e}")
                 
+                keyboard = [
+                    [InlineKeyboardButton("📄 Показать полный текст", callback_data="meeting_full_transcript")],
+                    [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
+                    [InlineKeyboardButton("⬅️ Назад к резюме", callback_data="meeting_back_to_summary")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.reply_text(
                     f"✅ Создано событий из встречи: {created_count}\n\n"
-                    f"События добавлены в твой календарь."
+                    f"События добавлены в твой календарь.",
+                    reply_markup=reply_markup
                 )
             else:
+                keyboard = [
+                    [InlineKeyboardButton("📄 Показать полный текст", callback_data="meeting_full_transcript")],
+                    [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
+                    [InlineKeyboardButton("⬅️ Назад к резюме", callback_data="meeting_back_to_summary")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.reply_text(
-                    "Не найдено событий с конкретными датами в расшифровке встречи."
+                    "Не найдено событий с конкретными датами в расшифровке встречи.",
+                    reply_markup=reply_markup
                 )
 
 
