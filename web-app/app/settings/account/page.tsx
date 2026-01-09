@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { X, User } from "lucide-react"
+import { X, User, ArrowLeft } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar"
 import { Button } from "../../../components/ui/button"
@@ -66,7 +66,7 @@ export default function AccountPage() {
             onClick={handleClose}
             className="text-foreground hover:text-muted-foreground transition-colors"
           >
-            <X className="h-5 w-5" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-semibold">Аккаунт</h1>
           <div className="w-5" />

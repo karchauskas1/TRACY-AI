@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronRight, User, Globe, Bell, Brain, Calendar, LogOut, X, MoreVertical } from "lucide-react"
+import { ChevronRight, User, Globe, Bell, Brain, Calendar, X, MoreVertical, ArrowLeft } from "lucide-react"
 import { Card, CardContent } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
@@ -56,23 +56,15 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
     }
   }, [])
 
+  const handleBack = () => {
+    router.push("/calendar")
+  }
+
   const handleClose = () => {
     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
       (window as any).Telegram.WebApp.close()
     } else {
       router.push("/calendar")
-    }
-  }
-
-  const handleLogout = () => {
-    // Очищаем localStorage
-    localStorage.removeItem("telegram_user")
-    localStorage.removeItem("tracy_events")
-    // Если открыто через Telegram Web App, закрываем его
-    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-      (window as any).Telegram.WebApp.close()
-    } else {
-      router.push("/login")
     }
   }
 
@@ -118,10 +110,10 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex h-14 items-center justify-between px-4">
           <button
-            onClick={handleClose}
+            onClick={handleBack}
             className="text-foreground hover:text-muted-foreground transition-colors"
           >
-            <X className="h-5 w-5" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center">
@@ -129,8 +121,11 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
             </div>
             <span className="text-sm font-medium">Tracy | умный ассистент</span>
           </div>
-          <button className="text-foreground hover:text-muted-foreground transition-colors">
-            <MoreVertical className="h-5 w-5" />
+          <button
+            onClick={handleClose}
+            className="text-foreground hover:text-muted-foreground transition-colors"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
       </header>
@@ -179,16 +174,6 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
                   </div>
                 )
               })}
-              <div className="border-t border-border" />
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center justify-between p-4 hover:bg-destructive/10 transition-colors text-destructive"
-              >
-                <div className="flex items-center gap-3">
-                  <LogOut className="h-5 w-5" />
-                  <span className="font-medium">Выйти</span>
-                </div>
-              </button>
             </CardContent>
           </Card>
         </div>

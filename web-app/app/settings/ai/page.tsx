@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { X, Brain } from "lucide-react"
+import { X, Brain, ArrowLeft } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
 
@@ -23,7 +23,7 @@ export default function AIPage() {
             onClick={handleClose}
             className="text-foreground hover:text-muted-foreground transition-colors"
           >
-            <X className="h-5 w-5" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-semibold">ИИ</h1>
           <div className="w-5" />
