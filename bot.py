@@ -52,27 +52,31 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✨ Я умею:\n"
         "• Создавать события из текста, голоса или фото\n"
         "• Распознавать даты и время естественным языком\n"
-        "• Синхронизировать с Google Calendar и iCloud\n"
-        "• Напоминать о важных событиях\n\n"
-        "🚀 Начни прямо сейчас — просто напиши или скажи:\n"
+        "• Напоминать о важных событиях\n"
+        "• Синхронизировать с Google Calendar и iCloud (опционально)\n\n"
+        "🚀 **Ты можешь пользоваться мной прямо сейчас!**\n\n"
+        "Все работает без подключения календарей — просто напиши или скажи:\n"
         "• \"Встреча завтра в 15:00\"\n"
         "• \"Напомни про доклад в пятницу\"\n"
         "• \"Уборка в среду утром\"\n\n"
+        "📅 **Подключение календарей (необязательно):**\n"
+        "Это функция для удобства — ты сможешь видеть события в своем привычном календаре (Google, iCloud). "
+        "Но бот работает и без подключения! Все события сохраняются, напоминания приходят — можешь пользоваться сразу.\n\n"
     )
     
     keyboard = []
     
-    # Если календари не подключены, предлагаем подключить
-    if not has_connections:
+    # Если календари подключены, показываем статус, иначе предлагаем (опционально)
+    if has_connections:
+        welcome_message += "✅ Твои календари подключены и синхронизируются!\n\n"
+    else:
         welcome_message += (
-            "📅 Для начала работы подключи календарь:\n"
+            "💡 Хочешь синхронизировать с календарем? Это опционально — можешь подключить позже через /settings\n\n"
         )
         keyboard.append([InlineKeyboardButton(
-            "📅 Подключить календарь",
+            "📅 Подключить календарь (опционально)",
             callback_data="settings_google"
         )])
-    else:
-        welcome_message += "✅ Твои календари подключены и готовы к работе!\n\n"
     
     # Кнопка для веб-приложения
     web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
@@ -452,6 +456,36 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "❌ Произошла ошибка при обработке запроса.\n"
                 "Попробуй снова через /settings"
             )
+    
+    elif data == "disconnect_google":
+        try:
+            connections = db.get_calendar_connections(user_id)
+            google_connection = next((c for c in connections if c['provider'] == 'google'), None)
+            
+            if google_connection:
+                # Удаляем подключение
+                db.deactivate_calendar_connection(user_id, 'google', google_connection.get('calendar_id', 'primary'))
+                await query.edit_message_text("✅ Google Calendar отключен.")
+            else:
+                await query.edit_message_text("Google Calendar не был подключен.")
+        except Exception as e:
+            logger.error(f"Ошибка отключения Google Calendar: {e}", exc_info=True)
+            await query.edit_message_text("❌ Ошибка при отключении Google Calendar.")
+    
+    elif data == "disconnect_icloud":
+        try:
+            connections = db.get_calendar_connections(user_id)
+            icloud_connection = next((c for c in connections if c['provider'] == 'icloud'), None)
+            
+            if icloud_connection:
+                # Удаляем подключение
+                db.deactivate_calendar_connection(user_id, 'icloud', icloud_connection.get('calendar_id', ''))
+                await query.edit_message_text("✅ iCloud Calendar отключен.")
+            else:
+                await query.edit_message_text("iCloud Calendar не был подключен.")
+        except Exception as e:
+            logger.error(f"Ошибка отключения iCloud Calendar: {e}", exc_info=True)
+            await query.edit_message_text("❌ Ошибка при отключении iCloud Calendar.")
     
     elif data == "settings_notifications":
         await query.edit_message_text(
