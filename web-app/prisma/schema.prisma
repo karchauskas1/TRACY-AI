@@ -1,0 +1,138 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  telegramId String   @unique
+  name        String
+  avatarUrl   String?
+  locale      String   @default("ru")
+  timezone    String   @default("Europe/Moscow")
+  timeFormat  String   @default("24") // "12" or "24"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  calendarConnections CalendarConnection[]
+  calendarSources     CalendarSource[]
+  events              Event[]
+  meetings            Meeting[]
+  jobs                Job[]
+
+  @@map("users")
+}
+
+model CalendarConnection {
+  id         String   @id @default(cuid())
+  userId     String
+  provider   String   // "google" or "icloud"
+  credentials Json    // Encrypted credentials
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendarSources CalendarSource[]
+
+  @@map("calendar_connections")
+}
+
+model CalendarSource {
+  id             String   @id @default(cuid())
+  connectionId   String
+  userId         String
+  externalId     String   // Calendar ID from provider
+  name           String
+  color          String   @default("#3b82f6") // Hex color
+  isEnabled      Boolean  @default(true)
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  connection CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events     Event[]
+
+  @@unique([connectionId, externalId])
+  @@map("calendar_sources")
+}
+
+model Event {
+  id             String   @id @default(cuid())
+  userId         String
+  provider       String?  // "google", "icloud", or null for local
+  calendarSourceId String?
+  externalId     String?  // Event ID from external calendar
+  title          String
+  description    String?
+  location       String?
+  startAt        DateTime
+  endAt          DateTime?
+  allDay         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendarSource CalendarSource? @relation(fields: [calendarSourceId], references: [id], onDelete: SetNull)
+  reminders      Reminder[]
+
+  @@index([userId, startAt])
+  @@index([calendarSourceId, startAt])
+  @@map("events")
+}
+
+model Reminder {
+  id          String   @id @default(cuid())
+  eventId     String
+  minutesBefore Int    // Minutes before event start (e.g., 15, 60, 1440 for 1 day)
+  createdAt   DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("reminders")
+}
+
+model Meeting {
+  id                String   @id @default(cuid())
+  userId            String
+  title             String?
+  status            String   @default("processing") // "processing", "completed", "failed"
+  audioUrl          String?
+  transcript        String?
+  transcriptSegments Json?   // Array of {start, end, speaker, text}
+  summary           String?
+  summaryExtended   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("meetings")
+}
+
+model Job {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String   // "meeting_transcribe"
+  status    String   @default("queued") // "queued", "processing", "done", "failed"
+  payload   Json     // Job-specific data
+  error     String?
+  result    Json?    // Job result
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@map("jobs")
+}
+

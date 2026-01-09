@@ -1,0 +1,463 @@
+"""Модуль для обработки встреч и создания резюме из аудиозаписей."""
+import io
+import logging
+import base64
+import re
+from typing import Optional, Dict, List, Tuple
+from datetime import datetime
+import speech_recognition as sr
+from pydub import AudioSegment
+import config
+
+logger = logging.getLogger(__name__)
+
+# OpenAI клиент для Whisper (высококачественная расшифровка)
+try:
+    from openai import OpenAI
+    whisper_client = OpenAI(
+        api_key=config.OPENROUTER_API_KEY,
+        base_url=config.OPENROUTER_BASE_URL
+    )
+    WHISPER_AVAILABLE = True
+except Exception:
+    whisper_client = None
+    WHISPER_AVAILABLE = False
+
+
+class MeetingProcessor:
+    """Класс для обработки встреч и создания резюме."""
+    
+    def __init__(self, nlp_client):
+        """Инициализация с NLP клиентом для генерации резюме."""
+        self.nlp_client = nlp_client
+        self.recognizer = sr.Recognizer()
+    
+    async def transcribe_meeting_audio(self, audio_file, language: str = "ru") -> Optional[Dict]:
+        """
+        Расшифровать аудиозапись встречи с тайм-кодами.
+        
+        Args:
+            audio_file: Файл аудио из Telegram
+            language: Язык для распознавания
+        
+        Returns:
+            Словарь с:
+            - transcript: полная расшифровка с тайм-кодами
+            - segments: список сегментов с временными метками
+            - speakers: информация о спикерах (если определена)
+        """
+        try:
+            # Скачиваем файл
+            audio_io = io.BytesIO()
+            await audio_file.download_to_memory(audio_io)
+            audio_io.seek(0)
+            
+            # Пробуем использовать Whisper API для качественной расшифровки
+            if WHISPER_AVAILABLE and whisper_client:
+                try:
+                    logger.info("Используем Whisper API для расшифровки встречи...")
+                    
+                    # Определяем формат и конвертируем при необходимости
+                    audio_io.seek(0)
+                    audio_format = "mp3"
+                    
+                    try:
+                        # Пробуем определить формат
+                        test_audio = AudioSegment.from_file(audio_io, format="ogg")
+                        audio_io.seek(0)
+                        
+                        # Конвертируем в MP3 для Whisper
+                        converted_io = io.BytesIO()
+                        test_audio.export(converted_io, format="mp3", bitrate="128k")
+                        converted_io.seek(0)
+                        audio_data = converted_io.read()
+                    except:
+                        # Если не получилось, используем как есть
+                        audio_io.seek(0)
+                        audio_data = audio_io.read()
+                    
+                    # Используем Whisper для расшифровки с временными метками
+                    import tempfile
+                    import os
+                    
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+                        temp_file.write(audio_data)
+                        temp_file_path = temp_file.name
+                    
+                    try:
+                        with open(temp_file_path, 'rb') as audio_file_obj:
+                            file_tuple = (os.path.basename(temp_file_path), audio_file_obj, 'audio/mpeg')
+                            
+                            # Используем Whisper с временными метками
+                            # Пробуем использовать verbose_json если доступен
+                            try:
+                                response = whisper_client.audio.transcriptions.create(
+                                    model="openai/whisper-1",
+                                    file=file_tuple,
+                                    language=language if language != "ru-RU" else "ru",
+                                    response_format="verbose_json",
+                                    timestamp_granularities=["segment"]
+                                )
+                                
+                                # Парсим результат с сегментами
+                                if isinstance(response, dict):
+                                    transcript = response.get('text', '')
+                                    segments = response.get('segments', [])
+                                elif hasattr(response, 'text') and hasattr(response, 'segments'):
+                                    transcript = response.text
+                                    segments = response.segments if hasattr(response, 'segments') else []
+                                elif hasattr(response, 'text'):
+                                    transcript = response.text
+                                    segments = []
+                                else:
+                                    # Если формат другой, используем строковое представление
+                                    transcript = str(response)
+                                    segments = []
+                            
+                            except Exception as verbose_error:
+                                # Fallback на обычный формат если verbose_json не поддерживается
+                                logger.warning(f"Verbose JSON не поддерживается, используем обычный формат: {verbose_error}")
+                                audio_file_obj.seek(0)
+                                file_tuple = (os.path.basename(temp_file_path), audio_file_obj, 'audio/mpeg')
+                                response = whisper_client.audio.transcriptions.create(
+                                    model="openai/whisper-1",
+                                    file=file_tuple,
+                                    language=language if language != "ru-RU" else "ru",
+                                    response_format="text"
+                                )
+                                transcript = str(response).strip()
+                                segments = []
+                            
+                            # Форматируем расшифровку с тайм-кодами (если есть сегменты)
+                            if segments:
+                                formatted_transcript = self._format_transcript_with_timestamps(transcript, segments)
+                            else:
+                                # Если нет сегментов, используем обычный текст, но разбиваем на абзацы
+                                formatted_transcript = self._format_transcript_plain(transcript)
+                            
+                            # Определяем длительность
+                            duration = 0
+                            if segments and len(segments) > 0:
+                                duration = segments[-1].get('end', 0) if isinstance(segments[-1], dict) else 0
+                            
+                            logger.info(f"Расшифровка завершена: {len(transcript)} символов, {len(segments)} сегментов, длительность: {duration}с")
+                            
+                            return {
+                                'transcript': formatted_transcript,
+                                'raw_text': transcript,
+                                'segments': segments,
+                                'duration': duration,
+                                'language': language
+                            }
+                    finally:
+                        if os.path.exists(temp_file_path):
+                            os.unlink(temp_file_path)
+                
+                except Exception as whisper_error:
+                    logger.warning(f"Whisper API недоступен: {whisper_error}, используем стандартное распознавание")
+                    # Fallback на стандартное распознавание
+                    return await self._transcribe_with_google(audio_io, language)
+            else:
+                # Используем Google Speech Recognition
+                return await self._transcribe_with_google(audio_io, language)
+        
+        except Exception as e:
+            logger.error(f"Ошибка расшифровки аудио: {e}", exc_info=True)
+            return None
+    
+    def _format_transcript_with_timestamps(self, transcript: str, segments: List[Dict]) -> str:
+        """Форматирует расшифровку с тайм-кодами."""
+        if not segments:
+            return self._format_transcript_plain(transcript)
+        
+        formatted_lines = []
+        
+        for segment in segments:
+            start_time = self._format_timestamp(segment.get('start', 0))
+            text = segment.get('text', '').strip()
+            
+            if not text:
+                continue
+            
+            # Если есть информация о спикере, используем её
+            speaker_info = ""
+            if 'speaker' in segment:
+                speaker_info = f"[Спикер {segment['speaker']}] "
+            elif 'speaker_id' in segment:
+                speaker_info = f"[Спикер {segment['speaker_id']}] "
+            
+            formatted_lines.append(f"{start_time} {speaker_info}{text}")
+        
+        return "\n\n".join(formatted_lines)
+    
+    def _format_transcript_plain(self, transcript: str) -> str:
+        """Форматирует расшифровку без тайм-кодов, разбивая на абзацы."""
+        # Разбиваем текст на предложения и группируем в абзацы
+        import re
+        sentences = re.split(r'([.!?]+)\s+', transcript)
+        
+        # Объединяем предложения обратно
+        text = transcript
+        # Простая замена точек на абзацы для лучшей читаемости
+        text = re.sub(r'\. ([А-Я])', r'.\n\n\1', text)
+        return text
+    
+    def _format_timestamp(self, seconds: float) -> str:
+        """Форматирует время в формат MM:SS или HH:MM:SS."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        else:
+            return f"{minutes:02d}:{secs:02d}"
+    
+    async def _transcribe_with_google(self, audio_io: io.BytesIO, language: str) -> Optional[Dict]:
+        """Fallback расшифровка через Google Speech Recognition."""
+        try:
+            # Конвертируем в WAV
+            audio_io.seek(0)
+            audio_data = AudioSegment.from_file(audio_io, format="ogg")
+            
+            wav_io = io.BytesIO()
+            audio_data.export(wav_io, format="wav")
+            wav_io.seek(0)
+            
+            # Используем WAV для распознавания
+            with sr.AudioFile(wav_io) as source:
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                audio = self.recognizer.record(source)
+            
+            text = self.recognizer.recognize_google(
+                audio,
+                language=language if language != "ru" else "ru-RU"
+            )
+            
+            return {
+                'transcript': text,
+                'raw_text': text,
+                'segments': [],
+                'duration': len(audio_data) / 1000.0,
+                'language': language
+            }
+        except Exception as e:
+            logger.error(f"Ошибка расшифровки через Google: {e}")
+            return None
+    
+    async def generate_meeting_summary(self, transcript: str, raw_text: str, language: str = "ru") -> Optional[str]:
+        """
+        Генерирует структурированное резюме встречи.
+        
+        Args:
+            transcript: Полная расшифровка с тайм-кодами
+            raw_text: Чистый текст без тайм-кодов
+            language: Язык
+        
+        Returns:
+            Структурированное резюме в виде текста
+        """
+        try:
+            prompt = f"""Проанализируй расшифровку встречи и создай структурированное резюме на русском языке.
+
+Расшифровка встречи:
+{raw_text[:8000]}
+
+Создай резюме в следующем формате:
+
+**📋 Краткое описание**
+[3-5 предложений о сути встречи]
+
+**📝 Основные темы**
+[Список основных тем, которые обсуждались, в виде маркированного списка]
+
+**✅ Договорённости и решения**
+[Список принятых решений и договорённостей, если были]
+
+**📌 Задачи и следующие шаги**
+[Список задач, которые нужно выполнить, с указанием ответственных, если упоминались]
+
+**📅 Даты, дедлайны и события**
+[Все упоминания дат, дедлайнов, встреч и событий, если были]
+
+Резюме должно быть полезным и структурированным, не просто пересказом. Выделяй самое важное."""
+            
+            response = self.nlp_client.chat.completions.create(
+                model="openai/gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Ты профессиональный ассистент для анализа встреч. Создавай структурированные, полезные резюме, выделяя ключевую информацию."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.7,
+                max_tokens=1500
+            )
+            
+            summary = response.choices[0].message.content.strip()
+            return summary
+        
+        except Exception as e:
+            logger.error(f"Ошибка генерации резюме: {e}", exc_info=True)
+            return None
+    
+    async def generate_extended_summary(self, transcript: str, raw_text: str, language: str = "ru") -> Optional[str]:
+        """Генерирует расширенное резюме встречи."""
+        try:
+            prompt = f"""Проанализируй расшифровку встречи и создай подробное расширенное резюме на русском языке.
+
+Расшифровка встречи:
+{raw_text[:12000]}
+
+Создай подробное резюме, включающее:
+- Детальное описание встречи (5-8 предложений)
+- Все обсуждаемые темы с подробностями
+- Все договорённости и решения с контекстом
+- Все задачи с приоритетами и ответственными
+- Все даты, дедлайны и события
+- Важные детали и нюансы обсуждения
+- Любые упоминания людей, проектов, документов
+
+Форматируй структурированно с заголовками и списками."""
+            
+            response = self.nlp_client.chat.completions.create(
+                model="openai/gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Ты профессиональный ассистент для анализа встреч. Создавай подробные, структурированные резюме с максимальной полезностью."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.7,
+                max_tokens=2500
+            )
+            
+            summary = response.choices[0].message.content.strip()
+            return summary
+        
+        except Exception as e:
+            logger.error(f"Ошибка генерации расширенного резюме: {e}", exc_info=True)
+            return None
+    
+    async def extract_events_from_meeting(self, summary: str, transcript: str, 
+                                         user_timezone: str = "Europe/Moscow") -> List[Dict]:
+        """
+        Извлекает события из резюме и расшифровки для создания в календаре.
+        
+        Args:
+            summary: Резюме встречи
+            transcript: Полная расшифровка
+            user_timezone: Часовой пояс пользователя
+        
+        Returns:
+            Список словарей с данными событий
+        """
+        try:
+            prompt = f"""Проанализируй резюме и расшифровку встречи и извлеки все события, встречи, дедлайны и напоминания для добавления в календарь.
+
+Резюме:
+{summary}
+
+Полная расшифровка:
+{transcript[:4000]}
+
+Текущая дата и время: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+Часовой пояс: {user_timezone}
+
+Верни JSON массив событий в формате:
+{{
+    "events": [
+        {{
+            "title": "название события",
+            "description": "описание",
+            "start_time": "YYYY-MM-DDTHH:MM:SS или null",
+            "end_time": "YYYY-MM-DDTHH:MM:SS или null",
+            "location": "место или null",
+            "priority": 0-5,
+            "has_explicit_time": true/false
+        }}
+    ]
+}}
+
+Извлекай только события с конкретными датами/временем. Если дата не указана явно, но есть относительная (например, "через неделю"), вычисляй конкретную дату. Если дата не определена, не включай событие."""
+            
+            response = self.nlp_client.chat.completions.create(
+                model="openai/gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Ты ассистент для извлечения событий из текста. Извлекай только события с конкретными датами. Верни только валидный JSON без дополнительного текста."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.3,
+                response_format={"type": "json_object"},
+                max_tokens=2000
+            )
+            
+            import json
+            result = json.loads(response.choices[0].message.content)
+            events = result.get('events', [])
+            
+            # Парсим даты
+            import pytz
+            import dateparser
+            tz = pytz.timezone(user_timezone)
+            now = datetime.now(tz)
+            
+            parsed_events = []
+            for event in events:
+                if event.get('start_time'):
+                    try:
+                        parsed_date = dateparser.parse(
+                            event['start_time'],
+                            settings={
+                                'TIMEZONE': user_timezone,
+                                'RETURN_AS_TIMEZONE_AWARE': True,
+                                'RELATIVE_BASE': now
+                            }
+                        )
+                        if parsed_date:
+                            event['start_time'] = parsed_date.astimezone(tz)
+                    except:
+                        event['start_time'] = None
+                
+                if event.get('end_time'):
+                    try:
+                        parsed_date = dateparser.parse(
+                            event['end_time'],
+                            settings={
+                                'TIMEZONE': user_timezone,
+                                'RETURN_AS_TIMEZONE_AWARE': True,
+                                'RELATIVE_BASE': now
+                            }
+                        )
+                        if parsed_date:
+                            event['end_time'] = parsed_date.astimezone(tz)
+                    except:
+                        event['end_time'] = None
+                
+                # Если есть start_time, но нет end_time, добавляем час по умолчанию
+                if event.get('start_time') and not event.get('end_time'):
+                    from datetime import timedelta
+                    event['end_time'] = event['start_time'] + timedelta(hours=1)
+                
+                parsed_events.append(event)
+            
+            return parsed_events
+        
+        except Exception as e:
+            logger.error(f"Ошибка извлечения событий: {e}", exc_info=True)
+            return []
+
