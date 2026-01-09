@@ -56,14 +56,10 @@ export default function NewMeetingPage() {
       // Открываем чат с ботом через deep link для расшифровки встречи
       tg.openTelegramLink(`https://t.me/${botUsername}?start=meeting_transcribe`)
       
-      // Показываем подсказку
+      // Закрываем веб-приложение после небольшой задержки
       setTimeout(() => {
-        tg.showAlert(
-          "В открывшемся чате отправь аудиофайл боту.\n\n" +
-          "Бот автоматически создаст расшифровку с тайм-кодами и структурированное резюме.",
-          () => {}
-        )
-      }, 1000)
+        tg.close()
+      }, 500)
     } else {
       // Если не через Telegram Web App, открываем ссылку на бота
       const telegramLink = `https://t.me/${botUsername}?start=meeting_transcribe`

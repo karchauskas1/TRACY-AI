@@ -49,11 +49,16 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if start_param == "meeting_transcribe":
         # Переходим в режим ожидания аудио для расшифровки встречи
         context.user_data['waiting_meeting_audio'] = True
+        
+        keyboard = [[InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await update.message.reply_text(
-            "🎤 **Расшифровка встречи**\n\n"
-            "Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
+            "🎤 **Режим работы с записями встреч**\n\n"
+            "Вы вошли в режим расшифровки встреч. Чтобы продолжить и расшифровать встречу, отправьте голосовое сообщение или аудиофайл с записью встречи.\n\n"
             "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n"
             "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG",
+            reply_markup=reply_markup,
             parse_mode="Markdown"
         )
         return
@@ -508,6 +513,44 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "В разработке. Сейчас все подтверждения отправляются в Telegram."
         )
     
+    elif data == "mode_planner":
+        # Выход из режима расшифровки встреч в обычный режим планировщика
+        context.user_data['waiting_meeting_audio'] = False
+        await query.answer("Переключено в режим планировщика")
+        
+        keyboard = [[InlineKeyboardButton("🎤 Режим расшифровки встреч", callback_data="mode_meeting_transcribe")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "📅 **Режим планировщика**\n\n"
+            "Теперь вы в обычном режиме работы с календарем.\n\n"
+            "Можете:\n"
+            "• Создавать события из текста, голоса или фото\n"
+            "• Управлять напоминаниями\n"
+            "• Просматривать и редактировать события",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "mode_meeting_transcribe":
+        # Переход в режим расшифровки встреч
+        context.user_data['waiting_meeting_audio'] = True
+        await query.answer("Переключено в режим расшифровки встреч")
+        
+        keyboard = [[InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "🎤 **Режим работы с записями встреч**\n\n"
+            "Вы вошли в режим расшифровки встреч. Чтобы продолжить и расшифровать встречу, отправьте голосовое сообщение или аудиофайл с записью встречи.\n\n"
+            "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n"
+            "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
     elif data == "meetings_mode":
         # Вход в режим "Встречи и резюме"
         keyboard = [
@@ -868,15 +911,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message.voice or (update.message.document and update.message.document.mime_type and 'audio' in update.message.document.mime_type):
             await handle_meeting_audio(update, context)
             return
-        elif update.message.text and update.message.text.lower() in ['отмена', 'cancel', 'выход', 'отменить']:
+        elif update.message.text and update.message.text.lower() in ['отмена', 'cancel', 'выход', 'отменить', 'режим планировщика']:
             context.user_data['waiting_meeting_audio'] = False
-            await update.message.reply_text("Режим встреч отменен.")
+            keyboard = [[InlineKeyboardButton("🎤 Режим расшифровки встреч", callback_data="mode_meeting_transcribe")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                "📅 **Режим планировщика**\n\n"
+                "Теперь вы в обычном режиме работы с календарем.\n\n"
+                "Можете:\n"
+                "• Создавать события из текста, голоса или фото\n"
+                "• Управлять напоминаниями\n"
+                "• Просматривать и редактировать события",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
             return
         else:
             # Если не аудио, напоминаем что нужно отправить аудио
+            keyboard = [[InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
                 "🎤 Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
-                "Или напиши 'отмена' для выхода из режима встреч."
+                "Или напиши 'отмена' или 'режим планировщика' для выхода из режима встреч.",
+                reply_markup=reply_markup
             )
             return
     

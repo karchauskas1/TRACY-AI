@@ -55,7 +55,12 @@ export function MeetingsPageClient() {
                       if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
                         const tg = (window as any).Telegram.WebApp
                         tg.ready()
+                        // Открываем чат с ботом через deep link
                         tg.openTelegramLink(`https://t.me/${botUsername}?start=meeting_transcribe`)
+                        // Закрываем веб-приложение после небольшой задержки
+                        setTimeout(() => {
+                          tg.close()
+                        }, 500)
                       } else {
                         window.open(`https://t.me/${botUsername}?start=meeting_transcribe`, '_blank')
                       }
