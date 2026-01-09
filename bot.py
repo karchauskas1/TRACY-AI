@@ -864,8 +864,8 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             'duration': transcription_result.get('duration', 0)
         }
         
-        # Выходим из режима ожидания
-        context.user_data['waiting_meeting_audio'] = False
+        # НЕ выходим из режима - остаемся в режиме расшифровки, чтобы принимать следующие аудио
+        # Режим будет сброшен только при явном выходе через кнопку или команду
         
         # Останавливаем typing
         stop_typing = True
@@ -874,13 +874,15 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
         keyboard = [
             [InlineKeyboardButton("📄 Показать полный текст встречи", callback_data="meeting_full_transcript")],
             [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
-            [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")]
+            [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")],
+            [InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Отправляем резюме с кнопками
+        # Отправляем резюме с кнопками и напоминанием о режиме
         await update.message.reply_text(
-            f"📋 **Резюме встречи**\n\n{summary}",
+            f"📋 **Резюме встречи**\n\n{summary}\n\n"
+            "💡 Режим расшифровки встреч активен. Отправь следующее аудио для расшифровки или выбери действие выше.",
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
@@ -888,10 +890,15 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         stop_typing = True
         logger.error(f"Ошибка обработки аудио для встречи: {e}", exc_info=True)
+        # НЕ сбрасываем режим при ошибке - пользователь может попробовать еще раз
+        keyboard = [[InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "Что-то пошло не так при обработке встречи. Попробуй еще раз или отправь аудио в другом формате."
+            "Что-то пошло не так при обработке встречи. Попробуй еще раз или отправь аудио в другом формате.\n\n"
+            "Режим расшифровки встреч всё ещё активен.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
         )
-        context.user_data['waiting_meeting_audio'] = False
     
     finally:
         stop_typing = True
@@ -1013,11 +1020,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     # Проверяем, находимся ли мы в режиме ожидания аудио для встречи (ВЫСШИЙ ПРИОРИТЕТ)
+    # В этом режиме ВСЕ голосовые сообщения идут на расшифровку встречи, а не на создание событий
     if context.user_data.get('waiting_meeting_audio'):
-        # Обработка аудио для встречи
+        # Обработка аудио для встречи - ВСЕ голосовые и аудиофайлы
         if update.message.voice or (update.message.document and update.message.document.mime_type and 'audio' in update.message.document.mime_type):
             await handle_meeting_audio(update, context)
             return
+        # Текстовые команды для выхода из режима
         elif update.message.text and update.message.text.lower() in ['отмена', 'cancel', 'выход', 'отменить', 'режим планировщика']:
             context.user_data['waiting_meeting_audio'] = False
             keyboard = [[InlineKeyboardButton("🎤 Режим расшифровки встреч", callback_data="mode_meeting_transcribe")]]
@@ -1034,13 +1043,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         else:
-            # Если не аудио, напоминаем что нужно отправить аудио
+            # Если не аудио и не команда выхода, напоминаем что нужно отправить аудио
+            # НЕ обрабатываем текст как обычное сообщение в режиме расшифровки
             keyboard = [[InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                "🎤 Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
-                "Или напиши 'отмена' или 'режим планировщика' для выхода из режима встреч.",
-                reply_markup=reply_markup
+                "🎤 **Режим расшифровки встреч активен**\n\n"
+                "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
+                "Чтобы выйти из режима расшифровки, напиши 'отмена' или 'режим планировщика', или нажми кнопку ниже.",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
             )
             return
     
@@ -1453,6 +1465,29 @@ def main():
                     logger.warning(f"⚠️ Не удалось установить Menu Button: {e}")
             else:
                 logger.info("⚠️ WEB_APP_URL не настроен или не HTTPS, Menu Button не установлен")
+            
+            # Устанавливаем команды бота (для меню команд)
+            try:
+                commands = [
+                    BotCommand("start", "Начать работу с ботом"),
+                    BotCommand("menu", "Открыть меню"),
+                    BotCommand("settings", "Настройки календарей"),
+                    BotCommand("help", "Как пользоваться"),
+                ]
+                await app.bot.set_my_commands(commands)
+                logger.info("✅ Команды бота установлены")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось установить команды бота: {e}")
+            
+            # Устанавливаем описание и короткое описание бота для поиска
+            try:
+                bot_description = "🤖 TRACY — ваш AI-ассистент для управления календарем. Создавайте события, управляйте напоминаниями и расшифровывайте встречи."
+                bot_short_description = "AI-ассистент для управления календарем и расшифровки встреч"
+                await app.bot.set_my_description(description=bot_description)
+                await app.bot.set_my_short_description(short_description=bot_short_description)
+                logger.info("✅ Описание бота установлено")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось установить описание бота: {e}")
         except Exception as e:
             logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА запуска ReminderScheduler: {e}", exc_info=True)
             import traceback

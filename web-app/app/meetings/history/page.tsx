@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { ArrowLeft, Search, Mic, Clock, Edit, Trash2, Filter, FileText, Globe, History } from "lucide-react"
 import Link from "next/link"
 import { Card, CardContent } from "../../../components/ui/card"
@@ -20,7 +19,6 @@ interface Meeting {
 }
 
 export default function MeetingsHistoryPage() {
-  const router = useRouter()
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [filteredMeetings, setFilteredMeetings] = useState<Meeting[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -124,17 +122,28 @@ export default function MeetingsHistoryPage() {
       const updated = meetings.filter(m => m.id !== id)
       setMeetings(updated)
       localStorage.setItem("tracy_meetings", JSON.stringify(updated))
-      setFilteredMeetings(updated.filter(m => {
-        if (searchQuery && !m.title.toLowerCase().includes(searchQuery.toLowerCase())) return false
-        if (mediaFilter !== "all" && m.type !== mediaFilter) return false
-        if (chatFilter !== "all" && m.chat !== chatFilter) return false
-        return true
-      }))
+      
+      // Обновляем отфильтрованный список
+      let filtered = [...updated]
+      if (searchQuery) {
+        filtered = filtered.filter(meeting =>
+          meeting.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (meeting.summary && meeting.summary.toLowerCase().includes(searchQuery.toLowerCase()))
+        )
+      }
+      if (mediaFilter !== "all") {
+        filtered = filtered.filter(meeting => meeting.type === mediaFilter)
+      }
+      if (chatFilter !== "all") {
+        filtered = filtered.filter(meeting => meeting.chat === chatFilter)
+      }
+      setFilteredMeetings(filtered)
     }
   }
 
   const handleEdit = (id: string) => {
-    router.push(`/meetings/${id}/edit`)
+    // Пока просто открываем детали встречи (можно добавить отдельную страницу редактирования)
+    alert(`Редактирование встречи ${id} будет реализовано позже.`)
   }
 
   const uniqueChats = Array.from(new Set(meetings.map(m => m.chat).filter(Boolean)))
