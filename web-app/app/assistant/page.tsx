@@ -168,12 +168,23 @@ export default function AssistantPage() {
                   Расшифровка и анализ аудиозаписей встреч с помощью искусственного интеллекта
                 </p>
                 
-                <Link href="/meetings/new">
-                  <Button className="w-full" size="lg">
-                    <Mic className="mr-2 h-5 w-5" />
-                    Расшифровать встречу
-                  </Button>
-                </Link>
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={() => {
+                    const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
+                    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+                      const tg = (window as any).Telegram.WebApp
+                      tg.ready()
+                      tg.openTelegramLink(`https://t.me/${botUsername}?start=meeting_transcribe`)
+                    } else {
+                      window.open(`https://t.me/${botUsername}?start=meeting_transcribe`, '_blank')
+                    }
+                  }}
+                >
+                  <Mic className="mr-2 h-5 w-5" />
+                  Расшифровать встречу
+                </Button>
                 
                 <Link href="/meetings/history">
                   <Button variant="outline" className="w-full">

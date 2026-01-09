@@ -34,21 +34,44 @@ export function MeetingsPageClient() {
           </div>
 
           <div className="space-y-4">
-            <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer" onClick={() => router.push("/meetings/new")}>
+            <Card className="border-border">
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
                   <FileAudio className="h-6 w-6 text-primary" />
                   Расшифровать встречу
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Загрузите аудиозапись встречи для автоматического создания расшифровки с тайм-кодами и структурированного резюме
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Для расшифровки встречи используй Telegram бота. Открой чат с ботом и отправь голосовое сообщение или аудиофайл.
                 </p>
-                <Button className="w-full" onClick={() => router.push("/meetings/new")}>
-                  <FileAudio className="mr-2 h-4 w-4" />
-                  Начать расшифровку
-                </Button>
+                
+                <div className="space-y-2">
+                  <Button 
+                    className="w-full" 
+                    onClick={() => {
+                      const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
+                      if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+                        const tg = (window as any).Telegram.WebApp
+                        tg.ready()
+                        tg.openTelegramLink(`https://t.me/${botUsername}`)
+                      } else {
+                        window.open(`https://t.me/${botUsername}`, '_blank')
+                      }
+                    }}
+                  >
+                    <FileAudio className="mr-2 h-4 w-4" />
+                    Открыть бота для расшифровки
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => router.push("/meetings/new")}
+                  >
+                    Загрузить через веб-интерфейс
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 

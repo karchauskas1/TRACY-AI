@@ -45,15 +45,35 @@ export default function NewMeetingPage() {
     
     setIsProcessing(true)
     
-    // В реальном приложении здесь будет загрузка файла и обработка
-    // Для статического сайта показываем сообщение о необходимости использовать Telegram бота
-    alert(
-      "Для расшифровки встреч используй Telegram бота:\n\n" +
-      "1. Открой бота в Telegram\n" +
-      "2. Используй команду /settings\n" +
-      "3. Выбери 'Встречи и резюме'\n" +
-      "4. Отправь голосовое сообщение или аудиофайл"
-    )
+    // Получаем username бота из переменных окружения
+    const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
+    
+    // Если открыто через Telegram Web App, открываем чат с ботом
+    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+      const tg = (window as any).Telegram.WebApp
+      tg.ready()
+      
+      // Открываем чат с ботом через deep link для расшифровки встречи
+      tg.openTelegramLink(`https://t.me/${botUsername}?start=meeting_transcribe`)
+      
+      // Показываем подсказку
+      setTimeout(() => {
+        tg.showAlert(
+          "В открывшемся чате отправь аудиофайл боту.\n\n" +
+          "Бот автоматически создаст расшифровку с тайм-кодами и структурированное резюме.",
+          () => {}
+        )
+      }, 1000)
+    } else {
+      // Если не через Telegram Web App, открываем ссылку на бота
+      const telegramLink = `https://t.me/${botUsername}?start=meeting_transcribe`
+      window.open(telegramLink, '_blank')
+      
+      alert(
+        "В открывшемся чате отправь аудиофайл боту.\n\n" +
+        "Бот автоматически создаст расшифровку с тайм-кодами и структурированное резюме."
+      )
+    }
     
     setIsProcessing(false)
   }
@@ -141,22 +161,32 @@ export default function NewMeetingPage() {
 
               {/* Submit Button */}
               {selectedFile && (
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={handleSubmit}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? "Обработка..." : "Начать расшифровку"}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    onClick={handleSubmit}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? "Обработка..." : "Открыть бота для расшифровки"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    После нажатия откроется чат с ботом. Отправь файл боту для расшифровки.
+                  </p>
+                </div>
               )}
 
               {/* Info Box */}
               <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  💡 <strong>Совет:</strong> Для более качественной расшифровки используй Telegram бота.
-                  Бот поддерживает обработку длинных аудиозаписей и создает структурированные резюме.
+                <p className="text-sm text-muted-foreground mb-2">
+                  💡 <strong>Как это работает:</strong>
                 </p>
+                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside ml-2">
+                  <li>Загрузи аудиофайл выше или выбери файл</li>
+                  <li>Нажми "Открыть бота для расшифровки"</li>
+                  <li>В открывшемся чате отправь боту аудиофайл</li>
+                  <li>Бот автоматически создаст расшифровку с тайм-кодами и резюме</li>
+                </ol>
               </div>
             </CardContent>
           </Card>

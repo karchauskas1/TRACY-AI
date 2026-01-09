@@ -43,6 +43,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Создаем пользователя в БД
     db.get_or_create_user(user_id)
     
+    # Проверяем параметр start (для deep links из веб-приложения)
+    start_param = context.args[0] if context.args else None
+    
+    if start_param == "meeting_transcribe":
+        # Переходим в режим ожидания аудио для расшифровки встречи
+        context.user_data['waiting_meeting_audio'] = True
+        await update.message.reply_text(
+            "🎤 **Расшифровка встречи**\n\n"
+            "Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
+            "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n"
+            "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG",
+            parse_mode="Markdown"
+        )
+        return
+    
     # Проверяем, есть ли подключенные календари
     connections = db.get_calendar_connections(user_id)
     has_connections = len(connections) > 0
@@ -1266,7 +1281,7 @@ def main():
             web_url = os.getenv("WEB_APP_URL")
             if web_url and "localhost" not in web_url.lower() and web_url.startswith("https://"):
                 try:
-                    menu_button = MenuButtonWebApp(text="🌐 TRACY", web_app=WebAppInfo(url=web_url))
+                    menu_button = MenuButtonWebApp(text="TRACY", web_app=WebAppInfo(url=web_url))
                     # Устанавливаем глобально (chat_id=None означает глобальная настройка)
                     await app.bot.set_chat_menu_button(chat_id=None, menu_button=menu_button)
                     logger.info(f"✅ Menu Button установлен: {web_url}")
