@@ -33,7 +33,7 @@ export function MeetingsPageClient() {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-4">
             <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer" onClick={() => router.push("/meetings/new")}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
@@ -42,9 +42,13 @@ export function MeetingsPageClient() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mb-4">
                   Загрузите аудиозапись встречи для автоматического создания расшифровки с тайм-кодами и структурированного резюме
                 </p>
+                <Button className="w-full" onClick={() => router.push("/meetings/new")}>
+                  <FileAudio className="mr-2 h-4 w-4" />
+                  Начать расшифровку
+                </Button>
               </CardContent>
             </Card>
 
@@ -56,9 +60,13 @@ export function MeetingsPageClient() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mb-4">
                   Просмотрите ранее обработанные встречи, их расшифровки и резюме
                 </p>
+                <Button variant="outline" className="w-full" onClick={() => router.push("/meetings/history")}>
+                  <History className="mr-2 h-4 w-4" />
+                  Открыть историю
+                </Button>
               </CardContent>
             </Card>
           </div>

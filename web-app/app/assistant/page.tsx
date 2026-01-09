@@ -130,6 +130,30 @@ export default function AssistantPage() {
                 </CardContent>
               </Card>
             </Link>
+            
+            {/* Open Calendar Button */}
+            <a
+              href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+            >
+              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer bg-primary/5 border-primary/20">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
+                      <Calendar className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold mb-1">Открыть календарь в Telegram</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Используй бота для управления событиями и напоминаниями
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </a>
 
             {/* AI Transcriber */}
             <Card className="border-border">
@@ -144,7 +168,7 @@ export default function AssistantPage() {
                   Расшифровка и анализ аудиозаписей встреч с помощью искусственного интеллекта
                 </p>
                 
-                <Link href="/meetings">
+                <Link href="/meetings/new">
                   <Button className="w-full" size="lg">
                     <Mic className="mr-2 h-5 w-5" />
                     Расшифровать встречу

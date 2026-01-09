@@ -366,30 +366,59 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     
     if data == "settings_google":
-        # Проверяем, не подключен ли уже
-        connections = db.get_calendar_connections(user_id)
-        google_connected = any(c['provider'] == 'google' for c in connections)
-        
-        if google_connected:
-            # Предлагаем отключить
-            await query.edit_message_text(
-                "Google Calendar уже подключен.\n\n"
-                "Отправить команду /disconnect_google для отключения."
-            )
-        else:
-            # Инициируем OAuth flow для Google
-            calendar = GoogleCalendar(user_id)
-            auth_url = calendar.get_authorization_url()
+        try:
+            # Проверяем, не подключен ли уже
+            connections = db.get_calendar_connections(user_id)
+            google_connected = any(c['provider'] == 'google' for c in connections)
             
+            if google_connected:
+                # Предлагаем отключить
+                keyboard = [[InlineKeyboardButton("Отключить Google Calendar", callback_data="disconnect_google")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(
+                    "✅ Google Calendar уже подключен.\n\n"
+                    "Твои события автоматически синхронизируются с Google Calendar.",
+                    reply_markup=reply_markup
+                )
+            else:
+                # Инициируем OAuth flow для Google
+                try:
+                    calendar = GoogleCalendar(user_id)
+                    auth_url = calendar.get_authorization_url()
+                    
+                    # Создаем кнопку для перехода по ссылке
+                    keyboard = [[InlineKeyboardButton(
+                        "🔗 Открыть ссылку авторизации",
+                        url=auth_url
+                    )]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await query.edit_message_text(
+                        "📅 **Подключение Google Calendar**\n\n"
+                        "1. Нажми на кнопку ниже для авторизации\n"
+                        "2. Разреши доступ к календарю\n"
+                        "3. После редиректа скопируй ПОЛНЫЙ URL из адресной строки\n"
+                        "4. Отправь этот URL боту в ответ на это сообщение\n\n"
+                        "Бот будет ожидать URL с кодом авторизации.",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                    
+                    # Сохраняем состояние ожидания URL
+                    context.user_data['waiting_google_url'] = True
+                except Exception as e:
+                    logger.error(f"Ошибка инициализации Google Calendar OAuth: {e}", exc_info=True)
+                    await query.edit_message_text(
+                        f"❌ Ошибка подключения Google Calendar.\n\n"
+                        f"Проверь настройки GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET.\n"
+                        f"Ошибка: {str(e)}"
+                    )
+        except Exception as e:
+            logger.error(f"Ошибка в settings_google: {e}", exc_info=True)
             await query.edit_message_text(
-                f"Подключение Google Calendar:\n\n"
-                f"1. Перейди по ссылке:\n{auth_url}\n\n"
-                f"2. Авторизуйся и разреши доступ\n\n"
-                f"3. После редиректа скопируй ПОЛНЫЙ URL из адресной строки и отправь его боту."
+                "❌ Произошла ошибка при обработке запроса.\n"
+                "Попробуй снова через /settings"
             )
-            
-            # Сохраняем состояние ожидания URL
-            context.user_data['waiting_google_url'] = True
     
     elif data == "help_show":
         # Показываем помощь
@@ -398,11 +427,31 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     elif data == "settings_icloud":
-        # Показываем сообщение о загрузке, затем генерируем инструкцию
-        await query.edit_message_text("⏳ Генерирую подробную инструкцию...")
-        # Генерируем подробную инструкцию через AI для лучшего понимания
-        instructions = await generate_icloud_instructions(query.from_user.id, context)
-        await query.edit_message_text(instructions)
+        try:
+            # Проверяем, не подключен ли уже
+            connections = db.get_calendar_connections(user_id)
+            icloud_connected = any(c['provider'] == 'icloud' for c in connections)
+            
+            if icloud_connected:
+                keyboard = [[InlineKeyboardButton("Отключить iCloud Calendar", callback_data="disconnect_icloud")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(
+                    "✅ iCloud Calendar уже подключен.\n\n"
+                    "Твои события автоматически синхронизируются с iCloud Calendar.",
+                    reply_markup=reply_markup
+                )
+            else:
+                # Показываем сообщение о загрузке, затем генерируем инструкцию
+                await query.edit_message_text("⏳ Генерирую подробную инструкцию...")
+                # Генерируем подробную инструкцию через AI для лучшего понимания
+                instructions = await generate_icloud_instructions(user_id, context)
+                await query.edit_message_text(instructions)
+        except Exception as e:
+            logger.error(f"Ошибка в settings_icloud: {e}", exc_info=True)
+            await query.edit_message_text(
+                "❌ Произошла ошибка при обработке запроса.\n"
+                "Попробуй снова через /settings"
+            )
     
     elif data == "settings_notifications":
         await query.edit_message_text(
@@ -1242,6 +1291,7 @@ def main():
     application.add_handler(CommandHandler("connect_icloud", connect_icloud_command))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^settings_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^meeting_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^help_"))
     
     # Обработчик голосовых сообщений (отдельно для лучшей отладки)
     application.add_handler(MessageHandler(
