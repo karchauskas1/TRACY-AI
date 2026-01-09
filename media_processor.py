@@ -58,9 +58,32 @@ class MediaProcessor:
             try:
                 from pydub import AudioSegment
                 
-                # Конвертируем OGG в WAV
-                audio_data = AudioSegment.from_file(voice_io, format="ogg")
+                # Пробуем определить формат и конвертируем в WAV
+                voice_io.seek(0)
+                audio_data = None
+                supported_formats = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
                 
+                # Пробуем разные форматы
+                for fmt in supported_formats:
+                    try:
+                        voice_io.seek(0)
+                        audio_data = AudioSegment.from_file(voice_io, format=fmt)
+                        logger.info(f"Определен формат аудио для распознавания: {fmt}")
+                        break
+                    except:
+                        continue
+                
+                # Если не удалось определить, пробуем автоопределение
+                if audio_data is None:
+                    try:
+                        voice_io.seek(0)
+                        audio_data = AudioSegment.from_file(voice_io)
+                        logger.info("Формат определен автоматически для распознавания")
+                    except Exception as e:
+                        logger.error(f"Не удалось определить формат аудио: {e}")
+                        return None
+                
+                # Конвертируем в WAV для Google Speech Recognition
                 wav_io = io.BytesIO()
                 audio_data.export(wav_io, format="wav")
                 wav_io.seek(0)
@@ -254,13 +277,39 @@ class MediaProcessor:
                 photo_file = await bot.get_file(photo.file_id)
                 return await self.process_image(photo_file)
             
-            # Документ (если это изображение)
+            # Документ (изображение или аудио)
             if update.message and update.message.document:
                 doc = update.message.document
+                # Изображение
                 if doc.mime_type and doc.mime_type.startswith('image/'):
                     logger.info("Обработка документа-изображения")
                     doc_file = await bot.get_file(doc.file_id)
                     return await self.process_image(doc_file)
+                
+                # Аудиофайл (для обычного режима - создание событий из голоса)
+                # Проверяем по расширению и mime_type
+                is_audio = False
+                if doc.mime_type and 'audio' in doc.mime_type.lower():
+                    is_audio = True
+                elif doc.file_name:
+                    audio_extensions = ['.mp3', '.m4a', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.wma', '.amr', '.3gp', '.mka']
+                    file_ext = doc.file_name.lower()
+                    if any(file_ext.endswith(ext) for ext in audio_extensions):
+                        is_audio = True
+                
+                if is_audio:
+                    logger.info(f"Обнаружен аудиофайл в обычном режиме: {doc.file_name or 'без имени'}, mime_type: {doc.mime_type}")
+                    try:
+                        doc_file = await bot.get_file(doc.file_id)
+                        logger.info("Загружаю аудиофайл...")
+                        # Обрабатываем как голосовое сообщение
+                        result = await self.process_voice(doc_file)
+                        if result:
+                            logger.info(f"Аудиофайл успешно обработан: {result[:50]}...")
+                        return result
+                    except Exception as e:
+                        logger.error(f"Ошибка при обработке аудиофайла: {e}", exc_info=True)
+                        raise
             
             logger.warning(f"Неизвестный тип сообщения: {type(update.message)}")
             return None
