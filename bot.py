@@ -698,7 +698,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎤 **Режим работы с записями встреч**\n\n"
             "Вы вошли в режим расшифровки встреч. Чтобы продолжить и расшифровать встречу, отправьте голосовое сообщение или аудиофайл с записью встречи.\n\n"
             "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n"
-            "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.",
+            "📎 Поддерживаемые аудиоформаты: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие.",
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
