@@ -5,7 +5,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameM
 import { ru } from "date-fns/locale"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "../../lib/utils"
 
 interface CalendarGridProps {
   selectedDate: Date
