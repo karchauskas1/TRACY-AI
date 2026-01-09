@@ -1,5 +1,6 @@
 "use client"
 
+// Login page for TRACY web app
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Script from "next/script"
