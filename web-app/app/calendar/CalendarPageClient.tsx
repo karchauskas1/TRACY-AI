@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { format, startOfMonth, endOfMonth, isSameDay } from "date-fns"
-import { Settings, MessageCircle } from "lucide-react"
+import { format, isSameDay } from "date-fns"
+import { ru } from "date-fns/locale"
+import { Settings, X, MessageCircle, Send } from "lucide-react"
 import Link from "next/link"
 import { CalendarGrid } from "../../components/calendar/CalendarGrid"
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { formatTime } from "../../lib/utils"
 
@@ -26,6 +26,32 @@ export function CalendarPageClient() {
   const [events, setEvents] = useState<Event[]>([])
   const [eventsByDate, setEventsByDate] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    // Загружаем данные пользователя из Telegram Web App или localStorage
+    if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg) {
+        tg.ready()
+        const tgUser = tg.initDataUnsafe?.user
+        if (tgUser) {
+          setUser({
+            id: tgUser.id.toString(),
+            first_name: tgUser.first_name,
+            last_name: tgUser.last_name,
+            username: tgUser.username,
+            photo_url: tgUser.photo_url,
+          })
+        }
+      } else {
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          setUser(JSON.parse(savedUser))
+        }
+      }
+    }
+  }, [])
 
   const loadEvents = async () => {
     try {
@@ -65,95 +91,123 @@ export function CalendarPageClient() {
     (event) => format(new Date(event.startAt), "yyyy-MM-dd") === selectedDateKey
   )
 
-  const telegramLink = process.env.NEXT_PUBLIC_TELEGRAM_DEEP_LINK || "https://t.me/your_bot"
+  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
+  const telegramLink = `https://t.me/${botUsername}`
+
+  const handleClose = () => {
+    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+      (window as any).Telegram.WebApp.close()
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold">Календарь</h1>
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Top Header - как на скриншоте */}
+      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
+        <div className="flex h-14 items-center justify-between px-4">
+          {/* Left: Close button and profile */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleClose}
+              className="text-foreground hover:text-muted-foreground transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            {user?.photo_url && (
+              <img
+                src={user.photo_url}
+                alt={user.first_name || "User"}
+                className="h-8 w-8 rounded-full"
+              />
+            )}
+            <button className="px-3 py-1.5 rounded-full bg-card border border-border text-sm font-medium hover:bg-accent transition-colors">
+              <span className="text-primary">TRACY</span>
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href={telegramLink} target="_blank">
-              <Button variant="outline" size="sm">
-                <MessageCircle className="mr-2 h-4 w-4" />
-                Открыть чат с TRACY
-              </Button>
-            </Link>
-            <Link href="/settings">
-              <Button variant="ghost" size="icon">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </Link>
-          </div>
+          
+          {/* Right: Settings */}
+          <Link href="/settings">
+            <button className="text-foreground hover:text-muted-foreground transition-colors">
+              <Settings className="h-5 w-5" />
+            </button>
+          </Link>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid gap-8 lg:grid-cols-3">
-          {/* Calendar */}
-          <div className="lg:col-span-2">
-            <CalendarGrid
-              selectedDate={selectedDate}
-              onDateSelect={setSelectedDate}
-              eventsByDate={eventsByDate}
-            />
-          </div>
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto pb-24">
+        <div className="px-4 py-4">
+          <CalendarGrid
+            selectedDate={selectedDate}
+            onDateSelect={setSelectedDate}
+            eventsByDate={eventsByDate}
+          />
+        </div>
 
-          {/* Events Panel */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {format(selectedDate, "d MMMM yyyy")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="text-center text-muted-foreground py-8">
-                    Загрузка...
+        {/* Bottom Panel - Events for selected day */}
+        <div className="px-4 pb-4">
+          <div className="bg-card rounded-2xl p-4 border border-border">
+            <h2 className="text-lg font-semibold mb-4">
+              {format(selectedDate, "d MMMM", { locale: ru })}
+            </h2>
+            
+            {loading ? (
+              <div className="text-center text-muted-foreground py-8">
+                Загрузка...
+              </div>
+            ) : dayEvents.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-2">Сегодня нет событий</p>
+                <a
+                  href={telegramLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline text-sm"
+                >
+                  Чат с TRACY для создания событий
+                </a>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {dayEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors"
+                  >
+                    <div
+                      className="mt-1.5 h-2 w-2 rounded-full flex-shrink-0"
+                      style={{
+                        backgroundColor: event.calendarSource?.color || "hsl(var(--calendar-event-dot))",
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{event.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {event.allDay
+                          ? "Весь день"
+                          : formatTime(new Date(event.startAt))}
+                      </p>
+                    </div>
                   </div>
-                ) : dayEvents.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-8">
-                    В этот день нет событий
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {dayEvents.map((event) => (
-                      <div
-                        key={event.id}
-                        className="block"
-                      >
-                        <div
-                          className="group flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
-                        >
-                          <div
-                            className="mt-1 h-1 w-1 rounded-full"
-                            style={{
-                              backgroundColor: event.calendarSource?.color || "#3b82f6",
-                            }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{event.title}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {event.allDay
-                                ? "Весь день"
-                                : formatTime(new Date(event.startAt))}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Floating Button - Bottom Right (как на скриншоте) */}
+      <a
+        href={telegramLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-30"
+      >
+        <button className="flex items-center gap-2 px-4 py-3 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors">
+          <Send className="h-4 w-4" />
+          <span className="font-medium">TRACY</span>
+        </button>
+      </a>
     </div>
   )
 }
-

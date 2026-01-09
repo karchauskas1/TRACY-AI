@@ -11,6 +11,11 @@ export default function HomePage() {
     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp
       tg.ready()
+      // Настраиваем тему Telegram Web App
+      tg.setHeaderColor("#1a1a20") // Темный фон
+      tg.setBackgroundColor("#1a1a20")
+      tg.enableClosingConfirmation()
+      
       // Сохраняем данные пользователя из Telegram Web App
       const user = tg.initDataUnsafe?.user
       if (user) {
@@ -22,6 +27,7 @@ export default function HomePage() {
           photo_url: user.photo_url,
         }))
       }
+      // Сразу переходим в календарь без авторизации
       router.push("/calendar")
     } else {
       // Проверяем, есть ли сохраненный пользователь
@@ -35,9 +41,9 @@ export default function HomePage() {
   }, [router])
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="text-center">
-        <h1 className="text-2xl font-semibold">TRACY</h1>
+        <h1 className="text-2xl font-semibold text-foreground">TRACY</h1>
         <p className="mt-2 text-muted-foreground">Загрузка...</p>
       </div>
     </div>

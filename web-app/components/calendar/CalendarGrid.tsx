@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, startOfWeek, endOfWeek } from "date-fns"
 import { ru } from "date-fns/locale"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, Settings } from "lucide-react"
+import Link from "next/link"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 
@@ -53,44 +54,62 @@ export function CalendarGrid({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between px-2">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-semibold">
-            {format(currentMonth, "LLLL yyyy", { locale: ru })}
-          </h2>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goToPreviousMonth}
-              className="h-8 w-8"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goToNextMonth}
-              className="h-8 w-8"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+      {/* Header - как на скриншоте */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📅</span>
+            <h2 className="text-lg font-semibold">
+              {format(currentMonth, "LLLL yyyy", { locale: ru })}
+            </h2>
           </div>
-          <Button variant="outline" size="sm" onClick={goToToday}>
+          <span className="text-primary text-lg">🤖</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToPreviousMonth}
+            className="h-8 w-8 text-foreground hover:bg-accent"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToNextMonth}
+            className="h-8 w-8 text-foreground hover:bg-accent"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={goToToday}
+            className="bg-card border-border hover:bg-accent"
+          >
             Сегодня
           </Button>
+          <Link href="/settings">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-foreground hover:bg-accent"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </Link>
         </div>
       </div>
 
       {/* Calendar Grid */}
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-lg bg-card border border-border p-4">
         {/* Week days header */}
-        <div className="grid grid-cols-7 gap-2 mb-2">
+        <div className="grid grid-cols-7 gap-1 mb-2">
           {weekDays.map((day) => (
             <div
               key={day}
-              className="text-center text-sm font-medium text-muted-foreground py-2"
+              className="text-center text-xs font-medium text-muted-foreground py-2"
             >
               {day}
             </div>
@@ -98,7 +117,7 @@ export function CalendarGrid({
         </div>
 
         {/* Calendar days */}
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1">
           {days.map((day) => {
             const isCurrentMonth = isSameMonth(day, currentMonth)
             const isSelected = isSameDay(day, selectedDate)
@@ -112,12 +131,11 @@ export function CalendarGrid({
                   onDateSelect(day)
                 }}
                 className={cn(
-                  "relative h-12 rounded-lg text-sm transition-colors",
-                  "hover:bg-accent hover:text-accent-foreground",
-                  !isCurrentMonth && "text-muted-foreground opacity-50",
-                  isSelected &&
-                    "bg-primary text-primary-foreground hover:bg-primary/90",
-                  !isSelected && isCurrentMonth && "bg-background"
+                  "relative h-10 rounded-lg text-sm transition-colors flex items-center justify-center",
+                  !isCurrentMonth && "text-muted-foreground opacity-40",
+                  isSelected
+                    ? "bg-[hsl(var(--calendar-selected))] text-white font-medium"
+                    : isCurrentMonth && "hover:bg-accent/50 text-foreground"
                 )}
               >
                 <span>{format(day, "d")}</span>
@@ -125,7 +143,9 @@ export function CalendarGrid({
                   <span
                     className={cn(
                       "absolute bottom-1 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full",
-                      isSelected ? "bg-primary-foreground" : "bg-primary"
+                      isSelected 
+                        ? "bg-white" 
+                        : "bg-[hsl(var(--calendar-event-dot))]"
                     )}
                   />
                 )}
