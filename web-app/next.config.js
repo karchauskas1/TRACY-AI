@@ -11,10 +11,17 @@ const nextConfig = {
   },
   trailingSlash: true,
   webpack: (config) => {
+    // Явно настраиваем алиас для разрешения @/ путей
+    const rootPath = path.resolve(__dirname)
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.resolve(__dirname),
+      '@': rootPath,
     }
+    // Также настраиваем modules для правильного разрешения
+    config.resolve.modules = [
+      ...(config.resolve.modules || []),
+      rootPath,
+    ]
     return config
   },
 }
