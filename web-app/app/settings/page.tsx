@@ -1,22 +1,23 @@
-import { redirect } from "next/navigation"
-import { cookies } from "next/headers"
-import { getSession } from "@/lib/auth"
+"use client"
+
+import { useState, useEffect } from "react"
 import { SettingsPageClient } from "./SettingsPageClient"
-import { NextRequest } from "next/server"
 
-export default async function SettingsPage() {
-  const cookieStore = await cookies()
-  const request = new NextRequest("http://localhost", {
-    headers: {
-      cookie: cookieStore.toString(),
-    },
-  })
-  const session = await getSession(request)
+export default function SettingsPage() {
+  const [user, setUser] = useState<any>(null)
 
-  if (!session) {
-    redirect("/login")
-  }
-
-  return <SettingsPageClient user={session} />
+  useEffect(() => {
+    // Для статического экспорта получаем пользователя из localStorage
+    const userStr = localStorage.getItem("telegram_user")
+    if (userStr) {
+      try {
+        setUser(JSON.parse(userStr))
+      } catch (e) {
+        console.error("Failed to parse user:", e)
+      }
+    }
+  }, [])
+  
+  return <SettingsPageClient user={user} />
 }
 

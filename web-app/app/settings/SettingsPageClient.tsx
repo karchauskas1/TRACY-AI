@@ -12,14 +12,16 @@ interface SettingsPageClientProps {
     id: string
     name: string
     avatarUrl?: string
-  }
+  } | null
 }
 
 export function SettingsPageClient({ user }: SettingsPageClientProps) {
   const router = useRouter()
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" })
+    // Для статического экспорта просто очищаем localStorage
+    localStorage.removeItem("telegram_user")
+    localStorage.removeItem("tracy_events")
     router.push("/login")
   }
 
@@ -63,17 +65,17 @@ export function SettingsPageClient({ user }: SettingsPageClientProps) {
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
-                <AvatarImage src={user.avatarUrl} alt={user.name} />
+                <AvatarImage src={user?.avatarUrl} alt={user?.name || "User"} />
                 <AvatarFallback>
-                  {user.name
-                    .split(" ")
+                  {user?.name
+                    ?.split(" ")
                     .map((n) => n[0])
                     .join("")
-                    .toUpperCase()}
+                    .toUpperCase() || "U"}
                 </AvatarFallback>
               </Avatar>
               <div>
-                <h2 className="text-xl font-semibold">{user.name}</h2>
+                <h2 className="text-xl font-semibold">{user?.name || "Пользователь"}</h2>
               </div>
             </div>
           </CardContent>

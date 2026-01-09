@@ -107,7 +107,7 @@ export function CalendarPageClient() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {format(selectedDate, "d MMMM", { locale: require("date-fns/locale/ru") })}
+                  {format(selectedDate, "d MMMM yyyy")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -122,9 +122,8 @@ export function CalendarPageClient() {
                 ) : (
                   <div className="space-y-2">
                     {dayEvents.map((event) => (
-                      <Link
+                      <div
                         key={event.id}
-                        href={`/event/${event.id}`}
                         className="block"
                       >
                         <div
@@ -145,7 +144,7 @@ export function CalendarPageClient() {
                             </p>
                           </div>
                         </div>
-                      </Link>
+                      </div>
                     ))}
                   </div>
                 )}
