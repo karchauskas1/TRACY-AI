@@ -12,6 +12,7 @@ interface SettingsPageClientProps {
     id: string
     name: string
     avatarUrl?: string
+    photo_url?: string
     first_name?: string
     last_name?: string
   } | null
