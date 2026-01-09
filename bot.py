@@ -767,16 +767,25 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Показать полный текст
             transcript = meeting_data.get('transcript', 'Расшифровка недоступна')
             
+            keyboard = [
+                [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
+                [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")],
+                [InlineKeyboardButton("⬅️ Назад к резюме", callback_data="meeting_back_to_summary")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
             # Если текст слишком длинный, отправляем как отдельное сообщение
             if len(transcript) > 4000:
                 await query.message.reply_text(
                     f"📄 **Полная расшифровка встречи**\n\n{transcript}",
+                    reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
                 await query.answer()
             else:
                 await query.edit_message_text(
                     f"📄 **Полная расшифровка встречи**\n\n{transcript}",
+                    reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
         
