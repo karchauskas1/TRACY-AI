@@ -59,34 +59,74 @@ class MeetingProcessor:
                     
                     # Определяем формат и конвертируем при необходимости
                     audio_io.seek(0)
-                    audio_format = "mp3"
                     
-                    try:
-                        # Пробуем определить формат
-                        test_audio = AudioSegment.from_file(audio_io, format="ogg")
-                        audio_io.seek(0)
-                        
-                        # Конвертируем в MP3 для Whisper
-                        converted_io = io.BytesIO()
-                        test_audio.export(converted_io, format="mp3", bitrate="128k")
-                        converted_io.seek(0)
-                        audio_data = converted_io.read()
-                    except:
-                        # Если не получилось, используем как есть
-                        audio_io.seek(0)
-                        audio_data = audio_io.read()
+                    # Пробуем определить формат по содержимому файла
+                    audio_format = None
+                    supported_formats = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
+                    
+                    audio_data = None
+                    for fmt in supported_formats:
+                        try:
+                            audio_io.seek(0)
+                            test_audio = AudioSegment.from_file(audio_io, format=fmt)
+                            audio_format = fmt
+                            logger.info(f"Определен формат аудио: {fmt}")
+                            
+                            # Конвертируем в MP3 для Whisper (если не MP3 уже)
+                            if fmt != 'mp3':
+                                converted_io = io.BytesIO()
+                                test_audio.export(converted_io, format="mp3", bitrate="128k")
+                                converted_io.seek(0)
+                                audio_data = converted_io.read()
+                            else:
+                                audio_io.seek(0)
+                                audio_data = audio_io.read()
+                            break
+                        except Exception as e:
+                            continue
+                    
+                    # Если формат не определен, пробуем автоопределение
+                    if not audio_format or not audio_data:
+                        try:
+                            audio_io.seek(0)
+                            logger.info("Пробую автоопределение формата...")
+                            test_audio = AudioSegment.from_file(audio_io)
+                            converted_io = io.BytesIO()
+                            test_audio.export(converted_io, format="mp3", bitrate="128k")
+                            converted_io.seek(0)
+                            audio_data = converted_io.read()
+                            audio_format = "mp3"
+                            logger.info("Формат определен автоматически, конвертировано в MP3")
+                        except Exception as e:
+                            logger.warning(f"Не удалось определить формат, используем как есть: {e}")
+                            audio_io.seek(0)
+                            audio_data = audio_io.read()
+                            audio_format = "mp3"  # Пробуем как MP3
                     
                     # Используем Whisper для расшифровки с временными метками
                     import tempfile
                     import os
                     
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+                    # Определяем расширение для временного файла
+                    suffix = f'.{audio_format}' if audio_format in ['mp3', 'wav', 'm4a'] else '.mp3'
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
                         temp_file.write(audio_data)
                         temp_file_path = temp_file.name
                     
                     try:
                         with open(temp_file_path, 'rb') as audio_file_obj:
-                            file_tuple = (os.path.basename(temp_file_path), audio_file_obj, 'audio/mpeg')
+                            # Определяем MIME тип в зависимости от формата
+                            mime_type = 'audio/mpeg'
+                            if audio_format == 'wav':
+                                mime_type = 'audio/wav'
+                            elif audio_format == 'm4a':
+                                mime_type = 'audio/mp4'
+                            elif audio_format in ['ogg', 'opus']:
+                                mime_type = 'audio/ogg'
+                            elif audio_format == 'flac':
+                                mime_type = 'audio/flac'
+                            
+                            file_tuple = (os.path.basename(temp_file_path), audio_file_obj, mime_type)
                             
                             # Используем Whisper с временными метками
                             # Пробуем использовать verbose_json если доступен
@@ -118,7 +158,7 @@ class MeetingProcessor:
                                 # Fallback на обычный формат если verbose_json не поддерживается
                                 logger.warning(f"Verbose JSON не поддерживается, используем обычный формат: {verbose_error}")
                                 audio_file_obj.seek(0)
-                                file_tuple = (os.path.basename(temp_file_path), audio_file_obj, 'audio/mpeg')
+                                file_tuple = (os.path.basename(temp_file_path), audio_file_obj, mime_type)
                                 response = whisper_client.audio.transcriptions.create(
                                     model="openai/whisper-1",
                                     file=file_tuple,

@@ -698,7 +698,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎤 **Режим работы с записями встреч**\n\n"
             "Вы вошли в режим расшифровки встреч. Чтобы продолжить и расшифровать встречу, отправьте голосовое сообщение или аудиофайл с записью встречи.\n\n"
             "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n"
-            "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG",
+            "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.",
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
@@ -945,6 +945,36 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
 
+def is_audio_file(message) -> bool:
+    """Проверяет, является ли сообщение аудиофайлом."""
+    # Голосовое сообщение
+    if message.voice:
+        return True
+    
+    # Документ с аудио
+    if message.document:
+        doc = message.document
+        # Проверяем mime_type
+        if doc.mime_type:
+            if 'audio' in doc.mime_type.lower():
+                return True
+        
+        # Проверяем расширение файла если mime_type не указан
+        if doc.file_name:
+            audio_extensions = ['.mp3', '.m4a', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.wma', '.amr', '.3gp', '.mka']
+            file_ext = doc.file_name.lower()
+            if any(file_ext.endswith(ext) for ext in audio_extensions):
+                return True
+        
+        # Если нет имени файла и mime_type, но есть document, попробуем обработать
+        # (Telegram иногда не передает mime_type)
+        if not doc.mime_type and not doc.file_name:
+            # Пробуем обработать как аудио, если нет других индикаторов
+            return True
+    
+    return False
+
+
 async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик аудио для режима встреч."""
     user_id = update.effective_user.id
@@ -983,20 +1013,45 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # Получаем аудиофайл
         audio_file = None
+        file_type = "unknown"
+        file_name = "audio"
+        
         if update.message.voice:
             voice = update.message.voice
             audio_file = await context.bot.get_file(voice.file_id)
+            file_type = "voice"
+            file_name = "voice.ogg"
+            logger.info(f"Получено голосовое сообщение, длительность: {voice.duration} сек")
         elif update.message.document:
             doc = update.message.document
-            audio_file = await context.bot.get_file(doc.file_id)
+            if is_audio_file(update.message):
+                audio_file = await context.bot.get_file(doc.file_id)
+                file_type = "document"
+                file_name = doc.file_name or "audio_file"
+                logger.info(f"Получен аудиофайл: {file_name}, размер: {doc.file_size} bytes, mime_type: {doc.mime_type}")
+            else:
+                await update.message.reply_text(
+                    "❌ Это не аудиофайл. Пожалуйста, отправь голосовое сообщение или аудиофайл.\n\n"
+                    "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты."
+                )
+                return
         
         if not audio_file:
-            await update.message.reply_text("Не удалось получить аудиофайл. Попробуй еще раз.")
+            await update.message.reply_text(
+                "❌ Не удалось получить аудиофайл. Убедись, что отправил голосовое сообщение или аудиофайл.\n\n"
+                "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты."
+            )
             return
         
         # Получаем настройки пользователя
         user = db.get_or_create_user(user_id)
         language = user.get('locale', 'ru_RU').split('_')[0]  # Извлекаем язык
+        
+        # Отправляем подтверждение о получении файла
+        await update.message.reply_text(
+            f"✅ Получен аудиофайл: {file_name}\n\n"
+            "🎤 Начинаю расшифровку... Это может занять некоторое время."
+        )
         
         # Расшифровываем аудио
         logger.info("Начинаю расшифровку аудио для встречи...")
@@ -1215,7 +1270,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # В этом режиме ВСЕ голосовые сообщения идут на расшифровку встречи, а не на создание событий
     if context.user_data.get('waiting_meeting_audio'):
         # Обработка аудио для встречи - ВСЕ голосовые и аудиофайлы
-        if update.message.voice or (update.message.document and update.message.document.mime_type and 'audio' in update.message.document.mime_type):
+        if is_audio_file(update.message):
             await handle_meeting_audio(update, context)
             return
         # Текстовые команды для выхода из режима
@@ -1239,13 +1294,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # НЕ обрабатываем текст как обычное сообщение в режиме расшифровки
             keyboard = [[InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(
-                "🎤 **Режим расшифровки встреч активен**\n\n"
-                "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
-                "Чтобы выйти из режима расшифровки, напиши 'отмена' или 'режим планировщика', или нажми кнопку ниже.",
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
-            )
+            
+            # Проверяем, что это не аудиофайл
+            if update.message.document and not is_audio_file(update.message):
+                await update.message.reply_text(
+                    "❌ **Режим расшифровки встреч активен**\n\n"
+                    "Этот файл не является аудиофайлом. Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
+                    "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
+                    "Чтобы выйти из режима расшифровки, напиши 'отмена' или 'режим планировщика', или нажми кнопку ниже.",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text(
+                    "🎤 **Режим расшифровки встреч активен**\n\n"
+                    "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
+                    "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
+                    "Чтобы выйти из режима расшифровки, напиши 'отмена' или 'режим планировщика', или нажми кнопку ниже.",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
             return
     
     # Включаем индикатор "бот печатает"
@@ -1740,6 +1808,13 @@ def main():
     # Обработчик голосовых сообщений (отдельно для лучшей отладки)
     application.add_handler(MessageHandler(
         filters.VOICE,
+        handle_message
+    ))
+    
+    # Обработчик аудиофайлов (документы с аудио)
+    # Используем фильтр для документов, но проверяем внутри handle_message
+    application.add_handler(MessageHandler(
+        filters.Document.ALL,  # Все документы, проверку делаем внутри
         handle_message
     ))
     
