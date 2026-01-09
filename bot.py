@@ -755,7 +755,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
     
-    elif data.startswith("meeting_") and data != "meeting_create_summary":
+    elif data.startswith("meeting_") and data != "meeting_create_summary" and data != "meeting_back_to_summary":
         # Обработка дополнительных действий после создания резюме
         meeting_data = context.user_data.get('last_meeting_data')
         
