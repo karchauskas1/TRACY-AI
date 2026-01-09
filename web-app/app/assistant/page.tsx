@@ -155,50 +155,24 @@ export default function AssistantPage() {
               </Card>
             </a>
 
-            {/* AI Transcriber */}
-            <Card className="border-border">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  ИИ транскрибатор
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground mb-4">
-                  Расшифровка и анализ аудиозаписей встреч с помощью искусственного интеллекта
-                </p>
-                
-                <Button 
-                  className="w-full" 
-                  size="lg"
-                  onClick={() => {
-                    const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
-                    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-                      const tg = (window as any).Telegram.WebApp
-                      tg.ready()
-                      // Открываем чат с ботом через deep link
-                      tg.openTelegramLink(`https://t.me/${botUsername}?start=meeting_transcribe`)
-                      // Закрываем веб-приложение после небольшой задержки
-                      setTimeout(() => {
-                        tg.close()
-                      }, 500)
-                    } else {
-                      window.open(`https://t.me/${botUsername}?start=meeting_transcribe`, '_blank')
-                    }
-                  }}
-                >
-                  <Mic className="mr-2 h-5 w-5" />
-                  Расшифровать встречу
-                </Button>
-                
-                <Link href="/meetings/history">
-                  <Button variant="outline" className="w-full">
-                    <History className="mr-2 h-4 w-4" />
-                    История расшифровок
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
+            {/* История расшифровок */}
+            <Link href="/meetings/history">
+              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <History className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold mb-1">История расшифровок</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Просмотр всех расшифрованных встреч
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
         </div>
       </div>

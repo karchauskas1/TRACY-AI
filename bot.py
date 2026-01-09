@@ -2,7 +2,7 @@
 import logging
 import asyncio
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp, BotCommand
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
@@ -109,6 +109,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
     
+    # Кнопка меню
+    keyboard.append([InlineKeyboardButton("📋 Меню", callback_data="menu_show")])
     # Кнопка помощи
     keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
     
@@ -116,6 +118,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         welcome_message,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /menu."""
+    keyboard = [
+        [InlineKeyboardButton("🎤 Режим резюмирования встреч", callback_data="mode_meeting_transcribe")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "📋 **Меню TRACY**\n\n"
+        "Выберите действие:",
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
@@ -443,6 +460,69 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "❌ Произошла ошибка при обработке запроса.\n"
                 "Попробуй снова через /settings"
             )
+    
+    elif data == "menu_show":
+        # Показываем меню с опциями
+        keyboard = [
+            [InlineKeyboardButton("🎤 Режим резюмирования встреч", callback_data="mode_meeting_transcribe")],
+            [InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")],
+            [InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")],
+            [InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "📋 **Меню TRACY**\n\n"
+            "Выберите режим работы или действие:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "settings_show":
+        # Показываем меню настроек через callback
+        user_id = query.from_user.id
+        connections = db.get_calendar_connections(user_id)
+        
+        keyboard = []
+        
+        # Кнопка для Google Calendar
+        google_connected = any(c['provider'] == 'google' for c in connections)
+        keyboard.append([InlineKeyboardButton(
+            f"Google Calendar {'✓' if google_connected else ''}",
+            callback_data="settings_google"
+        )])
+        
+        # Кнопка для iCloud Calendar
+        icloud_connected = any(c['provider'] == 'icloud' for c in connections)
+        keyboard.append([InlineKeyboardButton(
+            f"iCloud Calendar {'✓' if icloud_connected else ''}",
+            callback_data="settings_icloud"
+        )])
+        
+        # Кнопка для настроек уведомлений
+        keyboard.append([InlineKeyboardButton("Уведомления", callback_data="settings_notifications")])
+        
+        # Кнопка для открытия веб-приложения
+        web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
+        if "localhost" not in web_url.lower() and web_url.startswith("https://"):
+            try:
+                keyboard.append([InlineKeyboardButton(
+                    "🌐 Открыть веб-приложение",
+                    web_app=WebAppInfo(url=web_url)
+                )])
+            except:
+                pass
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "⚙️ **Настройки**\n\n"
+            "Здесь ты можешь управлять подключенными календарями и другими параметрами:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
     
     elif data == "help_show":
         # Показываем помощь (быстрый статический ответ)
@@ -1415,6 +1495,7 @@ def main():
     
     # Регистрируем обработчики (команды имеют приоритет)
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("menu", menu_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("settings", settings_command))
     # Команды /web, /search, /share убраны из меню, но остаются доступными для использования
@@ -1425,6 +1506,7 @@ def main():
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^settings_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^meeting_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^help_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^menu_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^mode_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^disconnect_"))
     
