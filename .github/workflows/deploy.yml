@@ -36,6 +36,20 @@ jobs:
         working-directory: ./web-app
         run: npm ci
       
+      - name: Debug - Check file structure
+        working-directory: ./web-app
+        run: |
+          echo "=== Current directory ==="
+          pwd
+          echo "=== File structure ==="
+          ls -la
+          echo "=== lib directory ==="
+          ls -la lib/ || echo "lib directory not found"
+          echo "=== Check utils.ts ==="
+          cat lib/utils.ts | head -10 || echo "utils.ts not found"
+          echo "=== Check app structure ==="
+          find app -name "*.tsx" -exec echo "File: {}" \; -exec head -15 {} \; | head -50
+      
       - name: Build
         working-directory: ./web-app
         env:
