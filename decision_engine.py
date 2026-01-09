@@ -314,8 +314,25 @@ class DecisionEngine:
                            calendar_connections: List[Dict], timezone: str) -> Dict:
         """Обработать создание/обновление события."""
         title = extracted_data.get('title', 'Без названия')
+        # Капитализируем первую букву названия
+        if title:
+            title = title[0].upper() + title[1:] if len(title) > 1 else title.upper()
+        
         start_time = extracted_data.get('start_time')
         has_explicit_time = extracted_data.get('has_explicit_time', False)
+        
+        # Если есть дата, но нет времени (только дата без времени), устанавливаем 12:00
+        if start_time and has_explicit_time:
+            import pytz
+            tz = pytz.timezone(timezone)
+            # Проверяем, есть ли время в start_time (не только дата)
+            if start_time.hour == 0 and start_time.minute == 0 and start_time.second == 0:
+                # Если время 00:00:00, это скорее всего только дата - ставим 12:00
+                start_time = start_time.replace(hour=12, minute=0, second=0)
+                if start_time.tzinfo is None:
+                    start_time = tz.localize(start_time)
+                else:
+                    start_time = start_time.astimezone(tz)
         
         # Дедупликация: проверяем похожие события
         similar_events = self.db.find_similar_events(

@@ -2,6 +2,7 @@
 import logging
 import asyncio
 import os
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp, BotCommand
 from telegram.constants import ChatAction
 from telegram.ext import (
@@ -896,15 +897,36 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 for event_data in events:
                     try:
+                        # Капитализируем первую букву названия события
+                        event_title = event_data.get('title', 'Событие из встречи')
+                        if event_title:
+                            event_title = event_title[0].upper() + event_title[1:] if len(event_title) > 1 else event_title.upper()
+                        
+                        # Получаем start_time и проверяем время
+                        start_time = event_data.get('start_time')
+                        has_explicit_time = event_data.get('has_explicit_time', True)
+                        
+                        # Если есть дата, но время 00:00:00, устанавливаем 12:00
+                        if start_time and isinstance(start_time, datetime):
+                            if start_time.hour == 0 and start_time.minute == 0 and start_time.second == 0:
+                                import pytz
+                                tz = pytz.timezone(timezone)
+                                start_time = start_time.replace(hour=12, minute=0, second=0)
+                                if start_time.tzinfo is None:
+                                    start_time = tz.localize(start_time)
+                                else:
+                                    start_time = start_time.astimezone(tz)
+                        
                         # Формируем extracted_data в правильном формате
                         extracted_data = {
                             'intent': 'event',
-                            'title': event_data.get('title', 'Событие из встречи'),
+                            'title': event_title,
                             'description': event_data.get('description', ''),
-                            'start_time': event_data.get('start_time'),
+                            'start_time': start_time,
                             'end_time': event_data.get('end_time'),
                             'location': event_data.get('location'),
-                            'priority': event_data.get('priority', 0)
+                            'priority': event_data.get('priority', 0),
+                            'has_explicit_time': has_explicit_time
                         }
                         
                         logger.info(f"Создаю событие: {extracted_data.get('title')} на {extracted_data.get('start_time')}")
@@ -929,8 +951,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.reply_text(
                     f"✅ Создано событий из встречи: {created_count}\n\n"
-                    f"События добавлены в твой календарь.",
-                    reply_markup=reply_markup
+                    f"События добавлены в твой календарь.\n\n"
+                    f"🎤 **Режим расшифровки встреч всё ещё активен.** Отправь следующее голосовое сообщение или аудиофайл для расшифровки.",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
                 )
             else:
                 keyboard = [

@@ -167,6 +167,9 @@ Intent (проверяй в порядке):
                         }
                     )
                     if parsed_date:
+                        # Если время 00:00:00 (только дата без времени), устанавливаем 12:00
+                        if parsed_date.hour == 0 and parsed_date.minute == 0 and parsed_date.second == 0:
+                            parsed_date = parsed_date.replace(hour=12, minute=0, second=0)
                         result["start_time"] = parsed_date.astimezone(tz)
                     else:
                         result["start_time"] = None
@@ -195,6 +198,12 @@ Intent (проверяй в порядке):
                     result["end_time"] = None
             else:
                 result["end_time"] = None
+            
+            # Капитализируем первую букву названия
+            if result.get("title"):
+                title = result["title"]
+                if title:
+                    result["title"] = title[0].upper() + title[1:] if len(title) > 1 else title.upper()
             
             # Если есть start_time но нет end_time, добавляем час по умолчанию
             if result.get("start_time") and not result.get("end_time"):
