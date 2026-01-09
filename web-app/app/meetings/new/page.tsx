@@ -177,16 +177,46 @@ export default function NewMeetingPage() {
               )}
 
               {/* Info Box */}
-              <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+              <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-3">
                 <p className="text-sm text-muted-foreground mb-2">
                   💡 <strong>Как это работает:</strong>
                 </p>
-                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside ml-2">
-                  <li>Загрузи аудиофайл выше или выбери файл</li>
-                  <li>Нажми "Открыть бота для расшифровки"</li>
-                  <li>В открывшемся чате отправь боту аудиофайл</li>
-                  <li>Бот автоматически создаст расшифровку с тайм-кодами и резюме</li>
+                <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside ml-2">
+                  <li>Загрузи аудиофайл выше или выбери файл (MP3, M4A, WAV, OGG)</li>
+                  <li>Нажми кнопку "Открыть бота для расшифровки"</li>
+                  <li>В открывшемся чате отправь боту голосовое сообщение или аудиофайл</li>
+                  <li>Бот автоматически создаст расшифровку с тайм-кодами и структурированное резюме</li>
                 </ol>
+                <p className="text-xs text-muted-foreground pt-2 border-t border-border">
+                  📝 <strong>Примечание:</strong> Файл не загружается автоматически. После открытия чата отправь файл боту вручную.
+                </p>
+              </div>
+              
+              {/* Alternative Method */}
+              <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+                <p className="text-sm font-medium mb-2">
+                  🚀 Быстрый способ:
+                </p>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Просто открой бота в Telegram и отправь ему голосовое сообщение или аудиофайл. 
+                  Бот автоматически распознает, что это встреча, и создаст расшифровку.
+                </p>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
+                    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+                      const tg = (window as any).Telegram.WebApp
+                      tg.ready()
+                      tg.openTelegramLink(`https://t.me/${botUsername}`)
+                    } else {
+                      window.open(`https://t.me/${botUsername}`, '_blank')
+                    }
+                  }}
+                >
+                  Открыть бота напрямую
+                </Button>
               </div>
             </CardContent>
           </Card>

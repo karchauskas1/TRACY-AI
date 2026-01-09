@@ -49,14 +49,15 @@ export function MeetingsPageClient() {
                 <div className="space-y-2">
                   <Button 
                     className="w-full" 
+                    size="lg"
                     onClick={() => {
                       const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
                       if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
                         const tg = (window as any).Telegram.WebApp
                         tg.ready()
-                        tg.openTelegramLink(`https://t.me/${botUsername}`)
+                        tg.openTelegramLink(`https://t.me/${botUsername}?start=meeting_transcribe`)
                       } else {
-                        window.open(`https://t.me/${botUsername}`, '_blank')
+                        window.open(`https://t.me/${botUsername}?start=meeting_transcribe`, '_blank')
                       }
                     }}
                   >
@@ -69,8 +70,13 @@ export function MeetingsPageClient() {
                     className="w-full"
                     onClick={() => router.push("/meetings/new")}
                   >
-                    Загрузить через веб-интерфейс
+                    Загрузить файл через веб-интерфейс
                   </Button>
+                </div>
+                
+                <div className="pt-2 text-xs text-muted-foreground">
+                  💡 <strong>Совет:</strong> После открытия чата отправь боту голосовое сообщение или аудиофайл. 
+                  Бот автоматически создаст расшифровку с тайм-кодами и структурированное резюме.
                 </div>
               </CardContent>
             </Card>
