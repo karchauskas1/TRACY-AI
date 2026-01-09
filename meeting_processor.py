@@ -429,9 +429,31 @@ class MeetingProcessor:
                 try:
                     # Парсим start_time
                     start_time_str = event.get('start_time')
+                    
+                    # Если уже datetime объект
                     if isinstance(start_time_str, datetime):
                         parsed_start = start_time_str
+                    # Если None или 'null'
+                    elif not start_time_str or start_time_str == 'null' or str(start_time_str).lower() == 'null':
+                        logger.info(f"Пропускаем событие без start_time: {event.get('title', 'Без названия')}")
+                        continue
+                    # Пробуем ISO формат сначала
+                    elif 'T' in str(start_time_str) or '-' in str(start_time_str):
+                        try:
+                            from dateutil import parser as dateutil_parser
+                            parsed_start = dateutil_parser.parse(str(start_time_str))
+                        except:
+                            # Fallback на dateparser
+                            parsed_start = dateparser.parse(
+                                str(start_time_str),
+                                settings={
+                                    'TIMEZONE': user_timezone,
+                                    'RETURN_AS_TIMEZONE_AWARE': True,
+                                    'RELATIVE_BASE': now
+                                }
+                            )
                     else:
+                        # Используем dateparser для естественного языка
                         parsed_start = dateparser.parse(
                             str(start_time_str),
                             settings={
@@ -442,12 +464,18 @@ class MeetingProcessor:
                         )
                     
                     if not parsed_start:
-                        logger.warning(f"Не удалось распарсить start_time для события: {event.get('title', 'Без названия')}")
+                        logger.warning(f"Не удалось распарсить start_time '{start_time_str}' для события: {event.get('title', 'Без названия')}")
                         continue
                     
-                    event['start_time'] = parsed_start.astimezone(tz) if parsed_start.tzinfo else tz.localize(parsed_start)
+                    # Убеждаемся что дата в правильном timezone
+                    if parsed_start.tzinfo is None:
+                        parsed_start = tz.localize(parsed_start)
+                    else:
+                        parsed_start = parsed_start.astimezone(tz)
+                    
+                    event['start_time'] = parsed_start
                 except Exception as e:
-                    logger.error(f"Ошибка парсинга start_time: {e}, событие: {event.get('title', 'Без названия')}")
+                    logger.error(f"Ошибка парсинга start_time: {e}, событие: {event.get('title', 'Без названия')}, start_time_str: {start_time_str}", exc_info=True)
                     continue
                 
                 # Парсим end_time если есть
