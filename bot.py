@@ -1333,11 +1333,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.message and update.message.photo:
         message_type = "изображение"
         logger.info(f"Получено изображение от пользователя {user_id}")
+    elif update.message and update.message.document:
+        doc = update.message.document
+        if is_audio_file(update.message):
+            message_type = "аудиофайл"
+            logger.info(f"Получен аудиофайл от пользователя {user_id}: {doc.file_name or 'без имени'}, mime_type: {doc.mime_type}")
+        elif doc.mime_type and doc.mime_type.startswith('image/'):
+            message_type = "изображение (документ)"
+            logger.info(f"Получен документ-изображение от пользователя {user_id}: {doc.file_name or 'без имени'}")
+        else:
+            message_type = "документ"
+            logger.info(f"Получен документ от пользователя {user_id}: {doc.file_name or 'без имени'}, mime_type: {doc.mime_type}")
     elif update.message and update.message.text:
         message_type = "текст"
         logger.info(f"Получено текстовое сообщение от пользователя {user_id}")
     
     logger.info(f"Обработка сообщения типа: {message_type} от пользователя {user_id}")
+    
+    # Если это документ, но не аудио и не изображение, сообщаем об этом
+    if update.message and update.message.document:
+        doc = update.message.document
+        # Если это не аудио и не изображение, не обрабатываем
+        if not is_audio_file(update.message) and not (doc.mime_type and doc.mime_type.startswith('image/')):
+            await update.message.reply_text(
+                "📎 Я могу обрабатывать:\n"
+                "• Голосовые сообщения\n"
+                "• Аудиофайлы (MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и др.)\n"
+                "• Изображения и скриншоты\n\n"
+                "Этот тип файла пока не поддерживается. Отправь аудиофайл или изображение."
+            )
+            return
     
     # Проверяем, ожидаем ли мы URL подтверждения Google
     if context.user_data.get('waiting_google_url'):
@@ -1811,16 +1836,16 @@ def main():
         handle_message
     ))
     
-    # Обработчик аудиофайлов (документы с аудио)
-    # Используем фильтр для документов, но проверяем внутри handle_message
+    # Обработчик изображений (перед обработчиком документов, чтобы не перехватывать их)
     application.add_handler(MessageHandler(
-        filters.Document.ALL,  # Все документы, проверку делаем внутри
+        filters.PHOTO | filters.Document.IMAGE,
         handle_message
     ))
     
-    # Обработчик изображений
+    # Обработчик документов (включая аудиофайлы)
+    # Проверку на аудио делаем внутри handle_message
     application.add_handler(MessageHandler(
-        filters.PHOTO | filters.Document.IMAGE,
+        filters.Document.ALL,  # Все документы, проверку делаем внутри
         handle_message
     ))
     
