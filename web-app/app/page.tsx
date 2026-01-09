@@ -9,9 +9,28 @@ export default function HomePage() {
   useEffect(() => {
     // Проверяем, открыто ли приложение через Telegram Web App
     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+      const tg = (window as any).Telegram.WebApp
+      tg.ready()
+      // Сохраняем данные пользователя из Telegram Web App
+      const user = tg.initDataUnsafe?.user
+      if (user) {
+        localStorage.setItem("telegram_user", JSON.stringify({
+          id: user.id.toString(),
+          first_name: user.first_name,
+          last_name: user.last_name,
+          username: user.username,
+          photo_url: user.photo_url,
+        }))
+      }
       router.push("/calendar")
     } else {
-      router.push("/login")
+      // Проверяем, есть ли сохраненный пользователь
+      const savedUser = localStorage.getItem("telegram_user")
+      if (savedUser) {
+        router.push("/calendar")
+      } else {
+        router.push("/login")
+      }
     }
   }, [router])
 
