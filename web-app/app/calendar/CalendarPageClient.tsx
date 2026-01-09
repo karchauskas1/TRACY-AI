@@ -4,9 +4,9 @@ import { useState, useEffect } from "react"
 import { format, startOfMonth, endOfMonth, isSameDay } from "date-fns"
 import { Settings, MessageCircle } from "lucide-react"
 import Link from "next/link"
-import { CalendarGrid } from "@/components/calendar/CalendarGrid"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { CalendarGrid } from "../../components/calendar/CalendarGrid"
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
+import { Button } from "../../components/ui/button"
 import { formatTime } from "../../lib/utils"
 
 interface Event {

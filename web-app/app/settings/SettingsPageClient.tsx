@@ -3,9 +3,9 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronRight, User, Globe, Bell, Brain, Calendar, LogOut } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "../../components/ui/card"
+import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
+import { Button } from "../../components/ui/button"
 
 interface SettingsPageClientProps {
   user: {

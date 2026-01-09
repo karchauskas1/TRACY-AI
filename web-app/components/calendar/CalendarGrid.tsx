@@ -4,7 +4,7 @@ import { useState } from "react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, startOfWeek, endOfWeek } from "date-fns"
 import { ru } from "date-fns/locale"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 
 interface CalendarGridProps {
