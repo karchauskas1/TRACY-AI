@@ -40,6 +40,7 @@ jobs:
         working-directory: ./web-app
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          NODE_ENV: production
         run: npm run build
       
       - name: Setup Pages
