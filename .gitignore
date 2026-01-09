@@ -13,8 +13,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# lib/ - закомментировано, так как web-app/lib/ нужен для проекта
+# lib64/
 parts/
 sdist/
 var/
