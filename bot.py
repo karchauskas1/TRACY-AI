@@ -445,9 +445,36 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     
     elif data == "help_show":
-        # Показываем помощь
-        help_text = await generate_structured_help_response()
-        await query.edit_message_text(help_text)
+        # Показываем помощь (быстрый статический ответ)
+        help_text = """📖 **Как пользоваться TRACY**
+
+Когда ты мне пишешь, я делаю так:
+
+1. Сначала читаю твоё сообщение — текст, голос, картинку или скриншот.
+2. Извлекаю из него ключевую информацию о событии или напоминании (что, когда, где).
+3. Создаю или обновляю событие в твоём календаре.
+4. Если нужно, устанавливаю напоминание, чтобы вовремя тебя уведомить.
+5. Отвечаю тебе, подтверждая, что событие добавлено или изменено.
+6. Если ты хочешь, могу искать события, удалять их или делиться ими с друзьями.
+7. Если ты отправляешь "/settings", показываю меню настроек для управления календарями, уведомлениями и прочим.
+
+📝 **Примеры использования:**
+• "Встреча с командой завтра в 15:00"
+• "Напомни про доклад в пятницу"
+• "Уборка в среду утром"
+• "Какие у меня планы на ближайшую неделю?"
+• "Удали все события на сегодня"
+
+🔧 **Команды:**
+• /settings — подключить Google/iCloud календарь, настроить параметры
+• /search <текст> — найти события
+• /share <событие> — поделиться событием (ICS файл)
+
+💡 **Подсказка:** Бот работает без подключения календарей! Все события сохраняются, напоминания приходят. Подключение календарей — это дополнительная функция для синхронизации с твоим привычным календарем.
+
+Короче, ты просто говоришь, что нужно, а я организую твой график и напомню! 😉"""
+        
+        await query.edit_message_text(help_text, parse_mode="Markdown")
         return
     
     elif data == "settings_icloud":
@@ -1398,6 +1425,8 @@ def main():
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^settings_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^meeting_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^help_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^mode_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^disconnect_"))
     
     # Обработчик голосовых сообщений (отдельно для лучшей отладки)
     application.add_handler(MessageHandler(
