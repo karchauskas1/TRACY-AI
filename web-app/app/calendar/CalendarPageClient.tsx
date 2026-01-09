@@ -55,23 +55,46 @@ export function CalendarPageClient() {
 
   const loadEvents = async () => {
     try {
-      // Для статического экспорта используем Telegram Web App API или localStorage
-      const storedEvents = localStorage.getItem("tracy_events")
-      if (storedEvents) {
-        const parsedEvents = JSON.parse(storedEvents)
-        setEvents(parsedEvents)
-
-        // Count events by date
-        const counts: Record<string, number> = {}
-        parsedEvents.forEach((event: Event) => {
-          const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-          counts[dateKey] = (counts[dateKey] || 0) + 1
-        })
-        setEventsByDate(counts)
+      // Проверяем, открыто ли через Telegram Web App
+      const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
+      
+      if (tg) {
+        // Если открыто через Telegram Web App, запрашиваем события через бота
+        // Отправляем запрос боту через Telegram Mini App API
+        tg.ready()
+        tg.expand()
+        
+        // Используем sendData для запроса событий
+        const requestData = JSON.stringify({ action: "get_events", user_id: user?.id })
+        tg.sendData(requestData)
+        
+        // Также загружаем из localStorage (fallback)
+        const storedEvents = localStorage.getItem("tracy_events")
+        if (storedEvents) {
+          const parsedEvents = JSON.parse(storedEvents)
+          setEvents(parsedEvents)
+          
+          const counts: Record<string, number> = {}
+          parsedEvents.forEach((event: Event) => {
+            const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+            counts[dateKey] = (counts[dateKey] || 0) + 1
+          })
+          setEventsByDate(counts)
+        }
       } else {
-        // Если нет данных, показываем пустой календарь
-        setEvents([])
-        setEventsByDate({})
+        // Если не через Telegram Web App, используем localStorage
+        const storedEvents = localStorage.getItem("tracy_events")
+        if (storedEvents) {
+          const parsedEvents = JSON.parse(storedEvents)
+          setEvents(parsedEvents)
+          
+          const counts: Record<string, number> = {}
+          parsedEvents.forEach((event: Event) => {
+            const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+            counts[dateKey] = (counts[dateKey] || 0) + 1
+          })
+          setEventsByDate(counts)
+        }
       }
     } catch (error) {
       console.error("Failed to load events:", error)
@@ -83,8 +106,48 @@ export function CalendarPageClient() {
   }
 
   useEffect(() => {
+    // Слушаем сообщения от бота через Telegram Mini App API
+    if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg) {
+        tg.ready()
+        
+        // Обработчик для получения данных от бота
+        tg.onEvent("viewportChanged", () => {
+          // При изменении viewport обновляем события
+          loadEvents()
+        })
+        
+        // Обработчик для получения данных через sendData
+        const handleDataReceived = (data: string) => {
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.action === "sync_events" && parsed.events) {
+              setEvents(parsed.events)
+              localStorage.setItem("tracy_events", JSON.stringify(parsed.events))
+              
+              // Count events by date
+              const counts: Record<string, number> = {}
+              parsed.events.forEach((event: Event) => {
+                const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                counts[dateKey] = (counts[dateKey] || 0) + 1
+              })
+              setEventsByDate(counts)
+            }
+          } catch (e) {
+            console.error("Failed to parse data from bot:", e)
+          }
+        }
+        
+        // Подписываемся на события от бота
+        if (tg.onEvent) {
+          tg.onEvent("message", handleDataReceived)
+        }
+      }
+    }
+    
     loadEvents()
-  }, [selectedDate])
+  }, [selectedDate, user])
 
   const selectedDateKey = format(selectedDate, "yyyy-MM-dd")
   const dayEvents = events.filter(

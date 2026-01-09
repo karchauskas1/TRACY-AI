@@ -2,7 +2,7 @@
 import logging
 import asyncio
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
@@ -37,29 +37,64 @@ decision_engine = None  # Будет инициализирован в main() п
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start."""
+    """Обработчик команды /start с онбордингом."""
     user_id = update.effective_user.id
     
     # Создаем пользователя в БД
     db.get_or_create_user(user_id)
     
+    # Проверяем, есть ли подключенные календари
+    connections = db.get_calendar_connections(user_id)
+    has_connections = len(connections) > 0
+    
     welcome_message = (
-        "Привет! Я TRACY, твой AI-ассистент для управления календарем.\n\n"
-        "Я понимаю:\n"
-        "• Текстовые сообщения\n"
-        "• Голосовые сообщения\n"
-        "• Изображения и скриншоты\n\n"
-        "Просто напиши или скажи мне о событии, напоминании или заметке.\n"
-        "Я автоматически создам события в твоих календарях.\n\n"
-        "Команды:\n"
-        "/settings - настройки календарей\n"
-        "/web - открыть веб-приложение\n"
-        "/search <запрос> - поиск событий\n"
-        "/share <событие> - поделиться событием\n"
-        "/help - помощь"
+        "👋 Привет! Я TRACY — твой AI-ассистент для управления календарем.\n\n"
+        "✨ Я умею:\n"
+        "• Создавать события из текста, голоса или фото\n"
+        "• Распознавать даты и время естественным языком\n"
+        "• Синхронизировать с Google Calendar и iCloud\n"
+        "• Напоминать о важных событиях\n\n"
+        "🚀 Начни прямо сейчас — просто напиши или скажи:\n"
+        "• \"Встреча завтра в 15:00\"\n"
+        "• \"Напомни про доклад в пятницу\"\n"
+        "• \"Уборка в среду утром\"\n\n"
     )
     
-    await update.message.reply_text(welcome_message)
+    keyboard = []
+    
+    # Если календари не подключены, предлагаем подключить
+    if not has_connections:
+        welcome_message += (
+            "📅 Для начала работы подключи календарь:\n"
+        )
+        keyboard.append([InlineKeyboardButton(
+            "📅 Подключить календарь",
+            callback_data="settings_google"
+        )])
+    else:
+        welcome_message += "✅ Твои календари подключены и готовы к работе!\n\n"
+    
+    # Кнопка для веб-приложения
+    web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
+    if "localhost" not in web_url.lower() and web_url.startswith("https://"):
+        try:
+            keyboard.append([InlineKeyboardButton(
+                "🌐 Открыть веб-приложение",
+                web_app=WebAppInfo(url=web_url)
+            )])
+        except:
+            pass
+    
+    # Кнопка помощи
+    keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    
+    await update.message.reply_text(
+        welcome_message,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -358,6 +393,12 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Сохраняем состояние ожидания URL
             context.user_data['waiting_google_url'] = True
+    
+    elif data == "help_show":
+        # Показываем помощь
+        help_text = await generate_structured_help_response()
+        await query.edit_message_text(help_text)
+        return
     
     elif data == "settings_icloud":
         # Показываем сообщение о загрузке, затем генерируем инструкцию
@@ -1140,6 +1181,19 @@ def main():
             else:
                 logger.error("reminder_scheduler не инициализирован для проверки напоминаний")
             logger.info("✅ Первая проверка напоминаний завершена")
+            
+            # Устанавливаем Menu Button для веб-приложения (глобально для всех чатов)
+            web_url = os.getenv("WEB_APP_URL")
+            if web_url and "localhost" not in web_url.lower() and web_url.startswith("https://"):
+                try:
+                    menu_button = MenuButtonWebApp(text="🌐 TRACY", web_app=WebAppInfo(url=web_url))
+                    # Устанавливаем глобально (chat_id=None означает глобальная настройка)
+                    await app.bot.set_chat_menu_button(chat_id=None, menu_button=menu_button)
+                    logger.info(f"✅ Menu Button установлен: {web_url}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось установить Menu Button: {e}")
+            else:
+                logger.info("⚠️ WEB_APP_URL не настроен или не HTTPS, Menu Button не установлен")
         except Exception as e:
             logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА запуска ReminderScheduler: {e}", exc_info=True)
             import traceback
@@ -1184,6 +1238,7 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("settings", settings_command))
+    # Команды /web, /search, /share убраны из меню, но остаются доступными для использования
     application.add_handler(CommandHandler("web", web_command))
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("share", share_command))

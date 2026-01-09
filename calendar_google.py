@@ -77,9 +77,25 @@ class GoogleCalendar:
         Обработать OAuth callback.
         
         Args:
-            authorization_response: URL с кодом авторизации или сам код
+            authorization_response: URL с кодом авторизации
         """
         try:
+            from urllib.parse import urlparse, parse_qs
+            
+            # Извлекаем код из URL
+            if authorization_response.startswith('http'):
+                parsed_url = urlparse(authorization_response)
+                query_params = parse_qs(parsed_url.query)
+                auth_code = query_params.get('code', [None])[0]
+            else:
+                # Если передан только код
+                auth_code = authorization_response
+            
+            if not auth_code:
+                logger.error("Не найден код авторизации в URL")
+                return False
+            
+            # Создаем новый flow для обмена кода на токен
             flow = Flow.from_client_config(
                 {
                     "web": {
@@ -94,22 +110,16 @@ class GoogleCalendar:
                 redirect_uri=config.GOOGLE_REDIRECT_URI
             )
             
-            # Если это полный URL, используем его напрямую
-            if authorization_response.startswith('http'):
-                auth_url = authorization_response
-            else:
-                # Если это только код, формируем полный URL
-                from urllib.parse import urlencode
-                auth_url = f"{config.GOOGLE_REDIRECT_URI}?code={authorization_response}"
-            
-            flow.fetch_token(authorization_response=auth_url)
+            # Обмениваем код на токен
+            flow.fetch_token(code=auth_code)
             
             credentials = flow.credentials
             self.save_credentials(credentials)
             
+            logger.info(f"Google Calendar успешно подключен для пользователя {self.user_id}")
             return True
         except Exception as e:
-            logger.error(f"Ошибка обработки callback: {e}")
+            logger.error(f"Ошибка обработки callback: {e}", exc_info=True)
             return False
     
     def _save_flow_state(self, flow: Flow):
