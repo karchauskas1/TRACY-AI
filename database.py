@@ -184,6 +184,23 @@ class Database:
                     )
                 """)
                 
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS meetings (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        title TEXT,
+                        transcript TEXT,
+                        raw_text TEXT,
+                        summary TEXT,
+                        summary_extended TEXT,
+                        segments JSONB,
+                        duration INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                
                 # Индексы
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time)")
@@ -192,6 +209,8 @@ class Database:
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON reminders(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_reminder_time ON reminders(reminder_time)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_sent ON reminders(sent)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_meetings_user_id ON meetings(user_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_meetings_created_at ON meetings(created_at)")
                 
             else:
                 # SQLite схемы (оригинальные)
@@ -275,6 +294,23 @@ class Database:
                     )
                 """)
                 
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS meetings (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        title TEXT,
+                        transcript TEXT,
+                        raw_text TEXT,
+                        summary TEXT,
+                        summary_extended TEXT,
+                        segments TEXT,
+                        duration INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                
                 # Индексы
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time)")
@@ -283,6 +319,8 @@ class Database:
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON reminders(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_reminder_time ON reminders(reminder_time)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_sent ON reminders(sent)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_meetings_user_id ON meetings(user_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_meetings_created_at ON meetings(created_at)")
             
             conn.commit()
         except Exception as e:
@@ -1215,5 +1253,140 @@ class Database:
         except Exception as e:
             logger.error(f"Ошибка update_last_event_context: {e}", exc_info=True)
             conn.rollback()
+        finally:
+            self.return_connection(conn)
+    
+    def save_meeting(self, user_id: int, title: Optional[str], transcript: Optional[str], 
+                     raw_text: Optional[str], summary: Optional[str], summary_extended: Optional[str] = None,
+                     segments: Optional[List] = None, duration: int = 0) -> Optional[int]:
+        """Сохранить встречу в БД."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            import json
+            segments_json = json.dumps(segments) if segments else None
+            
+            if self.use_postgresql:
+                cursor.execute("""
+                    INSERT INTO meetings (user_id, title, transcript, raw_text, summary, summary_extended, segments, duration, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    RETURNING id
+                """, (user_id, title, transcript, raw_text, summary, summary_extended, segments_json, duration))
+                meeting_id = cursor.fetchone()[0]
+            else:
+                cursor.execute("""
+                    INSERT INTO meetings (user_id, title, transcript, raw_text, summary, summary_extended, segments, duration, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, (user_id, title, transcript, raw_text, summary, summary_extended, segments_json, duration))
+                meeting_id = cursor.lastrowid
+            
+            conn.commit()
+            logger.info(f"Встреча сохранена: id={meeting_id}, user_id={user_id}")
+            return meeting_id
+        except Exception as e:
+            logger.error(f"Ошибка сохранения встречи: {e}", exc_info=True)
+            conn.rollback()
+            return None
+        finally:
+            self.return_connection(conn)
+    
+    def get_meetings(self, user_id: int, limit: int = 50) -> List[Dict]:
+        """Получить список встреч пользователя."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    SELECT id, title, transcript, raw_text, summary, summary_extended, segments, duration, created_at, updated_at
+                    FROM meetings
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (user_id, limit))
+            else:
+                cursor.execute("""
+                    SELECT id, title, transcript, raw_text, summary, summary_extended, segments, duration, created_at, updated_at
+                    FROM meetings
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """, (user_id, limit))
+            
+            meetings = []
+            for row in cursor.fetchall():
+                meeting = dict(row) if self.use_postgresql else dict(row)
+                # Парсим segments если это JSON
+                if meeting.get('segments') and isinstance(meeting['segments'], str):
+                    try:
+                        import json
+                        meeting['segments'] = json.loads(meeting['segments'])
+                    except:
+                        meeting['segments'] = []
+                meetings.append(meeting)
+            
+            return meetings
+        except Exception as e:
+            logger.error(f"Ошибка получения встреч: {e}", exc_info=True)
+            return []
+        finally:
+            self.return_connection(conn)
+    
+    def get_meeting(self, meeting_id: int, user_id: int) -> Optional[Dict]:
+        """Получить конкретную встречу."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    SELECT id, title, transcript, raw_text, summary, summary_extended, segments, duration, created_at, updated_at
+                    FROM meetings
+                    WHERE id = %s AND user_id = %s
+                """, (meeting_id, user_id))
+            else:
+                cursor.execute("""
+                    SELECT id, title, transcript, raw_text, summary, summary_extended, segments, duration, created_at, updated_at
+                    FROM meetings
+                    WHERE id = ? AND user_id = ?
+                """, (meeting_id, user_id))
+            
+            row = cursor.fetchone()
+            if row:
+                meeting = dict(row) if self.use_postgresql else dict(row)
+                # Парсим segments если это JSON
+                if meeting.get('segments') and isinstance(meeting['segments'], str):
+                    try:
+                        import json
+                        meeting['segments'] = json.loads(meeting['segments'])
+                    except:
+                        meeting['segments'] = []
+                return meeting
+            return None
+        except Exception as e:
+            logger.error(f"Ошибка получения встречи: {e}", exc_info=True)
+            return None
+        finally:
+            self.return_connection(conn)
+    
+    def delete_meeting(self, meeting_id: int, user_id: int) -> bool:
+        """Удалить встречу."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("DELETE FROM meetings WHERE id = %s AND user_id = %s", (meeting_id, user_id))
+            else:
+                cursor.execute("DELETE FROM meetings WHERE id = ? AND user_id = ?", (meeting_id, user_id))
+            
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
+        except Exception as e:
+            logger.error(f"Ошибка удаления встречи: {e}", exc_info=True)
+            conn.rollback()
+            return False
         finally:
             self.return_connection(conn)

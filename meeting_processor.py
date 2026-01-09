@@ -265,22 +265,25 @@ class MeetingProcessor:
 
 Создай резюме в следующем формате:
 
-**📋 Краткое описание**
-[3-5 предложений о сути встречи]
+**📋 Краткое резюме встречи**
+На встрече обсуждалось: [3-5 предложений естественным языком о сути встречи, что было обсуждено, какие вопросы поднимались]
 
 **📝 Основные темы**
-[Список основных тем, которые обсуждались, в виде маркированного списка]
+• [Список основных тем, которые обсуждались, в виде маркированного списка]
 
 **✅ Договорённости и решения**
-[Список принятых решений и договорённостей, если были]
+• [Список принятых решений и договорённостей, если были]
 
 **📌 Задачи и следующие шаги**
-[Список задач, которые нужно выполнить, с указанием ответственных, если упоминались]
+• [Список задач, которые нужно выполнить, с указанием ответственных, если упоминались]
 
 **📅 Даты, дедлайны и события**
-[Все упоминания дат, дедлайнов, встреч и событий, если были]
+• [Все упоминания дат, дедлайнов, встреч и событий, если были]
 
-Резюме должно быть полезным и структурированным, не просто пересказом. Выделяй самое важное."""
+ВАЖНО:
+- Краткое описание должно начинаться с "На встрече обсуждалось:" и быть написано естественным языком, без шаблонов
+- Заголовок "Краткое резюме встречи" должен быть жирным (используй **)
+- Резюме должно быть полезным и структурированным, не просто пересказом. Выделяй самое важное."""
             
             response = self.nlp_client.chat.completions.create(
                 model="openai/gpt-4o-mini",
@@ -418,35 +421,60 @@ class MeetingProcessor:
             
             parsed_events = []
             for event in events:
-                if event.get('start_time'):
-                    try:
-                        parsed_date = dateparser.parse(
-                            event['start_time'],
-                            settings={
-                                'TIMEZONE': user_timezone,
-                                'RETURN_AS_TIMEZONE_AWARE': True,
-                                'RELATIVE_BASE': now
-                            }
-                        )
-                        if parsed_date:
-                            event['start_time'] = parsed_date.astimezone(tz)
-                    except:
-                        event['start_time'] = None
+                # Пропускаем события без start_time
+                if not event.get('start_time') or event['start_time'] == 'null' or event['start_time'] is None:
+                    logger.info(f"Пропускаем событие без start_time: {event.get('title', 'Без названия')}")
+                    continue
                 
-                if event.get('end_time'):
-                    try:
-                        parsed_date = dateparser.parse(
-                            event['end_time'],
+                try:
+                    # Парсим start_time
+                    start_time_str = event.get('start_time')
+                    if isinstance(start_time_str, datetime):
+                        parsed_start = start_time_str
+                    else:
+                        parsed_start = dateparser.parse(
+                            str(start_time_str),
                             settings={
                                 'TIMEZONE': user_timezone,
                                 'RETURN_AS_TIMEZONE_AWARE': True,
                                 'RELATIVE_BASE': now
                             }
                         )
-                        if parsed_date:
-                            event['end_time'] = parsed_date.astimezone(tz)
-                    except:
+                    
+                    if not parsed_start:
+                        logger.warning(f"Не удалось распарсить start_time для события: {event.get('title', 'Без названия')}")
+                        continue
+                    
+                    event['start_time'] = parsed_start.astimezone(tz) if parsed_start.tzinfo else tz.localize(parsed_start)
+                except Exception as e:
+                    logger.error(f"Ошибка парсинга start_time: {e}, событие: {event.get('title', 'Без названия')}")
+                    continue
+                
+                # Парсим end_time если есть
+                if event.get('end_time') and event['end_time'] != 'null':
+                    try:
+                        end_time_str = event.get('end_time')
+                        if isinstance(end_time_str, datetime):
+                            parsed_end = end_time_str
+                        else:
+                            parsed_end = dateparser.parse(
+                                str(end_time_str),
+                                settings={
+                                    'TIMEZONE': user_timezone,
+                                    'RETURN_AS_TIMEZONE_AWARE': True,
+                                    'RELATIVE_BASE': now
+                                }
+                            )
+                        
+                        if parsed_end:
+                            event['end_time'] = parsed_end.astimezone(tz) if parsed_end.tzinfo else tz.localize(parsed_end)
+                        else:
+                            event['end_time'] = None
+                    except Exception as e:
+                        logger.warning(f"Ошибка парсинга end_time: {e}")
                         event['end_time'] = None
+                else:
+                    event['end_time'] = None
                 
                 # Если есть start_time, но нет end_time, добавляем час по умолчанию
                 if event.get('start_time') and not event.get('end_time'):
@@ -455,6 +483,7 @@ class MeetingProcessor:
                 
                 parsed_events.append(event)
             
+            logger.info(f"Извлечено {len(parsed_events)} событий из встречи")
             return parsed_events
         
         except Exception as e:

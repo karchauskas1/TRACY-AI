@@ -776,10 +776,24 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Если текст слишком длинный, отправляем как отдельное сообщение
             if len(transcript) > 4000:
+                # Разбиваем на части если слишком длинный
+                parts = [transcript[i:i+4000] for i in range(0, len(transcript), 4000)]
+                for i, part in enumerate(parts):
+                    if i == 0:
+                        await query.message.reply_text(
+                            f"📄 **Полная расшифровка встречи** (часть {i+1}/{len(parts)})\n\n{part}",
+                            parse_mode="Markdown"
+                        )
+                    else:
+                        await query.message.reply_text(
+                            f"**Продолжение** (часть {i+1}/{len(parts)})\n\n{part}",
+                            parse_mode="Markdown"
+                        )
+                
+                # Отправляем кнопки в последнем сообщении
                 await query.message.reply_text(
-                    f"📄 **Полная расшифровка встречи**\n\n{transcript}",
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
+                    "Выбери действие:",
+                    reply_markup=reply_markup
                 )
                 await query.answer()
             else:
@@ -811,6 +825,38 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if extended_summary:
+                # Обновляем расширенное резюме в БД если есть ID встречи
+                meeting_id = meeting_data.get('id')
+                if meeting_id:
+                    try:
+                        # Обновляем встречу в БД через прямой SQL запрос, так как нет метода update_meeting
+                        conn = db.get_connection()
+                        cursor = conn.cursor()
+                        try:
+                            if db.use_postgresql:
+                                cursor.execute(
+                                    "UPDATE meetings SET summary_extended = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND user_id = %s",
+                                    (extended_summary, meeting_id, user_id)
+                                )
+                            else:
+                                cursor.execute(
+                                    "UPDATE meetings SET summary_extended = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+                                    (extended_summary, meeting_id, user_id)
+                                )
+                            conn.commit()
+                            logger.info(f"Расширенное резюме сохранено для встречи {meeting_id}")
+                        except Exception as e:
+                            logger.error(f"Ошибка сохранения расширенного резюме: {e}")
+                            conn.rollback()
+                        finally:
+                            db.return_connection(conn)
+                    except Exception as e:
+                        logger.error(f"Ошибка обновления расширенного резюме: {e}")
+                
+                # Обновляем в контексте
+                meeting_data['summary_extended'] = extended_summary
+                context.user_data['last_meeting_data'] = meeting_data
+                
                 await query.message.reply_text(
                     f"📋 **Расширенное резюме**\n\n{extended_summary}",
                     reply_markup=reply_markup,
@@ -850,15 +896,30 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 for event_data in events:
                     try:
+                        # Формируем extracted_data в правильном формате
+                        extracted_data = {
+                            'intent': 'event',
+                            'title': event_data.get('title', 'Событие из встречи'),
+                            'description': event_data.get('description', ''),
+                            'start_time': event_data.get('start_time'),
+                            'end_time': event_data.get('end_time'),
+                            'location': event_data.get('location'),
+                            'priority': event_data.get('priority', 0)
+                        }
+                        
+                        logger.info(f"Создаю событие: {extracted_data.get('title')} на {extracted_data.get('start_time')}")
+                        
                         result = await decision_engine.process_intent(
                             user_id,
-                            {**event_data, 'intent': 'event'},
+                            extracted_data,
                             last_event=None
                         )
+                        
+                        logger.info(f"Результат создания события: {result.get('action')}")
                         if result.get('action') == 'created':
                             created_count += 1
                     except Exception as e:
-                        logger.error(f"Ошибка создания события из встречи: {e}")
+                        logger.error(f"Ошибка создания события из встречи: {e}", exc_info=True)
                 
                 keyboard = [
                     [InlineKeyboardButton("📄 Показать полный текст", callback_data="meeting_full_transcript")],
@@ -961,8 +1022,31 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
         
-        # Сохраняем данные встречи для дополнительных действий
+        # Извлекаем заголовок из резюме для названия встречи
+        meeting_title = "Встреча"
+        if summary:
+            # Пытаемся извлечь название из резюме (первая строка до переноса строки или первые 50 символов)
+            title_line = summary.split('\n')[0] if '\n' in summary else summary[:100]
+            # Убираем markdown форматирование
+            title_line = title_line.replace('**', '').replace('📋', '').strip()
+            if title_line:
+                meeting_title = title_line[:100]  # Ограничиваем длину
+        
+        # Сохраняем встречу в БД
+        meeting_id = db.save_meeting(
+            user_id=user_id,
+            title=meeting_title,
+            transcript=transcription_result.get('transcript', ''),
+            raw_text=transcription_result.get('raw_text', ''),
+            summary=summary,
+            summary_extended=None,
+            segments=transcription_result.get('segments', []),
+            duration=int(transcription_result.get('duration', 0))
+        )
+        
+        # Сохраняем данные встречи для дополнительных действий (включая ID из БД)
         context.user_data['last_meeting_data'] = {
+            'id': meeting_id,
             'transcript': transcription_result.get('transcript', ''),
             'raw_text': transcription_result.get('raw_text', ''),
             'summary': summary,
@@ -987,8 +1071,9 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         # Отправляем резюме с кнопками и напоминанием о режиме
+        # Резюме уже содержит жирный заголовок и естественное описание
         await update.message.reply_text(
-            f"📋 **Резюме встречи**\n\n{summary}\n\n"
+            f"{summary}\n\n"
             "💡 Режим расшифровки встреч активен. Отправь следующее аудио для расшифровки или выбери действие выше.",
             reply_markup=reply_markup,
             parse_mode="Markdown"
