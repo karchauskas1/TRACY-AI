@@ -118,30 +118,56 @@ export function CalendarPageClient() {
           loadEvents()
         })
         
-        // Обработчик для получения данных через sendData
+        // Обработчик для получения данных через sendData и через сообщения от бота
         const handleDataReceived = (data: string) => {
           try {
-            const parsed = JSON.parse(data)
-            if (parsed.action === "sync_events" && parsed.events) {
-              setEvents(parsed.events)
-              localStorage.setItem("tracy_events", JSON.stringify(parsed.events))
-              
-              // Count events by date
-              const counts: Record<string, number> = {}
-              parsed.events.forEach((event: Event) => {
-                const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-                counts[dateKey] = (counts[dateKey] || 0) + 1
-              })
-              setEventsByDate(counts)
+            // Проверяем, это ответ от бота с событиями
+            if (data.startsWith("TRACY_SYNC_EVENTS:")) {
+              const jsonData = data.replace("TRACY_SYNC_EVENTS:", "")
+              const parsed = JSON.parse(jsonData)
+              if (parsed.action === "sync_events" && parsed.events) {
+                setEvents(parsed.events)
+                localStorage.setItem("tracy_events", JSON.stringify(parsed.events))
+                
+                // Count events by date
+                const counts: Record<string, number> = {}
+                parsed.events.forEach((event: Event) => {
+                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                  counts[dateKey] = (counts[dateKey] || 0) + 1
+                })
+                setEventsByDate(counts)
+                setLoading(false)
+              }
+            } else {
+              // Обычный JSON ответ
+              const parsed = JSON.parse(data)
+              if (parsed.action === "sync_events" && parsed.events) {
+                setEvents(parsed.events)
+                localStorage.setItem("tracy_events", JSON.stringify(parsed.events))
+                
+                // Count events by date
+                const counts: Record<string, number> = {}
+                parsed.events.forEach((event: Event) => {
+                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                  counts[dateKey] = (counts[dateKey] || 0) + 1
+                })
+                setEventsByDate(counts)
+                setLoading(false)
+              }
             }
           } catch (e) {
             console.error("Failed to parse data from bot:", e)
           }
         }
         
-        // Подписываемся на события от бота
+        // Подписываемся на события от бота через Telegram Mini App API
         if (tg.onEvent) {
-          tg.onEvent("message", handleDataReceived)
+          // Слушаем сообщения от бота (если бот отправляет ответы)
+          tg.onEvent("message", (message: any) => {
+            if (message && message.text) {
+              handleDataReceived(message.text)
+            }
+          })
         }
       }
     }
