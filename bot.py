@@ -1413,10 +1413,13 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         
         # Расшифровываем аудио
-        logger.info("Начинаю расшифровку аудио для встречи...")
+        logger.info(f"Начинаю расшифровку аудио для встречи (тип: {file_type}, имя: {file_name}, язык: {language})...")
         try:
             transcription_result = await meeting_processor.transcribe_meeting_audio(audio_file, language)
-            logger.info(f"Расшифровка завершена. Результат: {transcription_result is not None}")
+            if transcription_result:
+                logger.info(f"✅ Расшифровка завершена успешно. Длина транскрипта: {len(transcription_result.get('transcript', ''))} символов")
+            else:
+                logger.warning("⚠️ Расшифровка вернула None (пустой результат)")
         except Exception as e:
             logger.error(f"Ошибка при расшифровке аудио: {e}", exc_info=True)
             import traceback
