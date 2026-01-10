@@ -49,8 +49,38 @@ class MeetingProcessor:
         try:
             # Скачиваем файл
             audio_io = io.BytesIO()
-            await audio_file.download_to_memory(audio_io)
-            audio_io.seek(0)
+            try:
+                # Пробуем использовать download_to_memory
+                await audio_file.download_to_memory(audio_io)
+                audio_io.seek(0)
+                logger.info("Файл успешно загружен в память")
+            except Exception as download_error:
+                # Fallback: используем download в файл, затем читаем
+                logger.warning(f"download_to_memory не сработал: {download_error}, использую альтернативный метод")
+                try:
+                    import tempfile
+                    import os
+                    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                        temp_path = temp_file.name
+                    # В python-telegram-bot используется метод download() с параметром output
+                    try:
+                        await audio_file.download(output=temp_path)
+                    except TypeError:
+                        # В некоторых версиях используется другой API
+                        await audio_file.download(temp_path)
+                    with open(temp_path, 'rb') as f:
+                        audio_io.write(f.read())
+                    os.unlink(temp_path)
+                    audio_io.seek(0)
+                    logger.info("Файл успешно загружен альтернативным методом")
+                except Exception as alt_error:
+                    logger.error(f"Альтернативный метод загрузки также не сработал: {alt_error}")
+                    raise download_error  # Поднимаем оригинальную ошибку
+            
+            # Проверяем, что файл не пустой
+            if audio_io.getvalue() == b'':
+                logger.error("Загруженный аудиофайл пуст")
+                return None
             
             # Пробуем использовать Whisper API для качественной расшифровки
             if WHISPER_AVAILABLE and whisper_client:
@@ -61,28 +91,33 @@ class MeetingProcessor:
                     audio_io.seek(0)
                     
                     # Пробуем определить формат по содержимому файла
+                    # M4A ставим первым, так как это популярный формат iPhone диктофона
                     audio_format = None
-                    supported_formats = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
+                    supported_formats = ['m4a', 'mp3', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
                     
                     audio_data = None
                     for fmt in supported_formats:
                         try:
                             audio_io.seek(0)
+                            logger.debug(f"Пробую определить формат как {fmt}...")
                             test_audio = AudioSegment.from_file(audio_io, format=fmt)
                             audio_format = fmt
-                            logger.info(f"Определен формат аудио: {fmt}")
+                            logger.info(f"✅ Определен формат аудио: {fmt}")
                             
                             # Конвертируем в MP3 для Whisper (если не MP3 уже)
                             if fmt != 'mp3':
+                                logger.info(f"Конвертирую {fmt} в MP3 для Whisper...")
                                 converted_io = io.BytesIO()
                                 test_audio.export(converted_io, format="mp3", bitrate="128k")
                                 converted_io.seek(0)
                                 audio_data = converted_io.read()
+                                logger.info(f"✅ Конвертация {fmt} -> MP3 завершена, размер: {len(audio_data)} bytes")
                             else:
                                 audio_io.seek(0)
                                 audio_data = audio_io.read()
                             break
                         except Exception as e:
+                            logger.debug(f"Формат {fmt} не подошел: {str(e)[:100]}")
                             continue
                     
                     # Если формат не определен, пробуем автоопределение
@@ -264,17 +299,19 @@ class MeetingProcessor:
             audio_io.seek(0)
             
             # Поддерживаемые форматы для pydub
-            supported_formats = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
+            # M4A ставим первым, так как это популярный формат iPhone диктофона
+            supported_formats = ['m4a', 'mp3', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
             audio_data = None
             
             for fmt in supported_formats:
                 try:
                     audio_io.seek(0)
+                    logger.debug(f"Пробую определить формат для Google Speech как {fmt}...")
                     audio_data = AudioSegment.from_file(audio_io, format=fmt)
-                    logger.info(f"Определен формат для Google Speech: {fmt}")
+                    logger.info(f"✅ Определен формат для Google Speech: {fmt}, длительность: {len(audio_data)/1000:.1f} сек")
                     break
                 except Exception as e:
-                    logger.debug(f"Формат {fmt} не подошел: {e}")
+                    logger.debug(f"Формат {fmt} не подошел для Google Speech: {str(e)[:100]}")
                     continue
             
             # Если не удалось определить, пробуем автоопределение
@@ -289,36 +326,52 @@ class MeetingProcessor:
                     return None
             
             # Конвертируем в WAV для Google Speech Recognition
-            wav_io = io.BytesIO()
-            audio_data.export(wav_io, format="wav")
-            wav_io.seek(0)
+            # Создаем временный файл, так как sr.AudioFile требует реальный файл
+            import tempfile
+            import os
             
-            # Проверяем, что recognizer инициализирован
-            if not hasattr(self, 'recognizer') or self.recognizer is None:
-                logger.error("recognizer не инициализирован в MeetingProcessor")
-                import speech_recognition as sr
-                self.recognizer = sr.Recognizer()
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_wav:
+                audio_data.export(temp_wav.name, format="wav")
+                temp_wav_path = temp_wav.name
             
-            # Используем WAV для распознавания
-            logger.info("Начинаю распознавание через Google Speech Recognition...")
-            with sr.AudioFile(wav_io) as source:
-                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                audio = self.recognizer.record(source)
-            
-            text = self.recognizer.recognize_google(
-                audio,
-                language=language if language != "ru" else "ru-RU"
-            )
-            
-            logger.info(f"Распознавание завершено. Длина текста: {len(text)} символов")
-            
-            return {
-                'transcript': text,
-                'raw_text': text,
-                'segments': [],
-                'duration': len(audio_data) / 1000.0,
-                'language': language
-            }
+            try:
+                # Проверяем, что recognizer инициализирован
+                if not hasattr(self, 'recognizer') or self.recognizer is None:
+                    logger.warning("recognizer не инициализирован, создаю новый...")
+                    import speech_recognition as sr
+                    self.recognizer = sr.Recognizer()
+                
+                # Используем WAV файл для распознавания
+                logger.info("Начинаю распознавание через Google Speech Recognition...")
+                with sr.AudioFile(temp_wav_path) as source:
+                    # Для длинных аудио делаем минимальную настройку шума
+                    duration_seconds = len(audio_data) / 1000.0
+                    noise_duration = min(1.0, duration_seconds / 10)  # Не более 1 секунды или 10% от длительности
+                    self.recognizer.adjust_for_ambient_noise(source, duration=noise_duration)
+                    audio = self.recognizer.record(source)
+                
+                logger.info(f"Аудио записано, отправляю в Google Speech Recognition...")
+                text = self.recognizer.recognize_google(
+                    audio,
+                    language=language if language != "ru" else "ru-RU"
+                )
+                
+                logger.info(f"Распознавание завершено. Длина текста: {len(text)} символов")
+                
+                return {
+                    'transcript': text,
+                    'raw_text': text,
+                    'segments': [],
+                    'duration': duration_seconds,
+                    'language': language
+                }
+            finally:
+                # Удаляем временный файл
+                if os.path.exists(temp_wav_path):
+                    try:
+                        os.unlink(temp_wav_path)
+                    except Exception as e:
+                        logger.warning(f"Не удалось удалить временный файл: {e}")
         except sr.UnknownValueError:
             logger.warning("Google Speech Recognition не смог распознать речь")
             return None
@@ -467,14 +520,19 @@ class MeetingProcessor:
         {{
             "title": "название события",
             "description": "описание",
-            "start_time": "YYYY-MM-DDTHH:MM:SS или null",
-            "end_time": "YYYY-MM-DDTHH:MM:SS или null",
+            "start_time": "YYYY-MM-DDTHH:MM:SS или null (время начала события)",
+            "end_time": "YYYY-MM-DDTHH:MM:SS или null (время окончания события, если указан диапазон)",
             "location": "место или null",
             "priority": 0-5,
             "has_explicit_time": true/false
         }}
     ]
 }}
+
+ВАЖНО для диапазонов времени:
+- Если указан диапазон времени ("с 11 утра до 15 часов", "с 10:00 до 14:00", "11:00-15:00", "от X до Y"), извлекай оба времени: start_time (начало) и end_time (окончание)
+- Примеры: "зарядка с 11 утра до 15 часов" → start_time="11:00", end_time="15:00" (на ту же дату)
+          "встреча завтра с 10:00 до 12:00" → start_time="завтра 10:00", end_time="завтра 12:00"
 
 Извлекай только события с конкретными датами/временем. Если дата не указана явно, но есть относительная (например, "через неделю"), вычисляй конкретную дату. Если дата не определена, не включай событие."""
             

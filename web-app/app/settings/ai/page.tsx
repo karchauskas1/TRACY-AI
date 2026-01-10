@@ -1,18 +1,56 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { X, Brain, ArrowLeft } from "lucide-react"
+import { Brain, ArrowLeft } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
+import { useLocale } from "../../../lib/locale-context"
+import { useToast } from "../../../hooks/use-toast"
 
 export default function AIPage() {
   const router = useRouter()
-  const [model, setModel] = useState("gpt-4o-mini")
+  const { locale, t } = useLocale()
+  const { toast } = useToast()
   const [interpretationMode, setInterpretationMode] = useState<"strict" | "soft">("soft")
+  const [smartReplyEnabled, setSmartReplyEnabled] = useState(true)
+
+  useEffect(() => {
+    // Load settings from localStorage
+    const savedMode = localStorage.getItem("tracy_ai_mode")
+    if (savedMode === "strict" || savedMode === "soft") {
+      setInterpretationMode(savedMode)
+    }
+    const savedSmartReply = localStorage.getItem("tracy_smart_reply")
+    if (savedSmartReply !== null) {
+      setSmartReplyEnabled(savedSmartReply === "true")
+    }
+  }, [])
 
   const handleClose = () => {
     router.push("/settings")
+  }
+
+  const handleSave = () => {
+    localStorage.setItem("tracy_ai_mode", interpretationMode)
+    localStorage.setItem("tracy_smart_reply", String(smartReplyEnabled))
+    
+    // Send to bot via Telegram Web App API
+    if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg) {
+        tg.sendData(JSON.stringify({
+          action: "update_ai_settings",
+          mode: interpretationMode,
+          smart_reply: smartReplyEnabled,
+        }))
+      }
+    }
+    
+    toast({
+      title: t("common.save"),
+      description: locale === "ru" ? "Настройки ИИ сохранены" : "AI settings saved",
+    })
   }
 
   return (
@@ -25,7 +63,7 @@ export default function AIPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-lg font-semibold">ИИ</h1>
+          <h1 className="text-lg font-semibold">{t("settings.ai")}</h1>
           <div className="w-5" />
         </div>
       </header>
@@ -36,29 +74,33 @@ export default function AIPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Brain className="h-5 w-5" />
-                Настройки ИИ
+                {t("settings.aiTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Модель ИИ</label>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full px-3 py-2 bg-card border border-border rounded-lg text-foreground"
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className="font-medium">{t("settings.aiSmartReply")}</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {t("settings.aiSmartReplyDesc")}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSmartReplyEnabled(!smartReplyEnabled)}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${
+                    smartReplyEnabled ? "bg-primary" : "bg-muted"
+                  }`}
                 >
-                  <option value="gpt-4o-mini">GPT-4o Mini (быстрая, экономичная)</option>
-                  <option value="gpt-4o">GPT-4o (высокое качество)</option>
-                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                  <option value="claude-3-haiku">Claude 3 Haiku</option>
-                </select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Выберите модель для обработки запросов
-                </p>
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                      smartReplyEnabled ? "translate-x-6" : "translate-x-0"
+                    }`}
+                  />
+                </button>
               </div>
 
-              <div>
-                <label className="text-sm font-medium mb-2 block">Режим интерпретации</label>
+              <div className="pt-4 border-t border-border">
+                <label className="text-sm font-medium mb-2 block">{t("settings.aiInterpretation")}</label>
                 <div className="space-y-2">
                   <button
                     onClick={() => setInterpretationMode("strict")}
@@ -68,9 +110,9 @@ export default function AIPage() {
                         : "border-border hover:bg-accent/50"
                     }`}
                   >
-                    <p className="font-medium">Строгий</p>
+                    <p className="font-medium">{t("settings.aiInterpretationStrict")}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Точное следование инструкциям, меньше предположений
+                      {t("settings.aiInterpretationStrictDesc")}
                     </p>
                   </button>
                   <button
@@ -81,18 +123,18 @@ export default function AIPage() {
                         : "border-border hover:bg-accent/50"
                     }`}
                   >
-                    <p className="font-medium">Мягкий</p>
+                    <p className="font-medium">{t("settings.aiInterpretationSoft")}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Гибкая интерпретация, больше предположений и контекста
+                      {t("settings.aiInterpretationSoftDesc")}
                     </p>
                   </button>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-border">
-                <p className="text-sm text-muted-foreground">
-                  API ключ OpenRouter настраивается на сервере бота
-                </p>
+              <div className="pt-4">
+                <Button onClick={handleSave} className="w-full">
+                  {t("common.save")}
+                </Button>
               </div>
             </CardContent>
           </Card>

@@ -1,19 +1,68 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { X, Globe, ArrowLeft } from "lucide-react"
+import { Globe, ArrowLeft } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
+import { useLocale } from "../../../lib/locale-context"
+import { useToast } from "../../../hooks/use-toast"
 
 export default function GeneralPage() {
   const router = useRouter()
-  const [language, setLanguage] = useState("ru")
-  const [timezone, setTimezone] = useState("Europe/Moscow")
-  const [timeFormat, setTimeFormat] = useState<"12" | "24">("24")
+  const { locale, setLocale, t } = useLocale()
+  const { toast } = useToast()
+  const [selectedLanguage, setSelectedLanguage] = useState<"ru" | "en">(locale)
+
+  useEffect(() => {
+    // Load saved language from localStorage
+    const savedLocale = localStorage.getItem('tracy_locale') as "ru" | "en" | null
+    if (savedLocale && (savedLocale === "ru" || savedLocale === "en")) {
+      setSelectedLanguage(savedLocale)
+    } else {
+      setSelectedLanguage(locale)
+    }
+  }, [locale])
 
   const handleClose = () => {
     router.push("/settings")
+  }
+
+  const handleLanguageChange = (newLang: "ru" | "en") => {
+    setSelectedLanguage(newLang)
+  }
+
+  const handleSave = async () => {
+    // Сохраняем язык в localStorage и в контексте
+    try {
+      localStorage.setItem('tracy_locale', selectedLanguage)
+      
+      // Обновляем язык в контексте
+      setLocale(selectedLanguage)
+      
+      // Обновляем HTML lang атрибут
+      if (typeof document !== 'undefined') {
+        document.documentElement.lang = selectedLanguage
+      }
+      
+      toast({
+        title: selectedLanguage === "ru" ? "Сохранено" : "Saved",
+        description: selectedLanguage === "ru" 
+          ? "Язык изменен на русский. Страница будет перезагружена." 
+          : "Language changed to English. Page will reload.",
+      })
+      
+      // Перезагружаем страницу для применения изменений языка
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } catch (error) {
+      console.error('Ошибка сохранения языка:', error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось сохранить язык. Попробуйте еще раз.",
+      })
+    }
   }
 
   return (
@@ -26,7 +75,7 @@ export default function GeneralPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-lg font-semibold">Общие</h1>
+          <h1 className="text-lg font-semibold">{t("settings.general")}</h1>
           <div className="w-5" />
         </div>
       </header>
@@ -37,52 +86,31 @@ export default function GeneralPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Globe className="h-5 w-5" />
-                Язык и регион
+                {t("settings.language")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">Язык</label>
+                <label className="text-sm font-medium mb-2 block">{t("settings.languageSelect")}</label>
                 <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full px-3 py-2 bg-card border border-border rounded-lg text-foreground"
+                  value={selectedLanguage}
+                  onChange={(e) => handleLanguageChange(e.target.value as "ru" | "en")}
+                  className="w-full px-3 py-2 bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="ru">Русский</option>
                   <option value="en">English</option>
                 </select>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {selectedLanguage === "ru" 
+                    ? "Язык интерфейса приложения" 
+                    : "Application interface language"}
+                </p>
               </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">Часовой пояс</label>
-                <select
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="w-full px-3 py-2 bg-card border border-border rounded-lg text-foreground"
-                >
-                  <option value="Europe/Moscow">Москва (UTC+3)</option>
-                  <option value="Europe/Kiev">Киев (UTC+2)</option>
-                  <option value="Europe/London">Лондон (UTC+0)</option>
-                  <option value="America/New_York">Нью-Йорк (UTC-5)</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">Формат времени</label>
-                <div className="flex gap-2">
-                  <Button
-                    variant={timeFormat === "24" ? "default" : "outline"}
-                    onClick={() => setTimeFormat("24")}
-                    className="flex-1"
-                  >
-                    24 часа
-                  </Button>
-                  <Button
-                    variant={timeFormat === "12" ? "default" : "outline"}
-                    onClick={() => setTimeFormat("12")}
-                    className="flex-1"
-                  >
-                    12 часов
-                  </Button>
-                </div>
+
+              <div className="pt-4">
+                <Button onClick={handleSave} className="w-full">
+                  {t("common.save")}
+                </Button>
               </div>
             </CardContent>
           </Card>

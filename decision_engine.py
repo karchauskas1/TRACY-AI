@@ -364,6 +364,7 @@ class DecisionEngine:
             message = self._format_event_confirmation(
                 title=title,
                 start_time=start_time,
+                end_time=extracted_data.get('end_time'),
                 location=extracted_data.get('location'),
                 description=extracted_data.get('description'),
                 timezone=timezone,
@@ -378,7 +379,144 @@ class DecisionEngine:
                 'needs_confirmation': True
             }
         
-        # Создаем событие в календарях
+        # КРИТИЧЕСКИ ВАЖНО: События ВСЕГДА должны сохраняться в БД, независимо от подключения календарей
+        # Это необходимо для отображения событий в веб-приложении
+        # Сначала сохраняем событие в БД (локально)
+        db_event_id = self.db.save_event(
+            user_id=user_id,
+            title=title,
+            description=extracted_data.get('description'),
+            start_time=start_time,
+            end_time=extracted_data.get('end_time'),
+            location=extracted_data.get('location'),
+            priority=extracted_data.get('priority', 0),
+            status='confirmed'  # События с явным временем считаются подтвержденными
+        )
+        logger.info(f"✓ Событие сохранено в БД: ID={db_event_id}, title={title}, start_time={start_time}")
+        
+        # Сохраняем последнее событие в контекст сразу после создания
+        self.db.update_last_event_context(user_id, db_event_id)
+        
+        # Парсим напоминания из extracted_data или из текста
+        reminder_minutes = []
+        reminder_intervals = extracted_data.get('reminder_intervals', [])
+        
+        if reminder_intervals and isinstance(reminder_intervals, list) and len(reminder_intervals) > 0:
+            # Парсим reminder_intervals из строк в минуты
+            for interval_str in reminder_intervals:
+                if isinstance(interval_str, str):
+                    minutes = self._parse_reminder_interval(interval_str)
+                    if minutes and minutes > 0:
+                        reminder_minutes.append(minutes)
+                        logger.info(f"Извлечено напоминание из reminder_intervals: {interval_str} → {minutes} минут")
+        
+        # Fallback: если не извлечены из JSON, парсим из оригинального текста
+        if not reminder_minutes:
+            original_text = extracted_data.get('_original_text', '')
+            if original_text:
+                import re
+                # Словарь для числительных
+                number_words = {
+                    'один': 1, 'два': 2, 'три': 3, 'четыре': 4, 'пять': 5,
+                    'шесть': 6, 'семь': 7, 'восемь': 8, 'девять': 9, 'десять': 10,
+                    'одиннадцать': 11, 'двенадцать': 12
+                }
+                
+                text_lower = original_text.lower()
+                
+                # Обрабатываем "полтора часа" отдельно (специальный случай)
+                if 'полтора часа' in text_lower or 'за полтора часа' in text_lower:
+                    reminder_minutes.append(90)  # 1.5 часа = 90 минут
+                    logger.info(f"Извлечено напоминание из текста: 'полтора часа' → 90 минут")
+                
+                # Ищем паттерны типа "за 2 часа", "за час", "за 30 минут", "за 1.5 часа", "за два часа"
+                # Паттерн: "за" + (число или числительное) + единица измерения
+                patterns = [
+                    # "за 1.5 часа", "за 2 часа", "за 30 минут"
+                    r'за\s+(\d+(?:\.\d+)?)\s*(час|часа|часов|мин|минут|минуты|день|дня|дней)',
+                    # "за час", "за день" (без числа = 1)
+                    r'за\s+(час|часа|часов|день|дня|дней)(?!\s*\d)',
+                    # "за два часа", "за три часа" (числительные)
+                    r'за\s+(один|два|три|четыре|пять|шесть|семь|восемь|девять|десять|одиннадцать|двенадцать)\s+(час|часа|часов|день|дня|дней)'
+                ]
+                
+                for pattern in patterns:
+                    matches = re.findall(pattern, text_lower)
+                    for match in matches:
+                        if isinstance(match, tuple):
+                            if len(match) == 2:
+                                num_str, unit = match
+                                # Проверяем, является ли первое значение числительным
+                                if num_str in number_words:
+                                    num = float(number_words[num_str])
+                                elif num_str.replace('.', '').isdigit():
+                                    num = float(num_str)
+                                else:
+                                    num = 1.0  # По умолчанию
+                            else:
+                                continue
+                        else:
+                            # Один элемент (например, "за час")
+                            unit = match
+                            num = 1.0
+                        
+                        # Исправляем единицу измерения, если нужно (например, "час" → "часов" после числительного)
+                        if unit == 'час' and num != 1.0:
+                            # После числительного 2-4 используется "часа", после 5+ - "часов"
+                            if 2 <= num <= 4:
+                                unit = 'часа'
+                            elif num >= 5:
+                                unit = 'часов'
+                        
+                        # Определяем единицу измерения
+                        if unit.startswith('час'):
+                            minutes_val = int(num * 60)
+                            reminder_minutes.append(minutes_val)
+                            logger.info(f"Извлечено напоминание из текста: '{match}' → {minutes_val} минут")
+                        elif unit.startswith('мин'):
+                            minutes_val = int(num) if isinstance(num, (int, float)) else 1
+                            reminder_minutes.append(minutes_val)
+                            logger.info(f"Извлечено напоминание из текста: '{match}' → {minutes_val} минут")
+                        elif unit.startswith('день'):
+                            minutes_val = int(num * 24 * 60) if isinstance(num, (int, float)) else 1440
+                            reminder_minutes.append(minutes_val)
+                            logger.info(f"Извлечено напоминание из текста: '{match}' → {minutes_val} минут")
+        
+        # Убираем дубликаты и сортируем по убыванию (самые ранние первыми)
+        reminder_minutes = sorted(set(reminder_minutes), reverse=True)
+        
+        # Если напоминания не были извлечены, используем настройку по умолчанию
+        if not reminder_minutes:
+            user_settings = self.db.get_user_settings(user_id)
+            default_reminder_minutes = user_settings.get('default_reminder_minutes', 15)
+            reminder_minutes = [default_reminder_minutes]
+            logger.info(f"Используется напоминание по умолчанию: {default_reminder_minutes} минут")
+        
+        # Создаем напоминания для события
+        if start_time and self.reminder_scheduler:
+            try:
+                import pytz
+                # Убеждаемся, что start_time в правильном часовом поясе
+                if start_time.tzinfo is None:
+                    start_time_local = pytz.timezone(timezone).localize(start_time)
+                else:
+                    start_time_local = start_time
+                
+                # Конвертируем в UTC для единообразия (create_reminders_for_event ожидает UTC)
+                start_time_utc = start_time_local.astimezone(pytz.UTC)
+                
+                # Создаем напоминания
+                self.reminder_scheduler.create_reminders_for_event(
+                    user_id=user_id,
+                    event_id=db_event_id,
+                    event_start_time=start_time_utc,
+                    reminder_minutes=reminder_minutes
+                )
+                logger.info(f"✓ Созданы напоминания для события {db_event_id}: {reminder_minutes} минут до начала")
+            except Exception as e:
+                logger.error(f"❌ Ошибка создания напоминаний для события {db_event_id}: {e}", exc_info=True)
+        
+        # Теперь пытаемся создать событие во внешних календарях (если подключены)
         created_in = []
         
         for conn in calendar_connections:
@@ -399,20 +537,14 @@ class DecisionEngine:
                     
                     if google_event:
                         external_id = google_event.get('id')
-                        # Сохраняем в БД
-                        db_event_id = self.db.save_event(
-                            user_id=user_id,
-                            title=title,
-                            description=extracted_data.get('description'),
-                            start_time=start_time,
-                            end_time=extracted_data.get('end_time'),
-                            location=extracted_data.get('location'),
-                            priority=extracted_data.get('priority', 0),
+                        # Обновляем событие в БД, добавляя external_id и provider
+                        self.db.update_event(
+                            db_event_id,
                             external_id=external_id,
-                            provider='google',
-                            status='confirmed'
+                            provider='google'
                         )
                         created_in.append('Google Calendar')
+                        logger.info(f"✓ Событие {db_event_id} синхронизировано с Google Calendar: {external_id}")
                 
                 elif provider == 'icloud':
                     # Загружаем credentials из БД
@@ -434,89 +566,41 @@ class DecisionEngine:
                     )
                     
                     if event_uid:
-                        db_event_id = self.db.save_event(
-                            user_id=user_id,
-                            title=title,
-                            description=extracted_data.get('description'),
-                            start_time=start_time,
-                            end_time=extracted_data.get('end_time'),
-                            location=extracted_data.get('location'),
-                            priority=extracted_data.get('priority', 0),
+                        # Обновляем событие в БД, добавляя external_id и provider
+                        self.db.update_event(
+                            db_event_id,
                             external_id=event_uid,
-                            provider='icloud',
-                            status='confirmed'
+                            provider='icloud'
                         )
                         created_in.append('iCloud Calendar')
+                        logger.info(f"✓ Событие {db_event_id} синхронизировано с iCloud Calendar: {event_uid}")
             
             except Exception as e:
                 logger.error(f"Ошибка создания события в {provider}: {e}")
                 continue
         
+        # Форматируем сообщение подтверждения (передаем список напоминаний)
+        message = self._format_event_confirmation(
+            title=title,
+            start_time=start_time,
+            end_time=extracted_data.get('end_time'),
+            location=extracted_data.get('location'),
+            description=extracted_data.get('description'),
+            timezone=timezone,
+            is_reminder=False,
+            reminder_minutes=reminder_minutes if reminder_minutes else None
+        )
+        
+        # Добавляем информацию о синхронизации с календарями, если были подключены
         if created_in:
-            # Форматируем сообщение в новом стиле
-            event_id = db_event_id if 'db_event_id' in locals() else None
-            message = self._format_event_confirmation(
-                title=title,
-                start_time=start_time,
-                location=extracted_data.get('location'),
-                description=extracted_data.get('description'),
-                timezone=timezone,
-                is_reminder=False
-            )
-            
-            # Сохраняем последнее событие в контекст
-            if event_id:
-                self.db.update_last_event_context(user_id, event_id)
-                
-                # Создаем напоминания для события (за 15 минут по умолчанию)
-                if start_time and self.reminder_scheduler:
-                    try:
-                        import pytz
-                        # Убеждаемся, что start_time в правильном часовом поясе
-                        if start_time.tzinfo is None:
-                            start_time_local = pytz.timezone(timezone).localize(start_time)
-                        else:
-                            start_time_local = start_time
-                        
-                        # Конвертируем в UTC для единообразия (create_reminders_for_event ожидает UTC)
-                        start_time_utc = start_time_local.astimezone(pytz.UTC)
-                        
-                        # Создаем напоминания: за 15 минут и в момент начала
-                        self.reminder_scheduler.create_reminders_for_event(
-                            user_id=user_id,
-                            event_id=event_id,
-                            event_start_time=start_time_utc,
-                            reminder_minutes=[15]  # По умолчанию за 15 минут
-                        )
-                        logger.info(f"✓ Созданы напоминания для события {event_id} (start_time: {start_time_utc.isoformat()})")
-                    except Exception as e:
-                        logger.error(f"❌ Ошибка создания напоминаний для события {event_id}: {e}", exc_info=True)
-            
-            return {
-                'action': 'created',
-                'message': message,
-                'event_id': event_id,
-                'needs_confirmation': False
-            }
-        else:
-            # Если не удалось создать в календарях, сохраняем в БД
-            event_id = self.db.save_event(
-                user_id=user_id,
-                title=title,
-                description=extracted_data.get('description'),
-                start_time=start_time,
-                end_time=extracted_data.get('end_time'),
-                location=extracted_data.get('location'),
-                priority=extracted_data.get('priority', 0),
-                status='draft'
-            )
-            
-            return {
-                'action': 'created_draft',
-                'message': f"Событие сохранено локально (календари не подключены): {title}",
-                'event_id': event_id,
-                'needs_confirmation': True
-            }
+            message += f"\n\n✅ Синхронизировано с: {', '.join(created_in)}"
+        
+        return {
+            'action': 'created',
+            'message': message,
+            'event_id': db_event_id,
+            'needs_confirmation': False
+        }
     
     async def _handle_reminder(self, user_id: int, extracted_data: Dict,
                               calendar_connections: List[Dict], timezone: str) -> Dict:
@@ -529,9 +613,11 @@ class DecisionEngine:
             # Форматируем заново с is_reminder=True
             title = extracted_data.get('title', 'Напоминание')
             start_time = extracted_data.get('start_time')
+            end_time = extracted_data.get('end_time')
             message = self._format_event_confirmation(
                 title=title,
                 start_time=start_time,
+                end_time=end_time,
                 location=extracted_data.get('location'),
                 description=extracted_data.get('description'),
                 timezone=timezone,
@@ -981,9 +1067,20 @@ class DecisionEngine:
                 from datetime import datetime
                 updated_start_time = datetime.fromisoformat(event['start_time'])
         
+        updated_end_time = updates.get('end_time')
+        if updated_end_time and isinstance(updated_end_time, str):
+            from datetime import datetime
+            updated_end_time = datetime.fromisoformat(updated_end_time)
+        elif not updated_end_time:
+            # Берем из события
+            if event.get('end_time'):
+                from datetime import datetime
+                updated_end_time = datetime.fromisoformat(event['end_time'])
+        
         message = self._format_event_confirmation(
             title=updated_title,
             start_time=updated_start_time,
+            end_time=updated_end_time,
             location=updates.get('location') or event.get('location'),
             description=updates.get('description') or event.get('description'),
             timezone=timezone,
@@ -1844,6 +1941,88 @@ class DecisionEngine:
             'needs_confirmation': False
         }
     
+    def _parse_reminder_interval(self, interval_str: str) -> Optional[int]:
+        """
+        Парсит строку интервала напоминания в минуты.
+        
+        Примеры:
+        - "1 hour" или "1 hours" → 60
+        - "1.5 hours" → 90
+        - "2 hours" → 120
+        - "30 minutes" → 30
+        - "1 day" или "1 days" → 1440
+        """
+        import re
+        
+        # Убираем лишние пробелы и приводим к нижнему регистру
+        interval_str = interval_str.strip().lower()
+        
+        # Пробуем парсить числовое значение (может быть целое или дробное)
+        # Паттерн: число (может быть с точкой) + пробел + единица измерения
+        match = re.match(r'(\d+(?:\.\d+)?)\s*(hour|hours|minute|minutes|day|days|час|часа|часов|мин|минут|минуты|день|дня|дней)', interval_str)
+        
+        if match:
+            num_str = match.group(1)
+            unit = match.group(2)
+            
+            try:
+                num = float(num_str)
+                
+                # Определяем единицу измерения и конвертируем в минуты
+                if unit.startswith('hour') or unit.startswith('час'):
+                    return int(num * 60)
+                elif unit.startswith('minute') or unit.startswith('мин'):
+                    return int(num)
+                elif unit.startswith('day') or unit.startswith('день'):
+                    return int(num * 24 * 60)
+                else:
+                    # По умолчанию считаем часами
+                    return int(num * 60)
+            except ValueError:
+                logger.warning(f"Не удалось преобразовать число из интервала: {num_str}")
+                return None
+        else:
+            logger.warning(f"Не удалось распарсить интервал напоминания: {interval_str}")
+            return None
+    
+    def _format_time_unit(self, value: int, unit: str) -> str:
+        """Форматирует единицу времени с правильным окончанием для русского языка."""
+        if unit == 'hour':
+            if value == 1:
+                return "час"
+            elif value in [2, 3, 4]:
+                return "часа"
+            else:
+                return "часов"
+        elif unit == 'minute':
+            if value == 1:
+                return "минуту"
+            elif value in [2, 3, 4]:
+                return "минуты"
+            else:
+                return "минут"
+        elif unit == 'day':
+            if value == 1:
+                return "день"
+            elif value in [2, 3, 4]:
+                return "дня"
+            else:
+                return "дней"
+        return unit
+    
+    def _format_time_unit_fractional(self, value: float, unit: str) -> str:
+        """Форматирует дробную единицу времени для русского языка."""
+        if unit == 'hour':
+            if 1.0 < value < 2.0:
+                return "часа"  # например, 1.5 часа
+            elif value >= 2.0:
+                # Для значений >= 2.0 используем целую часть
+                int_part = int(value)
+                return self._format_time_unit(int_part, 'hour')
+            else:
+                return "часа"
+        return unit
+    
     def _format_datetime(self, dt: Optional[datetime], timezone: str) -> str:
         """Форматировать datetime для пользователя."""
         if not dt:
@@ -1859,15 +2038,17 @@ class DecisionEngine:
         return dt.strftime("%d.%m.%Y %H:%M")
     
     def _format_event_confirmation(self, title: str, start_time: Optional[datetime] = None,
-                                  location: Optional[str] = None, description: Optional[str] = None,
-                                  timezone: str = "Europe/Moscow", is_reminder: bool = False) -> str:
+                                  end_time: Optional[datetime] = None, location: Optional[str] = None, 
+                                  description: Optional[str] = None,
+                                  timezone: str = "Europe/Moscow", is_reminder: bool = False,
+                                  reminder_minutes: Optional[List[int]] = None) -> str:
         """
         Форматировать подтверждение события в заданном формате.
         
         Формат:
         📅 (эмодзи по контексту) Название события
          · Дата: (Вт) 13 январь
-         · Время: 12:00
+         · Время: 12:00 (или 12:00 - 15:00 если указан диапазон)
          · Напоминание: За 15 минут до события
          · Заметки: если есть
         """
@@ -1887,27 +2068,66 @@ class DecisionEngine:
         if start_time:
             tz = pytz.timezone(timezone)
             if start_time.tzinfo is None:
-                dt = tz.localize(start_time)
+                dt_start = tz.localize(start_time)
             else:
-                dt = start_time.astimezone(tz)
+                dt_start = start_time.astimezone(tz)
             
             # День недели (краткий формат)
             weekdays_short = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-            weekday = weekdays_short[dt.weekday()]
+            weekday = weekdays_short[dt_start.weekday()]
             
             # Месяц на русском
             months = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
                      'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
-            month = months[dt.month - 1]
+            month = months[dt_start.month - 1]
             
             # Дата
-            message += f" · Дата: ({weekday}) {dt.day} {month}\n"
+            message += f" · Дата: ({weekday}) {dt_start.day} {month}\n"
             
-            # Время
-            message += f" · Время: {dt.strftime('%H:%M')}\n"
+            # Время - показываем диапазон, если указан end_time
+            if end_time:
+                if end_time.tzinfo is None:
+                    dt_end = tz.localize(end_time)
+                else:
+                    dt_end = end_time.astimezone(tz)
+                
+                # Если даты разные, показываем обе даты
+                if dt_start.date() != dt_end.date():
+                    message += f" · Время: {dt_start.strftime('%H:%M')} - {dt_end.strftime('%H:%M')} ({dt_end.day} {months[dt_end.month - 1]})\n"
+                else:
+                    message += f" · Время: {dt_start.strftime('%H:%M')} - {dt_end.strftime('%H:%M')}\n"
+            else:
+                message += f" · Время: {dt_start.strftime('%H:%M')}\n"
         
-        # Напоминание (всегда по умолчанию за 15 минут)
-        message += " · Напоминание: За 15 минут до события\n"
+        # Напоминания
+        if reminder_minutes and len(reminder_minutes) > 0:
+            # Форматируем список напоминаний
+            reminder_texts = []
+            for minutes in sorted(reminder_minutes, reverse=True):  # Сортируем от большего к меньшему
+                if minutes >= 1440:  # Дни
+                    days = minutes // 1440
+                    reminder_texts.append(f"за {days} {self._format_time_unit(days, 'day')}")
+                elif minutes >= 60:  # Часы
+                    hours = minutes / 60
+                    if hours.is_integer():
+                        hours = int(hours)
+                        reminder_texts.append(f"за {hours} {self._format_time_unit(hours, 'hour')}")
+                    else:
+                        # Дробные часы (например, 1.5 часа)
+                        if hours == 1.5:
+                            reminder_texts.append("за полтора часа")
+                        else:
+                            reminder_texts.append(f"за {hours} {self._format_time_unit_fractional(hours, 'hour')}")
+                else:  # Минуты
+                    reminder_texts.append(f"за {minutes} {self._format_time_unit(minutes, 'minute')}")
+            
+            if len(reminder_texts) == 1:
+                message += f" · Напоминание: {reminder_texts[0]} до события\n"
+            else:
+                message += f" · Напоминания: {', '.join(reminder_texts)} до события\n"
+        else:
+            # По умолчанию за 15 минут
+            message += " · Напоминание: За 15 минут до события\n"
         
         # Заметки (description)
         if description:

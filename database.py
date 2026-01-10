@@ -111,6 +111,8 @@ class Database:
                         locale TEXT DEFAULT 'ru_RU',
                         notifications_enabled BOOLEAN DEFAULT TRUE,
                         default_reminder_minutes INTEGER DEFAULT 15,
+                        morning_digest_time TEXT DEFAULT '09:00',
+                        web_notifications_enabled BOOLEAN DEFAULT TRUE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
@@ -123,6 +125,16 @@ class Database:
                 
                 try:
                     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS default_reminder_minutes INTEGER DEFAULT 15")
+                except:
+                    pass  # Колонка уже существует
+                
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS morning_digest_time TEXT DEFAULT '09:00'")
+                except:
+                    pass  # Колонка уже существует
+                
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS web_notifications_enabled BOOLEAN DEFAULT TRUE")
                 except:
                     pass  # Колонка уже существует
                 
@@ -234,6 +246,8 @@ class Database:
                         locale TEXT DEFAULT 'ru_RU',
                         notifications_enabled INTEGER DEFAULT 1,
                         default_reminder_minutes INTEGER DEFAULT 15,
+                        morning_digest_time TEXT DEFAULT '09:00',
+                        web_notifications_enabled INTEGER DEFAULT 1,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
@@ -246,6 +260,16 @@ class Database:
                 
                 try:
                     cursor.execute("ALTER TABLE users ADD COLUMN default_reminder_minutes INTEGER DEFAULT 15")
+                except:
+                    pass  # Колонка уже существует
+                
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN morning_digest_time TEXT DEFAULT '09:00'")
+                except:
+                    pass  # Колонка уже существует
+                
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN web_notifications_enabled INTEGER DEFAULT 1")
                 except:
                     pass  # Колонка уже существует
                 
@@ -398,7 +422,9 @@ class Database:
                 'timezone': 'Europe/Moscow',
                 'locale': 'ru_RU',
                 'notifications_enabled': True,
-                'default_reminder_minutes': 15
+                'default_reminder_minutes': 15,
+                'morning_digest_time': '09:00',
+                'web_notifications_enabled': True
             }
         
         # Преобразуем в словарь с правильными типами
@@ -406,13 +432,17 @@ class Database:
             'timezone': user.get('timezone', 'Europe/Moscow'),
             'locale': user.get('locale', 'ru_RU'),
             'notifications_enabled': bool(user.get('notifications_enabled', True)),
-            'default_reminder_minutes': int(user.get('default_reminder_minutes', 15))
+            'default_reminder_minutes': int(user.get('default_reminder_minutes', 15)),
+            'morning_digest_time': user.get('morning_digest_time', '09:00'),
+            'web_notifications_enabled': bool(user.get('web_notifications_enabled', True))
         }
         
         # Для SQLite преобразуем boolean
         if not self.use_postgresql:
             if isinstance(user.get('notifications_enabled'), int):
                 settings['notifications_enabled'] = bool(user.get('notifications_enabled', 1))
+            if isinstance(user.get('web_notifications_enabled'), int):
+                settings['web_notifications_enabled'] = bool(user.get('web_notifications_enabled', 1))
         
         return settings
     
@@ -454,6 +484,28 @@ class Database:
                 if 'default_reminder_minutes' in settings_dict:
                     updates.append("default_reminder_minutes = %s" if self.use_postgresql else "default_reminder_minutes = ?")
                     params.append(int(settings_dict['default_reminder_minutes']))
+                
+                if 'morning_digest_time' in settings_dict:
+                    value = settings_dict['morning_digest_time']
+                    if value is None or value == '':
+                        # NULL означает дайджест выключен
+                        if self.use_postgresql:
+                            updates.append("morning_digest_time = NULL")
+                        else:
+                            updates.append("morning_digest_time = NULL")
+                        # Не добавляем в params для NULL
+                    else:
+                        updates.append("morning_digest_time = %s" if self.use_postgresql else "morning_digest_time = ?")
+                        params.append(str(value))
+                
+                if 'web_notifications_enabled' in settings_dict:
+                    value = settings_dict['web_notifications_enabled']
+                    if self.use_postgresql:
+                        updates.append("web_notifications_enabled = %s")
+                        params.append(bool(value))
+                    else:
+                        updates.append("web_notifications_enabled = ?")
+                        params.append(1 if bool(value) else 0)
             else:
                 # Обратная совместимость со старым API
                 if timezone:

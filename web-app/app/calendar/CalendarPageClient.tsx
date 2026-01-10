@@ -53,127 +53,166 @@ export function CalendarPageClient() {
     }
   }, [])
 
-  const loadEvents = async () => {
+  const loadEvents = async (forceRefresh: boolean = false) => {
     try {
+      if (forceRefresh) {
+        setLoading(true)
+      }
+      
       // Проверяем, открыто ли через Telegram Web App
       const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
       
-      if (tg) {
+      if (tg && user?.id) {
         // Если открыто через Telegram Web App, запрашиваем события через бота
-        // Отправляем запрос боту через Telegram Mini App API
         tg.ready()
         tg.expand()
         
-        // Используем sendData для запроса событий
-        const requestData = JSON.stringify({ action: "get_events", user_id: user?.id })
-        tg.sendData(requestData)
+        // Сначала загружаем из localStorage для быстрого отображения
+        const storedEvents = localStorage.getItem("tracy_events")
+        if (storedEvents) {
+          try {
+            const parsedEvents = JSON.parse(storedEvents)
+            if (Array.isArray(parsedEvents)) {
+              console.log(`[Calendar] Загружено ${parsedEvents.length} событий из localStorage`)
+              setEvents(parsedEvents)
+              
+              const counts: Record<string, number> = {}
+              parsedEvents.forEach((event: Event) => {
+                try {
+                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                  counts[dateKey] = (counts[dateKey] || 0) + 1
+                } catch (e) {
+                  console.error("Error parsing event date:", e, event)
+                }
+              })
+              setEventsByDate(counts)
+              
+              // Если есть сохраненные события, не показываем loading сразу (только при forceRefresh)
+              if (!forceRefresh && parsedEvents.length > 0) {
+                setLoading(false)
+              }
+            }
+          } catch (e) {
+            console.error("[Calendar] Error parsing stored events:", e)
+          }
+        } else {
+          console.log(`[Calendar] Нет сохраненных событий в localStorage`)
+        }
         
-        // Также загружаем из localStorage (fallback)
-        const storedEvents = localStorage.getItem("tracy_events")
-        if (storedEvents) {
-          const parsedEvents = JSON.parse(storedEvents)
-          setEvents(parsedEvents)
-          
-          const counts: Record<string, number> = {}
-          parsedEvents.forEach((event: Event) => {
-            const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-            counts[dateKey] = (counts[dateKey] || 0) + 1
-          })
-          setEventsByDate(counts)
+        // Запрашиваем свежие данные у бота через sendData
+        // ВАЖНО: Бот обработает запрос и отправит ответ в чат
+        // Так как веб-приложение не может читать ответы автоматически, используем механизм:
+        // 1. Бот отправляет события в формате TRACY_EVENTS_SYNC:{base64_json} в чат
+        // 2. После создания события в боте, события автоматически отправляются в этом формате
+        // 3. Веб-приложение использует polling для получения обновлений
+        const requestData = JSON.stringify({ action: "get_events", user_id: user.id })
+        tg.sendData(requestData)
+        console.log(`[Calendar] Отправлен запрос событий для пользователя ${user.id}`)
+        
+        // Устанавливаем таймер для завершения loading
+        // События будут обновляться через периодический polling (каждые 15 секунд)
+        if (!storedEvents || forceRefresh) {
+          setTimeout(() => {
+            setLoading(false)
+            console.log(`[Calendar] Loading завершен. Событий в состоянии: ${events.length}`)
+          }, 2000)
+        } else {
+          setLoading(false)
         }
+        
       } else {
-        // Если не через Telegram Web App, используем localStorage
+        // Если не через Telegram Web App, используем только localStorage
         const storedEvents = localStorage.getItem("tracy_events")
         if (storedEvents) {
-          const parsedEvents = JSON.parse(storedEvents)
-          setEvents(parsedEvents)
-          
-          const counts: Record<string, number> = {}
-          parsedEvents.forEach((event: Event) => {
-            const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-            counts[dateKey] = (counts[dateKey] || 0) + 1
-          })
-          setEventsByDate(counts)
+          try {
+            const parsedEvents = JSON.parse(storedEvents)
+            if (Array.isArray(parsedEvents)) {
+              setEvents(parsedEvents)
+              
+              const counts: Record<string, number> = {}
+              parsedEvents.forEach((event: Event) => {
+                try {
+                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                  counts[dateKey] = (counts[dateKey] || 0) + 1
+                } catch (e) {
+                  console.error("Error parsing event date:", e, event)
+                }
+              })
+              setEventsByDate(counts)
+            }
+          } catch (e) {
+            console.error("Error parsing stored events:", e)
+            setEvents([])
+            setEventsByDate({})
+          }
+        } else {
+          setEvents([])
+          setEventsByDate({})
         }
+        setLoading(false)
       }
+      
+      // Всегда завершаем loading после попытки загрузки
+      setTimeout(() => {
+        setLoading(false)
+      }, 2000)
+      
     } catch (error) {
       console.error("Failed to load events:", error)
       setEvents([])
       setEventsByDate({})
-    } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Слушаем сообщения от бота через Telegram Mini App API
-    if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.ready()
-        
-        // Обработчик для получения данных от бота
-        tg.onEvent("viewportChanged", () => {
-          // При изменении viewport обновляем события
-          loadEvents()
-        })
-        
-        // Обработчик для получения данных через sendData и через сообщения от бота
-        const handleDataReceived = (data: string) => {
-          try {
-            // Проверяем, это ответ от бота с событиями
-            if (data.startsWith("TRACY_SYNC_EVENTS:")) {
-              const jsonData = data.replace("TRACY_SYNC_EVENTS:", "")
-              const parsed = JSON.parse(jsonData)
-              if (parsed.action === "sync_events" && parsed.events) {
-                setEvents(parsed.events)
-                localStorage.setItem("tracy_events", JSON.stringify(parsed.events))
-                
-                // Count events by date
-                const counts: Record<string, number> = {}
-                parsed.events.forEach((event: Event) => {
-                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-                  counts[dateKey] = (counts[dateKey] || 0) + 1
-                })
-                setEventsByDate(counts)
-                setLoading(false)
-              }
-            } else {
-              // Обычный JSON ответ
-              const parsed = JSON.parse(data)
-              if (parsed.action === "sync_events" && parsed.events) {
-                setEvents(parsed.events)
-                localStorage.setItem("tracy_events", JSON.stringify(parsed.events))
-                
-                // Count events by date
-                const counts: Record<string, number> = {}
-                parsed.events.forEach((event: Event) => {
-                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-                  counts[dateKey] = (counts[dateKey] || 0) + 1
-                })
-                setEventsByDate(counts)
-                setLoading(false)
-              }
-            }
-          } catch (e) {
-            console.error("Failed to parse data from bot:", e)
-          }
-        }
-        
-        // Подписываемся на события от бота через Telegram Mini App API
-        if (tg.onEvent) {
-          // Слушаем сообщения от бота (если бот отправляет ответы)
-          tg.onEvent("message", (message: any) => {
-            if (message && message.text) {
-              handleDataReceived(message.text)
-            }
-          })
+    // Загружаем события при монтировании компонента
+    if (user?.id) {
+      loadEvents(true)
+    }
+  }, [user?.id])
+  
+  useEffect(() => {
+    // Автоматическое обновление событий при открытом веб-приложении
+    const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
+    if (tg && user?.id) {
+      // Обновление каждые 15 секунд (достаточно часто для синхронизации)
+      const intervalId = setInterval(() => {
+        console.log(`[Calendar] Автоматическое обновление событий для пользователя ${user.id}`)
+        loadEvents(true)
+      }, 15000) // Обновление каждые 15 секунд
+      
+      // Обновление при возвращении на вкладку (focus)
+      const handleFocus = () => {
+        console.log(`[Calendar] Обновление событий при focus`)
+        loadEvents(true)
+      }
+      window.addEventListener("focus", handleFocus)
+      
+      // Обновление при видимости страницы (visibilitychange)
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          console.log(`[Calendar] Обновление событий при visibility change`)
+          loadEvents(true)
         }
       }
+      document.addEventListener("visibilitychange", handleVisibilityChange)
+      
+      // Обновление при открытии веб-приложения (viewportChanged)
+      if (tg.onEvent) {
+        tg.onEvent("viewportChanged", () => {
+          console.log(`[Calendar] Обновление событий при viewport changed`)
+          loadEvents(true)
+        })
+      }
+      
+      return () => {
+        clearInterval(intervalId)
+        window.removeEventListener("focus", handleFocus)
+        document.removeEventListener("visibilitychange", handleVisibilityChange)
+      }
     }
-    
-    loadEvents()
-  }, [selectedDate, user])
+  }, [user?.id])
 
   const selectedDateKey = format(selectedDate, "yyyy-MM-dd")
   const dayEvents = events.filter(

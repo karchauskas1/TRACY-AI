@@ -3,8 +3,8 @@ import logging
 import asyncio
 import os
 from datetime import datetime
-from typing import List, Dict
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp, BotCommand
+from typing import List, Dict, Union
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp, BotCommand, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
@@ -52,15 +52,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Переходим в режим ожидания аудио для расшифровки встречи
         context.user_data['waiting_meeting_audio'] = True
         
-        keyboard = [[InlineKeyboardButton("📅 Режим планировщика", callback_data="mode_planner")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        # Устанавливаем постоянную клавиатуру для режима расшифровки
+        reply_keyboard = get_reply_keyboard(context)
         
         await update.message.reply_text(
             "🎤 **Режим работы с записями встреч**\n\n"
             "Вы вошли в режим расшифровки встреч. Чтобы продолжить и расшифровать встречу, отправьте голосовое сообщение или аудиофайл с записью встречи.\n\n"
             "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n"
             "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG",
-            reply_markup=reply_markup,
+            reply_markup=reply_keyboard,
             parse_mode="Markdown"
         )
         return
@@ -100,17 +100,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             callback_data="settings_google"
         )])
     
-    # Кнопка для веб-приложения
-    web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
-    if "localhost" not in web_url.lower() and web_url.startswith("https://"):
-        try:
-            keyboard.append([InlineKeyboardButton(
-                "🌐 Открыть веб-приложение",
-                web_app=WebAppInfo(url=web_url)
-            )])
-        except:
-            pass
-    
     # Кнопка меню
     keyboard.append([InlineKeyboardButton("📋 Меню", callback_data="menu_show")])
     # Кнопка помощи
@@ -130,19 +119,15 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     is_meeting_mode = context.user_data.get('waiting_meeting_audio', False)
     
+    # Устанавливаем постоянную клавиатуру
+    reply_keyboard = get_reply_keyboard(context)
+    
+    # Дополнительные кнопки для меню (inline)
     keyboard = []
-    
-    # Переключатель режимов (одна кнопка, меняется в зависимости от режима)
-    if is_meeting_mode:
-        keyboard.append([InlineKeyboardButton("📅 Перейти в режим планировщика", callback_data="mode_planner")])
-    else:
-        keyboard.append([InlineKeyboardButton("🎤 Перейти в режим резюмирования встреч", callback_data="mode_meeting_transcribe")])
-    
-    # Кнопки настроек и помощи
     keyboard.append([InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")])
     keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
     
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    inline_markup = InlineKeyboardMarkup(keyboard)
     
     mode_text = "🎤 **Режим резюмирования встреч**" if is_meeting_mode else "📅 **Режим планировщика**"
     
@@ -150,9 +135,11 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📋 **Главное меню TRACY**\n\n"
         f"Текущий режим: {mode_text}\n\n"
         "Выбери действие:",
-        reply_markup=reply_markup,
+        reply_markup=inline_markup,
         parse_mode="Markdown"
     )
+    # Отправляем отдельное сообщение с постоянной клавиатурой (если нужно обновить)
+    # Но лучше просто установить клавиатуру один раз при входе в режим
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -657,6 +644,9 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.edit_message_text("✅ Google Calendar отключен.", reply_markup=reply_markup)
+                
+                # Отправляем обновленный статус календарей в веб-приложение
+                await send_calendar_status_to_web_app(user_id, context)
             else:
                 keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -678,6 +668,9 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.edit_message_text("✅ iCloud Calendar отключен.", reply_markup=reply_markup)
+                
+                # Отправляем обновленный статус календарей в веб-приложение
+                await send_calendar_status_to_web_app(user_id, context)
             else:
                 keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -693,6 +686,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_settings = db.get_user_settings(user_id)
         notifications_enabled = user_settings.get('notifications_enabled', True)
         default_reminder_minutes = user_settings.get('default_reminder_minutes', 15)
+        morning_digest_time = user_settings.get('morning_digest_time', '09:00')
         
         keyboard = []
         
@@ -726,7 +720,9 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"🔔 **Настройки уведомлений**\n\n"
             f"Статус: {status_icon} Уведомления {status_text}\n\n"
-            f"Напоминание по умолчанию: за {reminder_text} до события\n\n"
+            f"Напоминание по умолчанию: за {reminder_text} до события\n"
+            f"☀️ Утренний дайджест: {morning_digest_time}\n\n"
+            "💡 Настройки утреннего дайджеста можно изменить в веб-приложении.\n\n"
             "Здесь ты можешь управлять уведомлениями о событиях и напоминаниями.",
             reply_markup=reply_markup,
             parse_mode="Markdown"
@@ -757,10 +753,22 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_text = "включены" if new_status else "выключены"
         default_reminder_minutes = user_settings.get('default_reminder_minutes', 15)
         
+        # Форматируем время напоминания для отображения
+        if default_reminder_minutes < 60:
+            reminder_text = f"{default_reminder_minutes} минут"
+        elif default_reminder_minutes == 60:
+            reminder_text = "1 час"
+        elif default_reminder_minutes < 1440:
+            hours = default_reminder_minutes // 60
+            reminder_text = f"{hours} час{'а' if hours in [2, 3, 4] else '' if hours == 1 else 'ов'}"
+        else:
+            days = default_reminder_minutes // 1440
+            reminder_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
+        
         await query.edit_message_text(
             f"🔔 **Настройки уведомлений**\n\n"
             f"Статус: {status_icon} Уведомления {status_text}\n\n"
-            f"Напоминание по умолчанию: за {default_reminder_minutes} минут до события\n\n"
+            f"Напоминание по умолчанию: за {reminder_text} до события\n\n"
             "Здесь ты можешь управлять уведомлениями о событиях и напоминаниями.",
             reply_markup=reply_markup,
             parse_mode="Markdown"
@@ -870,15 +878,14 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_meeting_audio'] = False
         await query.answer("✅ Переключено в режим планировщика")
         
-        # Возвращаемся в главное меню
-        is_meeting_mode = False
+        # Устанавливаем постоянную клавиатуру для режима планировщика
+        reply_keyboard = get_reply_keyboard(context)
         
+        # Дополнительные кнопки для меню (inline)
         keyboard = []
-        keyboard.append([InlineKeyboardButton("🎤 Перейти в режим резюмирования встреч", callback_data="mode_meeting_transcribe")])
         keyboard.append([InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")])
         keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        inline_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
             "📋 **Главное меню TRACY**\n\n"
@@ -887,9 +894,14 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Создавать события из текста, голоса или фото\n"
             "• Управлять напоминаниями\n"
             "• Просматривать и редактировать события\n\n"
-            "Выбери действие:",
-            reply_markup=reply_markup,
+            "Используй кнопки внизу экрана для переключения режима.",
+            reply_markup=inline_markup,
             parse_mode="Markdown"
+        )
+        # Устанавливаем постоянную клавиатуру через новое сообщение
+        await query.message.reply_text(
+            "Постоянная клавиатура активирована. Используй кнопки внизу экрана.",
+            reply_markup=reply_keyboard
         )
         return
     
@@ -898,24 +910,28 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_meeting_audio'] = True
         await query.answer("✅ Переключено в режим резюмирования встреч")
         
-        # Возвращаемся в главное меню
-        is_meeting_mode = True
+        # Устанавливаем постоянную клавиатуру для режима расшифровки
+        reply_keyboard = get_reply_keyboard(context)
         
+        # Дополнительные кнопки для меню (inline)
         keyboard = []
-        keyboard.append([InlineKeyboardButton("📅 Перейти в режим планировщика", callback_data="mode_planner")])
         keyboard.append([InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")])
         keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        inline_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
             "📋 **Главное меню TRACY**\n\n"
             "✅ **Режим резюмирования встреч**\n\n"
             "Теперь ты в режиме расшифровки встреч. Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
             "📎 Поддерживаемые аудиоформаты: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие.\n\n"
-            "Выбери действие:",
-            reply_markup=reply_markup,
+            "Используй кнопки внизу экрана для переключения режима.",
+            reply_markup=inline_markup,
             parse_mode="Markdown"
+        )
+        # Устанавливаем постоянную клавиатуру через новое сообщение
+        await query.message.reply_text(
+            "💡 Используй кнопки внизу экрана для переключения режима.",
+            reply_markup=reply_keyboard
         )
         return
     
@@ -927,9 +943,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [
                 [InlineKeyboardButton("📄 Показать полный текст встречи", callback_data="meeting_full_transcript")],
                 [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
-                [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")],
-                [InlineKeyboardButton("📋 Главное меню", callback_data="menu_show")]
+                [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")]
             ]
+            # Добавляем постоянные кнопки режима
+            keyboard.extend(get_meeting_mode_footer_buttons(context))
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 f"📋 **Резюме встречи**\n\n{summary}\n\n"
@@ -961,6 +978,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_meeting_audio'] = True
         
         keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="meetings_mode")]]
+        # Добавляем постоянные кнопки режима
+        keyboard.extend(get_meeting_mode_footer_buttons(context))
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -987,6 +1006,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")],
                 [InlineKeyboardButton("⬅️ Назад к резюме", callback_data="meeting_back_to_summary")]
             ]
+            # Добавляем постоянные кнопки режима
+            keyboard.extend(get_meeting_mode_footer_buttons(context))
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             # Если текст слишком длинный, отправляем как отдельное сообщение
@@ -1037,6 +1058,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")],
                 [InlineKeyboardButton("⬅️ Назад к резюме", callback_data="meeting_back_to_summary")]
             ]
+            # Добавляем постоянные кнопки режима
+            keyboard.extend(get_meeting_mode_footer_buttons(context))
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if extended_summary:
@@ -1162,6 +1185,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
                     [InlineKeyboardButton("⬅️ Назад к резюме", callback_data="meeting_back_to_summary")]
                 ]
+                # Добавляем постоянные кнопки режима
+                keyboard.extend(get_meeting_mode_footer_buttons(context))
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.reply_text(
                     f"✅ Создано событий из встречи: {created_count}\n\n"
@@ -1176,11 +1201,59 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
                     [InlineKeyboardButton("⬅️ Назад к резюме", callback_data="meeting_back_to_summary")]
                 ]
+                # Добавляем постоянные кнопки режима
+                keyboard.extend(get_meeting_mode_footer_buttons(context))
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.reply_text(
                     "Не найдено событий с конкретными датами в расшифровке встречи.",
                     reply_markup=reply_markup
                 )
+
+
+def get_meeting_mode_footer_buttons(context: ContextTypes.DEFAULT_TYPE) -> List[List[InlineKeyboardButton]]:
+    """Создает постоянные кнопки для режима расшифровки встреч (переключение режима и меню)."""
+    is_meeting_mode = context.user_data.get('waiting_meeting_audio', False)
+    buttons = []
+    
+    # Кнопка переключения режима
+    if is_meeting_mode:
+        buttons.append([InlineKeyboardButton("📅 Перейти в режим планировщика", callback_data="mode_planner")])
+    else:
+        buttons.append([InlineKeyboardButton("🎤 Перейти в режим резюмирования встреч", callback_data="mode_meeting_transcribe")])
+    
+    # Кнопка меню
+    buttons.append([InlineKeyboardButton("📋 Главное меню", callback_data="menu_show")])
+    
+    return buttons
+
+
+def get_reply_keyboard(context: ContextTypes.DEFAULT_TYPE, remove: bool = False) -> Union[ReplyKeyboardMarkup, ReplyKeyboardRemove]:
+    """
+    Создает постоянную клавиатуру (ReplyKeyboardMarkup), которая всегда видна внизу экрана.
+    
+    Args:
+        context: Контекст бота
+        remove: Если True, возвращает ReplyKeyboardRemove для скрытия клавиатуры
+    
+    Returns:
+        ReplyKeyboardMarkup или ReplyKeyboardRemove
+    """
+    if remove:
+        return ReplyKeyboardRemove()
+    
+    is_meeting_mode = context.user_data.get('waiting_meeting_audio', False)
+    keyboard = []
+    
+    # Кнопка переключения режима
+    if is_meeting_mode:
+        keyboard.append([KeyboardButton("📅 Режим планировщика")])
+    else:
+        keyboard.append([KeyboardButton("🎤 Режим расшифровки встреч")])
+    
+    # Кнопка меню
+    keyboard.append([KeyboardButton("📋 Меню")])
+    
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
 def is_audio_file(message) -> bool:
@@ -1192,17 +1265,30 @@ def is_audio_file(message) -> bool:
     # Документ с аудио
     if message.document:
         doc = message.document
-        # Проверяем mime_type
-        if doc.mime_type:
-            if 'audio' in doc.mime_type.lower():
-                return True
-        
-        # Проверяем расширение файла если mime_type не указан
+        # Проверяем расширение файла ПЕРВЫМ (более надежно для M4A из iPhone)
         if doc.file_name:
-            audio_extensions = ['.mp3', '.m4a', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.wma', '.amr', '.3gp', '.mka']
+            audio_extensions = ['.mp3', '.m4a', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.wma', '.amr', '.3gp', '.mka', '.mp4']
             file_ext = doc.file_name.lower()
             if any(file_ext.endswith(ext) for ext in audio_extensions):
+                logger.info(f"Аудиофайл определен по расширению: {file_ext}")
                 return True
+        
+        # Проверяем mime_type (M4A может быть audio/mp4 или audio/x-m4a)
+        if doc.mime_type:
+            mime_lower = doc.mime_type.lower()
+            # Проверяем на audio/* типы
+            if 'audio' in mime_lower:
+                logger.info(f"Аудиофайл определен по MIME типу: {doc.mime_type}")
+                return True
+            # M4A может быть определен как audio/mp4 или video/mp4 (но с аудио контентом)
+            if 'mp4' in mime_lower and doc.file_name and doc.file_name.lower().endswith('.m4a'):
+                logger.info(f"M4A файл определен по комбинации MIME и расширения: {doc.mime_type}, {doc.file_name}")
+                return True
+        
+        # Если нет имени файла, но есть document с audio mime_type, считаем аудио
+        if doc.mime_type and 'audio' in doc.mime_type.lower():
+            logger.info(f"Аудиофайл определен только по MIME типу: {doc.mime_type}")
+            return True
         
         # Если нет имени файла и mime_type, но есть document, попробуем обработать
         # (Telegram иногда не передает mime_type)
@@ -1262,30 +1348,46 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.info(f"Получено голосовое сообщение, длительность: {voice.duration} сек")
         elif update.message.document:
             doc = update.message.document
+            logger.info(f"Получен документ: file_name={doc.file_name}, mime_type={doc.mime_type}, file_size={doc.file_size}")
+            
             if is_audio_file(update.message):
                 audio_file = await context.bot.get_file(doc.file_id)
                 file_type = "document"
                 file_name = doc.file_name or "audio_file"
-                logger.info(f"Получен аудиофайл: {file_name}, размер: {doc.file_size} bytes, mime_type: {doc.mime_type}")
+                logger.info(f"✅ Аудиофайл определен: {file_name}, размер: {doc.file_size} bytes, mime_type: {doc.mime_type}")
             else:
+                logger.warning(f"❌ Документ не определен как аудиофайл: file_name={doc.file_name}, mime_type={doc.mime_type}")
+                # Устанавливаем постоянную клавиатуру
+                reply_keyboard = get_reply_keyboard(context)
                 await update.message.reply_text(
                     "❌ Это не аудиофайл. Пожалуйста, отправь голосовое сообщение или аудиофайл.\n\n"
-                    "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты."
+                    "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
+                    "💡 Для iPhone: отправь файл из диктофона (обычно формат M4A).\n\n"
+                    "Используй кнопки внизу экрана для переключения режима.",
+                    reply_markup=reply_keyboard
                 )
                 return
         
         if not audio_file:
+            # Устанавливаем постоянную клавиатуру
+            reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
                 "❌ Не удалось получить аудиофайл. Убедись, что отправил голосовое сообщение или аудиофайл.\n\n"
-                "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты."
+                "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
+                "Используй кнопки внизу экрана для переключения режима.",
+                reply_markup=reply_keyboard
             )
             return
         
         # Проверяем, что meeting_processor инициализирован
         if not meeting_processor:
             logger.error("meeting_processor не инициализирован")
+            # Добавляем постоянные кнопки режима
+            keyboard = get_meeting_mode_footer_buttons(context)
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                "❌ Ошибка инициализации. Попробуй перезапустить бота."
+                "❌ Ошибка инициализации. Попробуй перезапустить бота.",
+                reply_markup=reply_markup
             )
             return
         
@@ -1294,10 +1396,12 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
         language = user.get('locale', 'ru_RU').split('_')[0]  # Извлекаем язык
         logger.info(f"Язык для расшифровки: {language}")
         
-        # Отправляем подтверждение о получении файла
+        # Отправляем подтверждение о получении файла с постоянной клавиатурой
+        reply_keyboard = get_reply_keyboard(context)
         await update.message.reply_text(
-            f"✅ Получен аудиофайл: {file_name}\n\n"
-            "🎤 Начинаю расшифровку... Это может занять некоторое время."
+            "✅ Аудиозапись получена.\n\n"
+            "🎤 Начинаю расшифровку. Это может занять некоторое время.",
+            reply_markup=reply_keyboard
         )
         
         # Расшифровываем аудио
@@ -1307,16 +1411,66 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.info(f"Расшифровка завершена. Результат: {transcription_result is not None}")
         except Exception as e:
             logger.error(f"Ошибка при расшифровке аудио: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Traceback расшифровки: {traceback.format_exc()}")
+            
+            error_message = str(e)
+            if "timeout" in error_message.lower() or "time" in error_message.lower():
+                user_message = (
+                    "⏱️ Таймаут при расшифровке аудио.\n\n"
+                    "Аудиофайл слишком длинный или обработка заняла слишком много времени.\n\n"
+                    "Попробуй отправить более короткий фрагмент или разделить встречу на части."
+                )
+            elif "format" in error_message.lower() or "неподдерживаемый" in error_message.lower():
+                user_message = (
+                    "📎 Проблема с форматом файла.\n\n"
+                    "Попробуй конвертировать аудио в один из поддерживаемых форматов:\n"
+                    "• MP3\n"
+                    "• WAV\n"
+                    "• OGG\n"
+                    "• M4A\n\n"
+                    "Или отправь аудио другим способом."
+                )
+            else:
+                user_message = (
+                    f"❌ Ошибка при расшифровке аудиозаписи.\n\n"
+                    f"Детали: {error_message[:200]}\n\n"
+                    "Попробуй:\n"
+                    "• Отправить аудио в другом формате\n"
+                    "• Проверить интернет-соединение\n"
+                    "• Попробовать позже"
+                )
+            
+            # Устанавливаем постоянную клавиатуру
+            reply_keyboard = get_reply_keyboard(context)
+            
             await update.message.reply_text(
-                f"❌ Ошибка при расшифровке аудиозаписи: {str(e)}\n\n"
-                "Попробуй еще раз или отправь аудио в другом формате."
+                f"{user_message}\n\n"
+                "💡 Режим расшифровки встреч всё ещё активен. Можешь отправить другое аудио.\n\n"
+                "Используй кнопки внизу экрана для переключения режима.",
+                reply_markup=reply_keyboard,
+                parse_mode="Markdown"
             )
             return
         
         if not transcription_result:
-            logger.warning("transcription_result пустой")
+            logger.warning("transcription_result пустой или None")
+            # Устанавливаем постоянную клавиатуру
+            reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
-                "Не удалось расшифровать аудиозапись. Проверь формат файла и попробуй еще раз."
+                "❌ Не удалось расшифровать аудиозапись.\n\n"
+                "Возможные причины:\n"
+                "• Неподдерживаемый формат файла\n"
+                "• Проблемы с доступом к API распознавания речи\n"
+                "• Аудио слишком длинное или пустое\n\n"
+                "Попробуй:\n"
+                "• Отправить аудио в формате MP3, WAV, OGG или M4A\n"
+                "• Убедиться, что в записи есть речь\n"
+                "• Проверить интернет-соединение\n\n"
+                "💡 Режим расшифровки встреч всё ещё активен. Можешь отправить другое аудио.\n\n"
+                "Используй кнопки внизу экрана для переключения режима.",
+                reply_markup=reply_keyboard,
+                parse_mode="Markdown"
             )
             return
         
@@ -1333,16 +1487,24 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.info(f"Резюме сгенерировано. Результат: {summary is not None}")
         except Exception as e:
             logger.error(f"Ошибка при генерации резюме: {e}", exc_info=True)
+            # Устанавливаем постоянную клавиатуру
+            reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
                 f"❌ Ошибка при создании резюме: {str(e)}\n\n"
-                "Попробуй еще раз."
+                "Попробуй еще раз.\n\n"
+                "Используй кнопки внизу экрана для переключения режима.",
+                reply_markup=reply_keyboard
             )
             return
         
         if not summary:
             logger.warning("summary пустой")
+            # Устанавливаем постоянную клавиатуру
+            reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
-                "Не удалось создать резюме. Попробуй еще раз."
+                "Не удалось создать резюме. Попробуй еще раз.\n\n"
+                "Используй кнопки внизу экрана для переключения режима.",
+                reply_markup=reply_keyboard
             )
             return
         
@@ -1385,34 +1547,44 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
         # Останавливаем typing
         stop_typing = True
         
-        # Формируем кнопки для дополнительных действий
+        # Формируем inline кнопки для дополнительных действий
         keyboard = [
             [InlineKeyboardButton("📄 Показать полный текст встречи", callback_data="meeting_full_transcript")],
             [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
-            [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")],
-            [InlineKeyboardButton("📋 Главное меню", callback_data="menu_show")]
+            [InlineKeyboardButton("📅 Создать события из встречи", callback_data="meeting_create_events")]
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        inline_markup = InlineKeyboardMarkup(keyboard)
         
-        # Отправляем резюме с кнопками и напоминанием о режиме
+        # Устанавливаем постоянную клавиатуру (ReplyKeyboardMarkup)
+        reply_keyboard = get_reply_keyboard(context)
+        
+        # Отправляем резюме с inline кнопками для дополнительных действий
         # Резюме уже содержит жирный заголовок и естественное описание
         await update.message.reply_text(
             f"{summary}\n\n"
             "💡 Режим расшифровки встреч активен. Отправь следующее аудио для расшифровки или выбери действие выше.",
-            reply_markup=reply_markup,
+            reply_markup=inline_markup,
             parse_mode="Markdown"
+        )
+        # Устанавливаем постоянную клавиатуру отдельным сообщением
+        # (InlineKeyboardMarkup и ReplyKeyboardMarkup нельзя использовать одновременно в одном сообщении)
+        # Постоянная клавиатура будет видна внизу экрана после этого сообщения
+        await update.message.reply_text(
+            "💡 Используй кнопки внизу экрана для переключения режима или возврата в меню.",
+            reply_markup=reply_keyboard
         )
         
     except Exception as e:
         stop_typing = True
         logger.error(f"Ошибка обработки аудио для встречи: {e}", exc_info=True)
         # НЕ сбрасываем режим при ошибке - пользователь может попробовать еще раз
-        keyboard = [[InlineKeyboardButton("📋 Главное меню", callback_data="menu_show")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        # Устанавливаем постоянную клавиатуру
+        reply_keyboard = get_reply_keyboard(context)
         await update.message.reply_text(
             "Что-то пошло не так при обработке встречи. Попробуй еще раз или отправь аудио в другом формате.\n\n"
-            "Режим расшифровки встреч всё ещё активен.",
-            reply_markup=reply_markup,
+            "Режим расшифровки встреч всё ещё активен.\n\n"
+            "Используй кнопки внизу экрана для переключения режима.",
+            reply_markup=reply_keyboard,
             parse_mode="Markdown"
         )
     
@@ -1547,24 +1719,167 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Веб-приложение запрашивает события
                 web_events = await get_events_for_web_app(user_id)
                 
-                # Отправляем события через обычное сообщение с JSON данными в тексте
-                # Веб-приложение может прочитать это сообщение и сохранить в localStorage
+                logger.info(f"Веб-приложение запросило события для пользователя {user_id}. Получено {len(web_events)} событий из БД")
+                
+                # Сохраняем события в user_data для последующего доступа
+                context.user_data['last_web_app_events'] = web_events
+                context.user_data['last_web_app_events_time'] = datetime.now().isoformat()
+                
+                import json
                 response_data = json.dumps({
                     'action': 'sync_events',
-                    'events': web_events
+                    'events': web_events,
+                    'timestamp': datetime.now().isoformat(),
+                    'count': len(web_events)
+                }, ensure_ascii=False, default=str)
+                context.user_data['last_web_app_events_json'] = response_data
+                
+                # КРИТИЧЕСКИ ВАЖНО: Telegram Web App не может читать ответы от бота напрямую через sendData
+                # Решение: Отправляем данные через обычное сообщение, которое веб-приложение может прочитать
+                # через механизм чтения последних сообщений или через копирование вручную
+                # Но более правильное решение - использовать механизм через прямое сохранение в localStorage
+                # через специальный механизм, который мы реализуем ниже
+                
+                # Отправляем сообщение с данными в специальном формате
+                # Формат: TRACY_EVENTS_SYNC:{base64_encoded_json}
+                # Веб-приложение может декодировать это и обновить localStorage
+                try:
+                    import base64
+                    encoded_data = base64.b64encode(response_data.encode('utf-8')).decode('utf-8')
+                    
+                    # Отправляем сообщение (будет видно в чате, но веб-приложение может его использовать)
+                    await update.message.reply_text(
+                        f"TRACY_EVENTS_SYNC:{encoded_data}",
+                        reply_markup=None,
+                        parse_mode=None
+                    )
+                    logger.info(f"✅ Отправлены {len(web_events)} событий пользователю {user_id} (base64 encoded)")
+                    
+                    # ДОПОЛНИТЕЛЬНО: Сохраняем события в user_data для доступа через другой механизм
+                    # Это позволит веб-приложению получить события при следующем запросе
+                    
+                except Exception as e:
+                    logger.error(f"❌ Ошибка отправки событий через сообщение: {e}", exc_info=True)
+                    # Fallback: отправляем короткое подтверждение
+                    try:
+                        await update.message.reply_text(
+                            f"✅ События готовы ({len(web_events)} шт.)",
+                            reply_markup=None
+                        )
+                    except Exception as e2:
+                        logger.error(f"❌ Ошибка отправки подтверждения: {e2}")
+                
+                return
+            
+            elif action == 'update_notifications':
+                # Обновление настроек уведомлений из веб-приложения
+                enabled = data.get('enabled', True)
+                db.update_user_settings(user_id, settings_dict={'web_notifications_enabled': enabled})
+                logger.info(f"Обновлены настройки уведомлений для пользователя {user_id}: {enabled}")
+                await update.message.reply_text("✅ Настройки уведомлений обновлены", reply_to_message_id=update.message.message_id)
+                return
+            
+            elif action == 'update_morning_digest':
+                # Обновление настроек утреннего дайджеста
+                time_str = data.get('time', '09:00')
+                default_reminder = data.get('default_reminder', '15')
+                digest_enabled = data.get('enabled', True)
+                
+                settings_update = {
+                    'default_reminder_minutes': int(default_reminder) if default_reminder.isdigit() else 15
+                }
+                
+                # Используем morning_digest_time как флаг: если enabled = True, устанавливаем время, иначе NULL
+                if digest_enabled:
+                    settings_update['morning_digest_time'] = time_str
+                    logger.info(f"Обновлены настройки утреннего дайджеста для пользователя {user_id}: включен, время={time_str}")
+                else:
+                    settings_update['morning_digest_time'] = None  # NULL означает выключен
+                    logger.info(f"Обновлены настройки утреннего дайджеста для пользователя {user_id}: выключен")
+                
+                db.update_user_settings(user_id, settings_dict=settings_update)
+                
+                status_text = f"включен на {time_str}" if digest_enabled else "выключен"
+                await update.message.reply_text(
+                    f"✅ Утренний дайджест {status_text}", 
+                    reply_to_message_id=update.message.message_id
+                )
+                return
+            
+            elif action == 'update_ai_settings':
+                # Обновление настроек AI из веб-приложения
+                model = data.get('model', 'gpt-4o-mini')
+                mode = data.get('mode', 'soft')
+                smart_reply = data.get('smart_reply', True)
+                # Эти настройки пока сохраняем в user_data, так как они не критичны для БД
+                context.user_data['ai_model'] = model
+                context.user_data['ai_mode'] = mode
+                context.user_data['smart_reply_enabled'] = smart_reply
+                logger.info(f"Обновлены настройки AI для пользователя {user_id}: model={model}, mode={mode}, smart_reply={smart_reply}")
+                await update.message.reply_text("✅ Настройки ИИ обновлены", reply_to_message_id=update.message.message_id)
+                return
+            
+            elif action == 'get_calendar_status':
+                # Получение статуса подключения календарей для веб-приложения
+                connections = db.get_calendar_connections(user_id)
+                google_connected = any(c['provider'] == 'google' for c in connections)
+                icloud_connected = any(c['provider'] == 'icloud' for c in connections)
+                
+                import json
+                import base64
+                status_data = json.dumps({
+                    'action': 'calendar_status',
+                    'google': google_connected,
+                    'icloud': icloud_connected,
+                    'timestamp': datetime.now().isoformat()
                 }, ensure_ascii=False)
                 
-                # Отправляем сообщение с данными (JSON в тексте для веб-приложения)
+                encoded_data = base64.b64encode(status_data.encode('utf-8')).decode('utf-8')
                 await update.message.reply_text(
-                    f"TRACY_SYNC_EVENTS:{response_data}",
-                    reply_markup=None
+                    f"TRACY_CALENDAR_STATUS:{encoded_data}",
+                    reply_markup=None,
+                    parse_mode=None
                 )
-                
-                logger.info(f"Отправлено {len(web_events)} событий для пользователя {user_id}")
+                logger.info(f"Отправлен статус календарей для пользователя {user_id}: Google={google_connected}, iCloud={icloud_connected}")
                 return
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"Ошибка обработки web_app_data: {e}")
             # Продолжаем обычную обработку
+    
+    # Обработка текстовых команд от постоянной клавиатуры (ВЫСШИЙ ПРИОРИТЕТ)
+    if update.message and update.message.text:
+        text = update.message.text.strip()
+        
+        # Команды от постоянной клавиатуры
+        if text == "📅 Режим планировщика" or text.lower() in ['режим планировщика', 'планировщик']:
+            context.user_data['waiting_meeting_audio'] = False
+            # Устанавливаем постоянную клавиатуру для режима планировщика
+            reply_keyboard = get_reply_keyboard(context)
+            await update.message.reply_text(
+                "✅ **Режим планировщика**\n\n"
+                "Теперь ты в обычном режиме работы с календарем.",
+                reply_markup=reply_keyboard,
+                parse_mode="Markdown"
+            )
+            return
+        
+        elif text == "🎤 Режим расшифровки встреч" or text.lower() in ['режим расшифровки встреч', 'расшифровка встреч']:
+            context.user_data['waiting_meeting_audio'] = True
+            # Устанавливаем постоянную клавиатуру для режима расшифровки
+            reply_keyboard = get_reply_keyboard(context)
+            await update.message.reply_text(
+                "🎤 **Режим расшифровки встреч**\n\n"
+                "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
+                "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.",
+                reply_markup=reply_keyboard,
+                parse_mode="Markdown"
+            )
+            return
+        
+        elif text == "📋 Меню" or text.lower() == 'меню':
+            # Открываем главное меню
+            await menu_command(update, context)
+            return
     
     # Проверяем, находимся ли мы в режиме ожидания аудио для встречи (ВЫСШИЙ ПРИОРИТЕТ)
     # В этом режиме ВСЕ голосовые сообщения идут на расшифровку встречи, а не на создание событий
@@ -1573,22 +1888,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_audio_file(update.message):
             await handle_meeting_audio(update, context)
             return
-        # Текстовые команды для выхода из режима
-        elif update.message.text and update.message.text.lower() in ['отмена', 'cancel', 'выход', 'отменить', 'режим планировщика', 'меню']:
+        # Текстовые команды для выхода из режима (старые команды, для обратной совместимости)
+        elif update.message.text and update.message.text.lower() in ['отмена', 'cancel', 'выход', 'отменить']:
             context.user_data['waiting_meeting_audio'] = False
-            keyboard = [[InlineKeyboardButton("📋 Главное меню", callback_data="menu_show")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            # Устанавливаем постоянную клавиатуру для режима планировщика
+            reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
                 "✅ **Режим планировщика**\n\n"
                 "Теперь ты в обычном режиме работы с календарем.",
-                reply_markup=reply_markup,
+                reply_markup=reply_keyboard,
                 parse_mode="Markdown"
             )
             return
         else:
             # Если не аудио и не команда выхода, напоминаем что нужно отправить аудио
             # НЕ обрабатываем текст как обычное сообщение в режиме расшифровки
-            keyboard = [[InlineKeyboardButton("📋 Главное меню", callback_data="menu_show")]]
+            # Добавляем постоянные кнопки режима
+            keyboard = get_meeting_mode_footer_buttons(context)
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             # Проверяем, что это не аудиофайл
@@ -1597,7 +1913,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "❌ **Режим расшифровки встреч активен**\n\n"
                     "Этот файл не является аудиофайлом. Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
                     "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
-                    "Чтобы выйти из режима расшифровки, напиши 'отмена' или 'режим планировщика', или нажми кнопку ниже.",
+                    "Используй кнопки ниже для переключения режима или возврата в меню.",
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
@@ -1606,7 +1922,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "🎤 **Режим расшифровки встреч активен**\n\n"
                     "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
                     "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
-                    "Чтобы выйти из режима расшифровки, напиши 'отмена' или 'режим планировщика', или нажми кнопку ниже.",
+                    "Используй кнопки ниже для переключения режима или возврата в меню.",
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
@@ -1754,6 +2070,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=reply_markup,
                         parse_mode="Markdown"
                     )
+                    
+                    # Отправляем обновленный статус календарей в веб-приложение
+                    await send_calendar_status_to_web_app(user_id, context)
                 else:
                     await status_msg.edit_text(
                         "❌ **Ошибка подключения к iCloud Calendar**\n\n"
@@ -1838,6 +2157,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
+                
+                # Отправляем обновленный статус календарей в веб-приложение
+                await send_calendar_status_to_web_app(user_id, context)
             else:
                 await update.message.reply_text(
                     "❌ **Ошибка подключения Google Calendar**\n\n"
@@ -1996,7 +2318,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(formatted_message)
         
         # Если событие было создано или обновлено, синхронизируем с веб-приложением
+        # Отправляем обновленные события сразу после создания, чтобы веб-приложение могло их получить
         if result.get('action') in ['created', 'updated', 'created_draft']:
+            # Сразу отправляем обновленные события для синхронизации с веб-приложением
+            try:
+                web_events = await get_events_for_web_app(user_id)
+                import json
+                import base64
+                
+                response_data = json.dumps({
+                    'action': 'sync_events',
+                    'events': web_events,
+                    'timestamp': datetime.now().isoformat(),
+                    'count': len(web_events)
+                }, ensure_ascii=False, default=str)
+                
+                # Отправляем события в специальном формате для веб-приложения
+                # Веб-приложение может прочитать это сообщение при следующем обновлении
+                encoded_data = base64.b64encode(response_data.encode('utf-8')).decode('utf-8')
+                
+                # Отправляем как отдельное сообщение с данными для веб-приложения
+                await update.message.reply_text(
+                    f"TRACY_EVENTS_SYNC:{encoded_data}",
+                    reply_markup=None,
+                    parse_mode=None
+                )
+                
+                logger.info(f"✅ События синхронизированы с веб-приложением: {len(web_events)} событий отправлено пользователю {user_id}")
+            except Exception as e:
+                logger.error(f"Ошибка синхронизации событий с веб-приложением: {e}", exc_info=True)
+            
+            # Также обновляем в user_data для последующего доступа
             await sync_events_to_web_app(user_id, context)
     
     except Exception as e:
@@ -2053,12 +2405,48 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def sync_events_to_web_app(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     """Синхронизирует события с веб-приложением (вызывается после создания/обновления события)."""
     try:
-        # Веб-приложение само запрашивает события при загрузке через sendData
-        # Здесь просто логируем, что событие было создано/обновлено
-        # При следующем запросе от веб-приложения события будут синхронизированы
-        logger.info(f"Событие создано/обновлено для пользователя {user_id}. Веб-приложение получит обновление при следующем запросе.")
+        # Обновляем события в user_data, чтобы веб-приложение могло их получить при следующем запросе
+        web_events = await get_events_for_web_app(user_id)
+        context.user_data['last_web_app_events'] = web_events
+        context.user_data['last_web_app_events_time'] = datetime.now().isoformat()
+        
+        import json
+        response_data = json.dumps({
+            'action': 'sync_events',
+            'events': web_events,
+            'timestamp': datetime.now().isoformat(),
+            'count': len(web_events)
+        }, ensure_ascii=False)
+        context.user_data['last_web_app_events_json'] = response_data
+        
+        logger.info(f"События синхронизированы для пользователя {user_id}: {len(web_events)} событий готовы для веб-приложения")
     except Exception as e:
         logger.error(f"Ошибка синхронизации событий: {e}", exc_info=True)
+
+
+async def send_calendar_status_to_web_app(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет статус подключения календарей в веб-приложение."""
+    try:
+        connections = db.get_calendar_connections(user_id)
+        google_connected = any(c['provider'] == 'google' for c in connections)
+        icloud_connected = any(c['provider'] == 'icloud' for c in connections)
+        
+        import json
+        import base64
+        status_data = json.dumps({
+            'action': 'calendar_status',
+            'google': google_connected,
+            'icloud': icloud_connected,
+            'timestamp': datetime.now().isoformat()
+        }, ensure_ascii=False)
+        
+        # Сохраняем статус в user_data для доступа через веб-приложение
+        context.user_data['last_calendar_status'] = status_data
+        context.user_data['last_calendar_status_time'] = datetime.now().isoformat()
+        
+        logger.info(f"Статус календарей обновлен для пользователя {user_id}: Google={google_connected}, iCloud={icloud_connected}")
+    except Exception as e:
+        logger.error(f"Ошибка отправки статуса календарей: {e}", exc_info=True)
 
 
 async def get_events_for_web_app(user_id: int) -> List[Dict]:
@@ -2077,6 +2465,7 @@ async def get_events_for_web_app(user_id: int) -> List[Dict]:
         start_to = now + timedelta(days=365)
         
         events = db.get_events(user_id, limit=200, start_from=start_from, start_to=start_to)
+        logger.info(f"📊 Получено {len(events)} событий из БД для пользователя {user_id} (период: {start_from.date()} - {start_to.date()})")
         
         # Преобразуем события в формат для веб-приложения
         web_events = []
@@ -2117,9 +2506,10 @@ async def get_events_for_web_app(user_id: int) -> List[Dict]:
                 }
             })
         
+        logger.info(f"✅ Подготовлено {len(web_events)} событий для веб-приложения пользователя {user_id}")
         return web_events
     except Exception as e:
-        logger.error(f"Ошибка получения событий для веб-приложения: {e}", exc_info=True)
+        logger.error(f"❌ Ошибка получения событий для веб-приложения: {e}", exc_info=True)
         return []
 
 
@@ -2222,6 +2612,9 @@ async def connect_icloud_command(update: Update, context: ContextTypes.DEFAULT_T
                 "Попробуй создать событие, например:\n"
                 "«Встреча завтра в 15:00»"
             )
+            
+            # Отправляем обновленный статус календарей в веб-приложение
+            await send_calendar_status_to_web_app(user_id, context)
         else:
             await status_msg.edit_text(
                 "❌ Ошибка подключения к iCloud Calendar\n\n"
@@ -2280,7 +2673,13 @@ def main():
     
     # Инициализируем планировщик напоминаний и decision_engine
     global reminder_scheduler, decision_engine
-    reminder_scheduler = ReminderScheduler(application.bot, db)
+    # Инициализируем AI клиент для reminder_scheduler
+    from openai import OpenAI
+    ai_client = OpenAI(
+        api_key=config.OPENROUTER_API_KEY,
+        base_url=config.OPENROUTER_BASE_URL
+    )
+    reminder_scheduler = ReminderScheduler(application.bot, db, ai_client=ai_client)
     # Передаем AI клиент из nlp_extractor для подбора эмодзи
     decision_engine = DecisionEngine(db, reminder_scheduler, ai_client=nlp_extractor.client)
     

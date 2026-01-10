@@ -96,6 +96,13 @@ Intent (проверяй в порядке):
    - ВАЖНО: "напомни в [время] [действие]" = "event" с start_time = [время]
    - ВАЖНО: "напомни [действие] в [время]" = "event" с start_time = [время]
    - ВАЖНО: "напомни завтра/сегодня [действие]" = "event" с start_time = завтра/сегодня
+   - ВАЖНО: Если указан диапазон времени (например, "с 11 утра до 15 часов", "с 10:00 до 14:00", "11:00-15:00", "зарядка с 11 утра до 15 часов дня"), то:
+     * start_time = время начала (11:00, 10:00 и т.д.)
+     * end_time = время окончания (15:00, 14:00 и т.д.)
+     * Если дата указана только для начала, используй ту же дату для end_time
+     * Примеры: "зарядка с 11 утра до 15 часов" → start_time="11:00", end_time="15:00" на ту же дату
+               "встреча завтра с 10:00 до 12:00" → start_time="завтра 10:00", end_time="завтра 12:00"
+               "работа с 9 до 18 часов" → start_time="09:00", end_time="18:00" на сегодня
 10. "update" - "измени/перенеси событие X" (update_fields)
 11. "update_many" - "перенеси все X"
 12. "delete" - "удали событие X"
@@ -108,6 +115,11 @@ Intent (проверяй в порядке):
 
 ПРАВИЛО: Дата/время + действие = СОБЫТИЕ, не заметка!
 ПРАВИЛО: "напомни" + время + действие = СОБЫТИЕ с этим временем!
+ПРАВИЛО: Если указан диапазон времени ("с X до Y", "X-Y", "X до Y часов"), извлекай оба времени: start_time и end_time!
+ПРАВИЛО: Если при создании события указано несколько напоминаний (например, "за час, за полтора часа, за два часа напомни", "за час, за полтора, за два часа предупреди"), извлекай их все в reminder_intervals как массив строк.
+ПРАВИЛО: reminder_intervals может быть указан для intent="event", если в тексте есть несколько напоминаний: "за час", "за полтора часа" (1.5 hours), "за два часа" (2 hours), "за 30 минут" (30 minutes), "за день" (1 day) и т.д.
+ПРАВИЛО: Формат reminder_intervals: массив строк в формате ["1 hour", "1.5 hours", "2 hours", "30 minutes", "1 day"] или ["60 minutes", "90 minutes", "120 minutes"].
+ПРИМЕР: "за час, за полтора часа, за два часа напомни" → reminder_intervals: ["1 hour", "1.5 hours", "2 hours"]
 Отвечай только JSON.
 
 Текущая дата и время: {current_time}
@@ -119,21 +131,27 @@ Intent (проверяй в порядке):
             
             user_prompt = f"""Извлеки информацию из сообщения: "{text}"
 
+ВАЖНО для диапазонов времени:
+- Если есть "с X до Y" / "X-Y" / "X до Y часов" / "от X до Y" → извлекай оба: start_time (начало) и end_time (окончание)
+- Примеры: "зарядка с 11 утра до 15 часов" → start_time="11:00", end_time="15:00" (на ту же дату)
+          "встреча завтра с 10:00 до 12:00" → start_time="завтра 10:00", end_time="завтра 12:00"
+          "работа с 9 до 18" → start_time="09:00", end_time="18:00" (на сегодня)
+
 Верни JSON:
 {{
     "intent": "event|reminder|note|list_events|delete_all|delete_by_period|delete_many|delete_by_pattern|add_reminder|add_note|create_many|update|update_many|delete|search|list_notes|delete_note|unknown",
     "title": "краткое название или null",
     "titles": ["название1", "название2"] или null (для delete_many, create_many),
     "description": "полное описание или null",
-    "start_time": "YYYY-MM-DDTHH:MM:SS или null",
-    "end_time": "YYYY-MM-DDTHH:MM:SS или null",
+    "start_time": "YYYY-MM-DDTHH:MM:SS или null (время начала события, если указан диапазон - это начало)",
+    "end_time": "YYYY-MM-DDTHH:MM:SS или null (время окончания события, если указан диапазон - это окончание)",
     "location": "место или null",
     "priority": 0-5,
     "has_explicit_time": true/false,
     "confidence": 0.0-1.0,
     "time_period": "today|tomorrow|week|month|all" или null (для list_events, delete_by_period),
     "pattern": "паттерн поиска" или null (для delete_by_pattern),
-    "reminder_intervals": ["2 hours", "1 hour"] или null (только для add_reminder),
+    "reminder_intervals": ["2 hours", "1 hour", "1.5 hours", "30 minutes"] или null (для add_reminder И для event, когда указаны несколько напоминаний),
     "note_text": "текст заметки" или null (только для add_note),
     "update_fields": {{"time": "16:00", "location": "новый офис"}} или null (для update),
     "refers_to_last_event": true/false (относится ли запрос к последнему событию)
@@ -205,9 +223,27 @@ Intent (проверяй в порядке):
                 if title:
                     result["title"] = title[0].upper() + title[1:] if len(title) > 1 else title.upper()
             
-            # Если есть start_time но нет end_time, добавляем час по умолчанию
-            if result.get("start_time") and not result.get("end_time"):
-                result["end_time"] = result["start_time"] + timedelta(hours=1)
+            # Обработка диапазонов времени
+            start_time = result.get("start_time")
+            end_time = result.get("end_time")
+            
+            if start_time and end_time:
+                # Если оба времени указаны, убеждаемся, что end_time >= start_time
+                # Если end_time раньше start_time (например, разница в дате не учтена), корректируем
+                if end_time < start_time:
+                    # Предполагаем, что end_time должен быть в тот же день, что и start_time
+                    # Если end_time явно меньше по часам, возможно это следующая дата, но для простоты
+                    # используем ту же дату что и start_time, но с временем из end_time
+                    end_time = start_time.replace(hour=end_time.hour, minute=end_time.minute, second=end_time.second, microsecond=end_time.microsecond)
+                    # Если все равно меньше, добавляем день
+                    if end_time < start_time:
+                        end_time = end_time + timedelta(days=1)
+                    result["end_time"] = end_time
+                    logger.info(f"Скорректирован end_time для диапазона: start={start_time}, end={end_time}")
+            elif start_time and not end_time:
+                # Если есть start_time но нет end_time, добавляем час по умолчанию
+                result["end_time"] = start_time + timedelta(hours=1)
+                logger.info(f"Добавлен end_time по умолчанию (1 час после start_time): {result['end_time']}")
             
             logger.info(f"Извлечено: intent={result.get('intent')}, title={result.get('title')}")
             

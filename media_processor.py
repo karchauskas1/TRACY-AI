@@ -59,18 +59,21 @@ class MediaProcessor:
                 from pydub import AudioSegment
                 
                 # Пробуем определить формат и конвертируем в WAV
+                # M4A ставим первым, так как это популярный формат iPhone диктофона
                 voice_io.seek(0)
                 audio_data = None
-                supported_formats = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
+                supported_formats = ['m4a', 'mp3', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
                 
                 # Пробуем разные форматы
                 for fmt in supported_formats:
                     try:
                         voice_io.seek(0)
+                        logger.debug(f"Пробую определить формат голосового как {fmt}...")
                         audio_data = AudioSegment.from_file(voice_io, format=fmt)
-                        logger.info(f"Определен формат аудио для распознавания: {fmt}")
+                        logger.info(f"✅ Определен формат аудио для распознавания: {fmt}")
                         break
-                    except:
+                    except Exception as e:
+                        logger.debug(f"Формат {fmt} не подошел: {str(e)[:50]}")
                         continue
                 
                 # Если не удалось определить, пробуем автоопределение
