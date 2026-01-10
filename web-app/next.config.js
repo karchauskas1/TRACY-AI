@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const path = require('path')
 const isProd = process.env.NODE_ENV === 'production'
-const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1] || 'tracy-ai-bot'
+// Репозиторий называется TRACY-AI на GitHub
+const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1] || 'TRACY-AI'
 
 const nextConfig = {
   output: 'export',

@@ -21,30 +21,42 @@
 3. Нажми на результат "Google Calendar API"
 4. Нажми кнопку "Enable"
 
-### 3. Создание OAuth 2.0 credentials
+### 3. Настройка OAuth Consent Screen (ВАЖНО!)
+
+**⚠️ Это нужно сделать ПЕРЕД созданием OAuth credentials!**
+
+1. Перейди в "APIs & Services" → "OAuth consent screen"
+2. Если еще не настроен, выбери "External" (для личного использования)
+3. Заполни обязательные поля на шаге "OAuth consent screen":
+   - **App name**: "TRACY Bot"
+   - **User support email**: твой email (например, karchauskas7889@gmail.com)
+   - **Developer contact email**: твой email
+   - **App domain** (опционально): karchauskas1.github.io
+4. Нажми "Save and Continue"
+5. На шаге "Scopes":
+   - Нажми "Add or Remove Scopes"
+   - Выбери "Google Calendar API" → `/auth/calendar`
+   - Нажми "Update" → "Save and Continue"
+6. На шаге "Test users":
+   - Нажми "+ ADD USERS"
+   - Добавь свой Google email: karchauskas7889@gmail.com
+   - Нажми "Add" → "Save and Continue"
+7. На шаге "Summary":
+   - Проверь все настройки
+   - Нажми "Back to Dashboard"
+
+4. Создание OAuth 2.0 credentials
 
 1. Перейди в "APIs & Services" → "Credentials"
 2. Нажми "Create Credentials" → "OAuth client ID"
-3. Если появится предупреждение о consent screen:
-   - Выбери "External" (для личного использования)
-   - Заполни обязательные поля:
-     - App name: "TRACY Bot"
-     - User support email: твой email
-     - Developer contact email: твой email
-   - Нажми "Save and Continue"
-   - На шаге "Scopes" нажми "Save and Continue"
-   - На шаге "Test users" добавь свой Google email, нажми "Save and Continue"
-   - Нажми "Back to Dashboard"
-
-4. Снова нажми "Create Credentials" → "OAuth client ID"
-5. Выбери тип приложения: **"Web application"**
-6. Заполни поля:
+3. Выбери тип приложения: **"Web application"**
+4. Заполни поля:
    - **Name**: "TRACY Bot Web Client"
    - **Authorized redirect URIs**: 
-     - Добавь: `http://localhost:8080/callback`
-     - (Для продакшена добавь реальный URL callback)
-7. Нажми "Create"
-8. **ВАЖНО**: Скопируй **Client ID** и **Client Secret** - они понадобятся дальше!
+     - Нажми "+ ADD URI"
+     - Добавь: `https://karchauskas1.github.io/TRACY-AI/oauth-callback.html`
+5. Нажми "Create"
+6. **ВАЖНО**: Скопируй **Client ID** и **Client Secret** - они понадобятся дальше!
 
 ### 4. Настройка переменных окружения
 
