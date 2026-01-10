@@ -79,9 +79,11 @@ class MeetingProcessor:
                 raise download_error
             
             # Проверяем, что файл не пустой
-            if audio_io.getvalue() == b'':
+            file_size = len(audio_io.getvalue())
+            if file_size == 0:
                 logger.error("Загруженный аудиофайл пуст")
                 return None
+            logger.info(f"Аудиофайл загружен, размер: {file_size} bytes")
             
             # Пробуем использовать Whisper API для качественной расшифровки
             if WHISPER_AVAILABLE and whisper_client:
