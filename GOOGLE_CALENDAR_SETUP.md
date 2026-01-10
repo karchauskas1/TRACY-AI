@@ -124,14 +124,31 @@ nohup python3 bot.py > bot.log 2>&1 &
 - Просто попробуй снова нажать "Открыть ссылку авторизации" в боте
 - Теперь должно работать!
 
-### Ошибка: "redirect_uri_mismatch"
+### Ошибка: "redirect_uri_mismatch" (Error 400)
 
-**Причина**: Redirect URI в credentials не совпадает с `GOOGLE_REDIRECT_URI` в `.env`.
+**Причина**: Redirect URI в запросе авторизации не совпадает с тем, что указан в Google Cloud Console.
 
 **Решение**:
-1. Проверь `GOOGLE_REDIRECT_URI` в файле `.env`
-2. Убедись, что в Google Cloud Console в OAuth credentials добавлен точно такой же Redirect URI
-3. Обрати внимание на `http://` vs `https://` и наличие/отсутствие завершающего слеша
+1. Открой [Google Cloud Console - Credentials](https://console.cloud.google.com/apis/credentials)
+2. Найди свой OAuth 2.0 Client ID (тот, который ты создал для бота)
+3. Нажми на название или иконку редактирования (карандаш)
+4. В разделе **"Authorized redirect URIs"** нажми **"+ ADD URI"**
+5. Добавь следующий URI:
+   ```
+   https://karchauskas1.github.io/TRACY-AI/oauth-callback.html
+   ```
+6. Если нужно тестировать локально, также добавь:
+   ```
+   http://localhost:8080/callback
+   ```
+7. Нажми **"SAVE"**
+8. Подожди 1-2 минуты для применения изменений
+9. Попробуй снова подключить календарь в боте
+
+**Важно:**
+- URI должен точно совпадать (включая `https://`, без завершающего слеша после `.html`)
+- Если используешь другой домен для веб-приложения, измени URI соответственно
+- Изменения в Google Cloud Console применяются не мгновенно, подожди пару минут
 
 ### Ошибка: "invalid_client"
 
