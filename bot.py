@@ -100,17 +100,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             callback_data="settings_google"
         )])
     
-    # Кнопка меню
-    keyboard.append([InlineKeyboardButton("📋 Меню", callback_data="menu_show")])
-    # Кнопка помощи
-    keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
+    # Устанавливаем постоянную клавиатуру (ReplyKeyboardMarkup) вместо inline кнопок
+    reply_keyboard = get_reply_keyboard(context)
     
-    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    # Inline кнопки только для дополнительных действий (если есть)
+    inline_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
     
     await update.message.reply_text(
         welcome_message,
-        reply_markup=reply_markup,
+        reply_markup=inline_markup,
         parse_mode="Markdown"
+    )
+    
+    # Отправляем отдельное сообщение с постоянной клавиатурой
+    # (InlineKeyboardMarkup и ReplyKeyboardMarkup нельзя использовать одновременно)
+    await update.message.reply_text(
+        "💡 Используй кнопки внизу экрана для переключения режима или возврата в меню.",
+        reply_markup=reply_keyboard
     )
 
 
@@ -146,7 +152,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /help."""
     # Генерируем структурированный ответ через AI
     help_text = await generate_structured_help_response()
-    await update.message.reply_text(help_text)
+    # Устанавливаем постоянную клавиатуру
+    reply_keyboard = get_reply_keyboard(context)
+    await update.message.reply_text(help_text, reply_markup=reply_keyboard)
 
 
 async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -220,7 +228,7 @@ async def generate_structured_help_response() -> str:
 1. Что делает бот (кратко)
 2. Как пользоваться (пошагово, нумерованный список)
 3. Примеры использования
-4. Команды
+4. Режимы работы
 
 Формат ответа должен быть таким, как в примере:
 "Когда ты мне пишешь, я делаю так:
@@ -546,12 +554,6 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • "Какие у меня планы на неделю?"
 • "Удали все события на сегодня"
 
-**Команды:**
-• /menu — главное меню
-• /settings — настройки календарей
-• /search — найти события
-• /share — поделиться событием
-
 **Режимы работы:**
 • **Режим планировщика** — создание и управление событиями
 • **Режим резюмирования встреч** — расшифровка аудио встреч
@@ -559,8 +561,15 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💡 Бот работает без подключения календарей! Все события сохраняются, напоминания приходят."""
         
         keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(help_text, reply_markup=reply_markup, parse_mode="Markdown")
+        inline_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(help_text, reply_markup=inline_markup, parse_mode="Markdown")
+        
+        # Устанавливаем постоянную клавиатуру отдельным сообщением
+        reply_keyboard = get_reply_keyboard(context)
+        await query.message.reply_text(
+            "💡 Используй кнопки внизу экрана для переключения режима или возврата в меню.",
+            reply_markup=reply_keyboard
+        )
         return
     
     elif data == "settings_icloud":
@@ -2314,8 +2323,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Останавливаем typing перед отправкой ответа
         stop_typing = True
         
-        # Отправляем результат пользователю (одно финальное сообщение)
-        await update.message.reply_text(formatted_message)
+        # Устанавливаем постоянную клавиатуру для всех ответов
+        reply_keyboard = get_reply_keyboard(context)
+        
+        # Отправляем результат пользователю с постоянной клавиатурой
+        await update.message.reply_text(formatted_message, reply_markup=reply_keyboard)
         
         # Если событие было создано или обновлено, синхронизируем с веб-приложением
         # Отправляем обновленные события сразу после создания, чтобы веб-приложение могло их получить
@@ -2380,13 +2392,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 error_message = "Что-то пошло не так. Попробуй еще раз или сформулируй запрос по-другому."
             
-            await update.message.reply_text(error_message)
+            # Устанавливаем постоянную клавиатуру при ошибке
+            reply_keyboard = get_reply_keyboard(context)
+            await update.message.reply_text(error_message, reply_markup=reply_keyboard)
         except Exception as reply_error:
             logger.error(f"Ошибка генерации/отправки сообщения об ошибке: {reply_error}", exc_info=True)
             # Fallback на простое сообщение
             try:
+                reply_keyboard = get_reply_keyboard(context)
                 await update.message.reply_text(
-                    "Что-то пошло не так. Попробуй еще раз или сформулируй запрос по-другому."
+                    "Что-то пошло не так. Попробуй еще раз или сформулируй запрос по-другому.",
+                    reply_markup=reply_keyboard
                 )
             except:
                 pass
