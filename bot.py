@@ -1405,10 +1405,9 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
         language = user.get('locale', 'ru_RU').split('_')[0]  # Извлекаем язык
         logger.info(f"Язык для расшифровки: {language}")
         
-        # Отправляем подтверждение о получении файла с постоянной клавиатурой
+        # Отправляем подтверждение о начале расшифровки с постоянной клавиатурой
         reply_keyboard = get_reply_keyboard(context)
         await update.message.reply_text(
-            "✅ Аудиозапись получена.\n\n"
             "🎤 Начинаю расшифровку. Это может занять некоторое время.",
             reply_markup=reply_keyboard
         )

@@ -47,35 +47,36 @@ class MeetingProcessor:
             - speakers: информация о спикерах (если определена)
         """
         try:
-            # Скачиваем файл
-            audio_io = io.BytesIO()
+            # Скачиваем файл в временный файл (правильный способ для python-telegram-bot)
+            import tempfile
+            import os
+            
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                temp_path = temp_file.name
+            
             try:
-                # Пробуем использовать download_to_memory
-                await audio_file.download_to_memory(audio_io)
+                # В python-telegram-bot используется метод download() с путем к файлу
+                await audio_file.download(temp_path)
+                logger.info(f"Файл успешно загружен в {temp_path}")
+                
+                # Читаем файл в BytesIO
+                audio_io = io.BytesIO()
+                with open(temp_path, 'rb') as f:
+                    audio_io.write(f.read())
                 audio_io.seek(0)
-                logger.info("Файл успешно загружен в память")
+                
+                # Удаляем временный файл
+                os.unlink(temp_path)
+                logger.info("Файл загружен в память, временный файл удален")
             except Exception as download_error:
-                # Fallback: используем download в файл, затем читаем
-                logger.warning(f"download_to_memory не сработал: {download_error}, использую альтернативный метод")
-                try:
-                    import tempfile
-                    import os
-                    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                        temp_path = temp_file.name
-                    # В python-telegram-bot используется метод download() с параметром output
+                # Если не удалось загрузить, удаляем временный файл и поднимаем ошибку
+                if os.path.exists(temp_path):
                     try:
-                        await audio_file.download(output=temp_path)
-                    except TypeError:
-                        # В некоторых версиях используется другой API
-                        await audio_file.download(temp_path)
-                    with open(temp_path, 'rb') as f:
-                        audio_io.write(f.read())
-                    os.unlink(temp_path)
-                    audio_io.seek(0)
-                    logger.info("Файл успешно загружен альтернативным методом")
-                except Exception as alt_error:
-                    logger.error(f"Альтернативный метод загрузки также не сработал: {alt_error}")
-                    raise download_error  # Поднимаем оригинальную ошибку
+                        os.unlink(temp_path)
+                    except:
+                        pass
+                logger.error(f"Ошибка загрузки файла: {download_error}", exc_info=True)
+                raise download_error
             
             # Проверяем, что файл не пустой
             if audio_io.getvalue() == b'':
