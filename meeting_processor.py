@@ -243,6 +243,14 @@ class MeetingProcessor:
             logger.error(f"Критическая ошибка расшифровки аудио: {e}", exc_info=True)
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
+            # Пробуем fallback на Google Speech Recognition если Whisper не сработал
+            try:
+                if 'audio_io' in locals() and audio_io is not None:
+                    logger.info("Пробую fallback на Google Speech Recognition...")
+                    audio_io.seek(0)
+                    return await self._transcribe_with_google(audio_io, language)
+            except Exception as fallback_error:
+                logger.error(f"Fallback на Google Speech также не сработал: {fallback_error}")
             return None
     
     def _format_transcript_with_timestamps(self, transcript: str, segments: List[Dict]) -> str:
