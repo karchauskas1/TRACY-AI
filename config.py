@@ -15,7 +15,10 @@ OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "gpt-4o-mini")
 # Google Calendar
 GOOGLE_CLIENT_ID = (os.getenv("GOOGLE_CLIENT_ID") or "").strip()
 GOOGLE_CLIENT_SECRET = (os.getenv("GOOGLE_CLIENT_SECRET") or "").strip()
-GOOGLE_REDIRECT_URI = (os.getenv("GOOGLE_REDIRECT_URI") or "http://localhost:8080/callback").strip()
+# Для production используем любой публичный URL, который показывает инструкцию
+# Пользователь скопирует URL из адресной строки (с параметром code) и отправит боту
+# Можно использовать любой публичный URL, например веб-приложение или простую страницу
+GOOGLE_REDIRECT_URI = (os.getenv("GOOGLE_REDIRECT_URI") or "https://karchauskas1.github.io/TRACY-AI/").strip()
 
 # Database
 # Поддержка PostgreSQL (приоритет) и SQLite (fallback для совместимости)
