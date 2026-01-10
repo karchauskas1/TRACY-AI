@@ -387,6 +387,38 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup
                 )
             else:
+                # Проверяем настройки Google OAuth ПЕРЕД созданием calendar
+                if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET or \
+                   not config.GOOGLE_CLIENT_ID.strip() or not config.GOOGLE_CLIENT_SECRET.strip():
+                    keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await query.edit_message_text(
+                        "❌ **Ошибка настройки Google Calendar**\n\n"
+                        "Google OAuth не настроен.\n\n"
+                        "📋 **Для настройки требуется:**\n\n"
+                        "**1. Создать проект в Google Cloud Console:**\n"
+                        "• Перейди на https://console.cloud.google.com/\n"
+                        "• Создай новый проект или выбери существующий\n"
+                        "• Включи Google Calendar API\n\n"
+                        "**2. Создать OAuth 2.0 credentials:**\n"
+                        "• Перейди в \"APIs & Services\" → \"Credentials\"\n"
+                        "• Нажми \"Create Credentials\" → \"OAuth client ID\"\n"
+                        "• Выбери тип \"Web application\"\n"
+                        "• Добавь Redirect URI: `http://localhost:8080/callback`\n"
+                        "• Скопируй Client ID и Client Secret\n\n"
+                        "**3. Добавить в .env файл:**\n"
+                        "```\n"
+                        "GOOGLE_CLIENT_ID=твой_client_id\n"
+                        "GOOGLE_CLIENT_SECRET=твой_client_secret\n"
+                        "GOOGLE_REDIRECT_URI=http://localhost:8080/callback\n"
+                        "```\n\n"
+                        "**4. Перезапустить бота**\n\n"
+                        "📖 Подробная инструкция: https://developers.google.com/calendar/api/quickstart/python",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                    return
+                
                 # Инициируем OAuth flow для Google
                 try:
                     calendar = GoogleCalendar(user_id)
@@ -401,22 +433,6 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                    # Проверяем настройки Google OAuth
-                    if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
-                        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        await query.edit_message_text(
-                            "❌ **Ошибка настройки Google Calendar**\n\n"
-                            "Google OAuth не настроен. Обратитесь к администратору бота.\n\n"
-                            "Для настройки требуются:\n"
-                            "• GOOGLE_CLIENT_ID\n"
-                            "• GOOGLE_CLIENT_SECRET\n"
-                            "• GOOGLE_REDIRECT_URI",
-                            reply_markup=reply_markup,
-                            parse_mode="Markdown"
-                        )
-                        return
                     
                     await query.edit_message_text(
                         "📅 **Подключение Google Calendar**\n\n"
@@ -448,11 +464,43 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"Ошибка инициализации Google Calendar OAuth: {e}", exc_info=True)
                     keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
                     reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    error_msg = str(e).lower()
+                    if "google_client_id" in error_msg or "google_client_secret" in error_msg or "пустыми" in error_msg or "не установлены" in error_msg:
+                        user_message = (
+                            "❌ **Ошибка настройки Google Calendar**\n\n"
+                            "Google OAuth не настроен.\n\n"
+                            "📋 **Для настройки требуется:**\n\n"
+                            "**1. Создать проект в Google Cloud Console:**\n"
+                            "• Перейди на https://console.cloud.google.com/\n"
+                            "• Создай новый проект или выбери существующий\n"
+                            "• Включи Google Calendar API\n\n"
+                            "**2. Создать OAuth 2.0 credentials:**\n"
+                            "• Перейди в \"APIs & Services\" → \"Credentials\"\n"
+                            "• Нажми \"Create Credentials\" → \"OAuth client ID\"\n"
+                            "• Выбери тип \"Web application\"\n"
+                            "• Добавь Redirect URI: `http://localhost:8080/callback`\n"
+                            "• Скопируй Client ID и Client Secret\n\n"
+                            "**3. Добавить в .env файл:**\n"
+                            "```\n"
+                            "GOOGLE_CLIENT_ID=твой_client_id\n"
+                            "GOOGLE_CLIENT_SECRET=твой_client_secret\n"
+                            "GOOGLE_REDIRECT_URI=http://localhost:8080/callback\n"
+                            "```\n\n"
+                            "**4. Перезапустить бота**\n\n"
+                            "📖 Подробная инструкция: https://developers.google.com/calendar/api/quickstart/python"
+                        )
+                    else:
+                        user_message = (
+                            f"❌ Ошибка подключения Google Calendar.\n\n"
+                            f"Детали ошибки: {str(e)[:300]}\n\n"
+                            f"Проверь настройки GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET в файле .env"
+                        )
+                    
                     await query.edit_message_text(
-                        f"❌ Ошибка подключения Google Calendar.\n\n"
-                        f"Проверь настройки GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET.\n"
-                        f"Ошибка: {str(e)}",
-                        reply_markup=reply_markup
+                        user_message,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
                     )
         except Exception as e:
             logger.error(f"Ошибка в settings_google: {e}", exc_info=True)

@@ -48,6 +48,19 @@ class GoogleCalendar:
     
     def get_authorization_url(self) -> str:
         """Получить URL для OAuth авторизации."""
+        # Проверяем наличие обязательных параметров
+        if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
+            raise ValueError(
+                "GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET должны быть установлены в переменных окружения. "
+                "Проверь файл .env"
+            )
+        
+        if not config.GOOGLE_CLIENT_ID.strip() or not config.GOOGLE_CLIENT_SECRET.strip():
+            raise ValueError(
+                "GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET не могут быть пустыми. "
+                "Проверь файл .env и убедись, что значения указаны после знака ="
+            )
+        
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -79,6 +92,19 @@ class GoogleCalendar:
         Args:
             authorization_response: URL с кодом авторизации
         """
+        # Проверяем наличие обязательных параметров
+        if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
+            raise ValueError(
+                "GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET должны быть установлены в переменных окружения. "
+                "Проверь файл .env"
+            )
+        
+        if not config.GOOGLE_CLIENT_ID.strip() or not config.GOOGLE_CLIENT_SECRET.strip():
+            raise ValueError(
+                "GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET не могут быть пустыми. "
+                "Проверь файл .env и убедись, что значения указаны после знака ="
+            )
+        
         try:
             from urllib.parse import urlparse, parse_qs
             
@@ -143,6 +169,19 @@ class GoogleCalendar:
     
     def _load_flow_state(self) -> Flow:
         """Загрузить состояние flow."""
+        # Проверяем наличие обязательных параметров
+        if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
+            raise ValueError(
+                "GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET должны быть установлены в переменных окружения. "
+                "Проверь файл .env"
+            )
+        
+        if not config.GOOGLE_CLIENT_ID.strip() or not config.GOOGLE_CLIENT_SECRET.strip():
+            raise ValueError(
+                "GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET не могут быть пустыми. "
+                "Проверь файл .env и убедись, что значения указаны после знака ="
+            )
+        
         return Flow.from_client_config(
             {
                 "web": {

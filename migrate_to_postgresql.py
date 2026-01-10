@@ -196,3 +196,4 @@ finally:
     pg_conn.close()
     print("\n✅ Соединения закрыты")
 
+

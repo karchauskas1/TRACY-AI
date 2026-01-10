@@ -37,3 +37,4 @@ WEB_APP_URL=https://твой-username.github.io/tracy-ai-bot/
 
 Готово! Веб-приложение будет автоматически деплоиться при каждом push в `main`.
 
+
