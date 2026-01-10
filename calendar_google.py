@@ -91,8 +91,22 @@ class GoogleCalendar:
                 # Если передан только код
                 auth_code = authorization_response
             
+            # Проверяем на наличие параметра error
+            if 'error=' in authorization_response.lower():
+                error_params = parse_qs(urlparse(authorization_response).query) if authorization_response.startswith('http') else {}
+                error = error_params.get('error', [None])[0] if error_params else None
+                if error:
+                    logger.error(f"OAuth error: {error}")
+                    raise ValueError(f"OAuth error: {error}")
+            
             if not auth_code:
                 logger.error("Не найден код авторизации в URL")
+                # Проверяем, возможно передан только error параметр
+                if authorization_response.startswith('http'):
+                    parsed_url = urlparse(authorization_response)
+                    query_params = parse_qs(parsed_url.query)
+                    if query_params.get('error'):
+                        raise ValueError(f"OAuth error: {query_params.get('error')[0]}")
                 return False
             
             # Создаем новый flow для обмена кода на токен

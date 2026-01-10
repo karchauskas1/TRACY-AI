@@ -336,83 +336,33 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(status_text, reply_markup=reply_markup)
 
 
-async def generate_icloud_instructions(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Генерирует подробную инструкцию для подключения iCloud через AI."""
-    try:
-        # Используем AI для генерации понятной инструкции на русском
-        prompt = """Создай подробную пошаговую инструкцию на русском языке для подключения iCloud Calendar к боту через CalDAV.
+def generate_icloud_instructions() -> str:
+    """Генерирует подробную инструкцию для подключения iCloud Calendar через Apple ID сайт."""
+    return """📋 **Подключение iCloud Calendar**
 
-Требования:
-1. Нужно создать App-Specific Password (пароль приложения)
-2. Должна быть включена двухфакторная аутентификация
-3. Инструкция должна быть максимально понятной для обычного пользователя
-4. Включи конкретные примеры и предупреждения
-5. Объясни, где именно найти нужные настройки на appleid.apple.com
-6. Используй эмодзи для визуального разделения разделов
-7. Объясни разницу между обычным паролем и App-Specific Password
-
-Формат вывода: структурированный текст с шагами, примерами и важными замечаниями."""
-        
-        response = nlp_extractor.client.chat.completions.create(
-            model=config.OPENROUTER_MODEL,
-            messages=[
-                {"role": "system", "content": "Ты помощник, который создает понятные инструкции для пользователей. Отвечай только текстом инструкции, без дополнительных пояснений."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=800
-        )
-        
-        ai_instructions = response.choices[0].message.content.strip()
-        
-        # Добавляем стандартную информацию о команде
-        return f"{ai_instructions}\n\n" \
-               f"📝 После создания пароля используй команду:\n" \
-               f"/connect_icloud <твой_apple_id@example.com> <app-specific-пароль>\n\n" \
-               f"💡 Пример:\n" \
-               f"/connect_icloud ivan@icloud.com abcd-efgh-ijkl-mnop"
-    
-    except Exception as e:
-        logger.error(f"Ошибка генерации AI инструкции: {e}")
-        # Fallback на статическую инструкцию
-        return """📋 ПОДРОБНАЯ ИНСТРУКЦИЯ: Подключение iCloud Calendar
-
-🔐 ШАГ 1: Включи двухфакторную аутентификацию
-   1. Открой appleid.apple.com в браузере
+🔐 **ШАГ 1: Проверь двухфакторную аутентификацию**
+   1. Открой сайт **appleid.apple.com** в браузере
    2. Войди в свой Apple ID
-   3. Перейди в раздел "Безопасность"
-   4. Если видишь "Двухфакторная аутентификация: Выкл" - включи её
-   5. Следуй инструкциям для активации
+   3. Перейди в раздел **"Безопасность"**
+   4. Проверь, что **"Двухфакторная аутентификация"** включена
+   5. Если выключена — включи её, следуя инструкциям на экране
 
-🔑 ШАГ 2: Создай App-Specific Password
-   1. На appleid.apple.com перейди в "Безопасность"
-   2. Прокрути вниз до раздела "Пароли приложений"
-   3. Нажми кнопку "Создать пароль..." или "Generate Password..."
-   4. В появившемся окне введи название: "TRACY Bot"
-   5. Нажми "Создать" или "Create"
-   6. ⚠️ КРИТИЧЕСКИ ВАЖНО: Скопируй пароль СРАЗУ!
-      Пароль показывается только один раз и имеет вид:
-      xxxx-xxxx-xxxx-xxxx
-      (16 символов, разделенных на 4 группы дефисами)
-   7. Сохрани пароль в безопасном месте
+🔑 **ШАГ 2: Создай пароль приложения (App-Specific Password)**
+   1. На сайте **appleid.apple.com** останься в разделе **"Безопасность"**
+   2. Прокрути вниз до раздела **"Пароли приложений"** (App-Specific Passwords)
+   3. Нажми кнопку **"Создать пароль..."** (или "Generate Password...")
+   4. В появившемся окне введи название: **"TRACY Bot"**
+   5. Нажми **"Создать"** (или "Create")
+   6. ⚠️ **КРИТИЧЕСКИ ВАЖНО:** Скопируй пароль **СРАЗУ!**
+      • Пароль показывается только один раз
+      • Формат: `xxxx-xxxx-xxxx-xxxx` (16 символов в 4 группах)
+      • Сохрани пароль в безопасном месте — он больше не будет показан
 
-📝 ШАГ 3: Подключи в боте
-   Отправь команду:
-   /connect_icloud твой_email@icloud.com xxxx-xxxx-xxxx-xxxx
-   
-   Пример:
-   /connect_icloud ivan@icloud.com abcd-efgh-ijkl-mnop
+💡 **ВАЖНО:**
+   • Используй **ТОЛЬКО** пароль приложения, **НЕ** обычный пароль Apple ID
+   • Если потерял пароль — создай новый (старый нельзя увидеть снова)
 
-⚠️ ВАЖНЫЕ ЗАМЕЧАНИЯ:
-   • Используй ТОЛЬКО App-Specific Password, НЕ обычный пароль!
-   • Пароль должен содержать дефисы между группами
-   • Если забыл пароль - создай новый (старый нельзя увидеть снова)
-   • Один App-Specific Password можно использовать для нескольких приложений
-
-❓ Частые проблемы:
-   • "Неверный пароль" → Убедись, что используешь App-Specific Password
-   • "Двухфакторная аутентификация не включена" → Включи её на appleid.apple.com
-   • "Неверный формат" → Проверь, что скопировал пароль полностью со всеми дефисами"""
+✅ Когда всё готово, нажми кнопку "Я готов к подключению" ниже."""
 
 
 async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -457,12 +407,41 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
+                    # Проверяем настройки Google OAuth
+                    if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
+                        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        await query.edit_message_text(
+                            "❌ **Ошибка настройки Google Calendar**\n\n"
+                            "Google OAuth не настроен. Обратитесь к администратору бота.\n\n"
+                            "Для настройки требуются:\n"
+                            "• GOOGLE_CLIENT_ID\n"
+                            "• GOOGLE_CLIENT_SECRET\n"
+                            "• GOOGLE_REDIRECT_URI",
+                            reply_markup=reply_markup,
+                            parse_mode="Markdown"
+                        )
+                        return
+                    
                     await query.edit_message_text(
                         "📅 **Подключение Google Calendar**\n\n"
-                        "1. Нажми на кнопку ниже для авторизации\n"
-                        "2. Разреши доступ к календарю\n"
-                        "3. После редиректа скопируй ПОЛНЫЙ URL из адресной строки\n"
-                        "4. Отправь этот URL боту в ответ на это сообщение\n\n"
+                        "🔐 **Пошаговая инструкция:**\n\n"
+                        "**ШАГ 1:** Нажми на кнопку **\"Открыть ссылку авторизации\"** ниже\n\n"
+                        "**ШАГ 2:** Войди в свой Google аккаунт (если еще не вошел)\n\n"
+                        "**ШАГ 3:** Разреши доступ к Google Calendar\n"
+                        "• Нажми \"Разрешить\" или \"Allow\"\n"
+                        "• Выбери аккаунт Google, если предложено\n\n"
+                        "**ШАГ 4:** После авторизации\n"
+                        "• Если видишь \"Access blocked\" или \"Эта страница не может быть открыта\" — это нормально!\n"
+                        "• Не закрывай страницу, просто скопируй URL из адресной строки браузера\n"
+                        "• URL должен содержать параметр `code=` или `error=`\n\n"
+                        "**ШАГ 5:** Скопируй и отправь URL\n"
+                        "• Скопируй **ВЕСЬ URL** из адресной строки (Ctrl+C или долгое нажатие)\n"
+                        "• Отправь этот URL боту в ответ на это сообщение\n\n"
+                        "⚠️ **Важно:**\n"
+                        "• URL должен начинаться с `http://` или `https://`\n"
+                        "• Скопируй URL целиком, включая `?code=` или `&code=`\n"
+                        "• Если видишь ошибку в URL (`error=`), отправь URL боту — он покажет, что не так\n\n"
                         "Бот будет ожидать URL с кодом авторизации.",
                         reply_markup=reply_markup,
                         parse_mode="Markdown"
@@ -615,13 +594,14 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup
                 )
             else:
-                # Показываем сообщение о загрузке, затем генерируем инструкцию
-                await query.edit_message_text("⏳ Генерирую подробную инструкцию...")
-                # Генерируем подробную инструкцию через AI для лучшего понимания
-                instructions = await generate_icloud_instructions(user_id, context)
-                keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+                # Показываем инструкцию
+                instructions = generate_icloud_instructions()
+                keyboard = [
+                    [InlineKeyboardButton("✅ Я готов к подключению", callback_data="icloud_ready")],
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]
+                ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(instructions, reply_markup=reply_markup)
+                await query.edit_message_text(instructions, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception as e:
             logger.error(f"Ошибка в settings_icloud: {e}", exc_info=True)
             keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
@@ -631,6 +611,40 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Попробуй снова через /settings",
                 reply_markup=reply_markup
             )
+    
+    elif data == "icloud_ready":
+        # Начинаем процесс подключения iCloud
+        context.user_data['icloud_step'] = 'email'
+        keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="icloud_cancel")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text(
+            "📧 **Шаг 1 из 2: Введи свой Apple ID**\n\n"
+            "Отправь email адрес, который привязан к твоему Apple ID.\n\n"
+            "Пример:\n"
+            "`ivan@icloud.com`\n"
+            "или\n"
+            "`ivan@gmail.com` (если используется как Apple ID)\n\n"
+            "Отправь email в ответ на это сообщение.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "icloud_cancel":
+        # Отмена подключения iCloud
+        context.user_data.pop('icloud_step', None)
+        context.user_data.pop('icloud_email', None)
+        await query.answer("Подключение отменено")
+        
+        # Возвращаемся к инструкции
+        instructions = generate_icloud_instructions()
+        keyboard = [
+            [InlineKeyboardButton("✅ Я готов к подключению", callback_data="icloud_ready")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(instructions, reply_markup=reply_markup, parse_mode="Markdown")
+        return
     
     elif data == "disconnect_google":
         try:
@@ -675,13 +689,181 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ Ошибка при отключении iCloud Calendar.", reply_markup=reply_markup)
     
     elif data == "settings_notifications":
-        keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
+        # Настройки уведомлений
+        user_settings = db.get_user_settings(user_id)
+        notifications_enabled = user_settings.get('notifications_enabled', True)
+        default_reminder_minutes = user_settings.get('default_reminder_minutes', 15)
+        
+        keyboard = []
+        
+        # Включение/выключение уведомлений
+        if notifications_enabled:
+            keyboard.append([InlineKeyboardButton("🔕 Отключить уведомления", callback_data="notifications_toggle")])
+        else:
+            keyboard.append([InlineKeyboardButton("🔔 Включить уведомления", callback_data="notifications_toggle")])
+        
+        # Настройка напоминаний по умолчанию
+        keyboard.append([InlineKeyboardButton("⏰ Настроить напоминания", callback_data="notifications_reminders")])
+        
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")])
         reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        status_icon = "🔔" if notifications_enabled else "🔕"
+        status_text = "включены" if notifications_enabled else "выключены"
+        
+        # Форматируем время напоминания для отображения
+        if default_reminder_minutes < 60:
+            reminder_text = f"{default_reminder_minutes} минут"
+        elif default_reminder_minutes == 60:
+            reminder_text = "1 час"
+        elif default_reminder_minutes < 1440:
+            hours = default_reminder_minutes // 60
+            reminder_text = f"{hours} час{'а' if hours in [2, 3, 4] else '' if hours == 1 else 'ов'}"
+        else:
+            days = default_reminder_minutes // 1440
+            reminder_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
+        
         await query.edit_message_text(
-            "Настройки уведомлений:\n\n"
-            "В разработке. Сейчас все подтверждения отправляются в Telegram.",
-            reply_markup=reply_markup
+            f"🔔 **Настройки уведомлений**\n\n"
+            f"Статус: {status_icon} Уведомления {status_text}\n\n"
+            f"Напоминание по умолчанию: за {reminder_text} до события\n\n"
+            "Здесь ты можешь управлять уведомлениями о событиях и напоминаниями.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
         )
+        return
+    
+    elif data == "notifications_toggle":
+        # Переключение уведомлений
+        user_settings = db.get_user_settings(user_id)
+        notifications_enabled = user_settings.get('notifications_enabled', True)
+        new_status = not notifications_enabled
+        
+        db.update_user_settings(user_id, settings_dict={'notifications_enabled': new_status})
+        
+        await query.answer(f"Уведомления {'включены' if new_status else 'выключены'}")
+        
+        # Возвращаемся к настройкам уведомлений
+        keyboard = []
+        if new_status:
+            keyboard.append([InlineKeyboardButton("🔕 Отключить уведомления", callback_data="notifications_toggle")])
+        else:
+            keyboard.append([InlineKeyboardButton("🔔 Включить уведомления", callback_data="notifications_toggle")])
+        keyboard.append([InlineKeyboardButton("⏰ Настроить напоминания", callback_data="notifications_reminders")])
+        keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        status_icon = "🔔" if new_status else "🔕"
+        status_text = "включены" if new_status else "выключены"
+        default_reminder_minutes = user_settings.get('default_reminder_minutes', 15)
+        
+        await query.edit_message_text(
+            f"🔔 **Настройки уведомлений**\n\n"
+            f"Статус: {status_icon} Уведомления {status_text}\n\n"
+            f"Напоминание по умолчанию: за {default_reminder_minutes} минут до события\n\n"
+            "Здесь ты можешь управлять уведомлениями о событиях и напоминаниями.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "notifications_reminders":
+        # Настройка напоминаний
+        user_settings = db.get_user_settings(user_id)
+        default_reminder_minutes = user_settings.get('default_reminder_minutes', 15)
+        
+        keyboard = [
+            [InlineKeyboardButton("⏰ За 5 минут", callback_data="reminder_set_5")],
+            [InlineKeyboardButton("⏰ За 15 минут", callback_data="reminder_set_15")],
+            [InlineKeyboardButton("⏰ За 30 минут", callback_data="reminder_set_30")],
+            [InlineKeyboardButton("⏰ За 1 час", callback_data="reminder_set_60")],
+            [InlineKeyboardButton("⏰ За 1 день", callback_data="reminder_set_1440")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="settings_notifications")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Форматируем текущее время напоминания
+        if default_reminder_minutes < 60:
+            current_reminder_text = f"{default_reminder_minutes} минут"
+        elif default_reminder_minutes == 60:
+            current_reminder_text = "1 час"
+        elif default_reminder_minutes < 1440:
+            hours = default_reminder_minutes // 60
+            current_reminder_text = f"{hours} час{'а' if hours in [2, 3, 4] else '' if hours == 1 else 'ов'}"
+        else:
+            days = default_reminder_minutes // 1440
+            current_reminder_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
+        
+        await query.edit_message_text(
+            f"⏰ **Настройка напоминаний**\n\n"
+            f"Текущее напоминание по умолчанию: за {current_reminder_text} до события\n\n"
+            "Выбери время, за которое бот будет напоминать о событиях:\n\n"
+            "Это время будет использоваться для всех новых событий, если ты не укажешь другое.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data.startswith("reminder_set_"):
+        # Установка времени напоминания
+        try:
+            minutes = int(data.split("_")[-1])
+            db.update_user_settings(user_id, settings_dict={'default_reminder_minutes': minutes})
+            
+            # Форматируем время для отображения
+            if minutes < 60:
+                time_text = f"{minutes} минут"
+            elif minutes == 60:
+                time_text = "1 час"
+            elif minutes < 1440:
+                hours = minutes // 60
+                time_text = f"{hours} час{'а' if hours in [2, 3, 4] else '' if hours == 1 else 'ов'}"
+            else:
+                days = minutes // 1440
+                time_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
+            
+            await query.answer(f"✅ Напоминание установлено: за {time_text}")
+            
+            # Возвращаемся к настройкам уведомлений
+            user_settings = db.get_user_settings(user_id)
+            notifications_enabled = user_settings.get('notifications_enabled', True)
+            
+            keyboard = []
+            if notifications_enabled:
+                keyboard.append([InlineKeyboardButton("🔕 Отключить уведомления", callback_data="notifications_toggle")])
+            else:
+                keyboard.append([InlineKeyboardButton("🔔 Включить уведомления", callback_data="notifications_toggle")])
+            keyboard.append([InlineKeyboardButton("⏰ Настроить напоминания", callback_data="notifications_reminders")])
+            keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            status_icon = "🔔" if notifications_enabled else "🔕"
+            status_text = "включены" if notifications_enabled else "выключены"
+            
+            # Форматируем для отображения в сообщении
+            if minutes < 60:
+                reminder_text = f"{minutes} минут"
+            elif minutes == 60:
+                reminder_text = "1 час"
+            elif minutes < 1440:
+                hours = minutes // 60
+                reminder_text = f"{hours} час{'а' if hours in [2, 3, 4] else '' if hours == 1 else 'ов'}"
+            else:
+                days = minutes // 1440
+                reminder_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
+            
+            await query.edit_message_text(
+                f"🔔 **Настройки уведомлений**\n\n"
+                f"Статус: {status_icon} Уведомления {status_text}\n\n"
+                f"✅ Напоминание по умолчанию: за {reminder_text} до события\n\n"
+                "Здесь ты можешь управлять уведомлениями о событиях и напоминаниями.",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+            return
+        except (ValueError, IndexError):
+            await query.answer("Ошибка установки времени напоминания", show_alert=True)
+            return
     
     elif data == "mode_planner":
         # Выход из режима расшифровки встреч в обычный режим планировщика
@@ -1478,12 +1660,163 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
     
+    # Проверяем процесс подключения iCloud (пошаговый)
+    icloud_step = context.user_data.get('icloud_step')
+    if icloud_step:
+        if icloud_step == 'email':
+            # Шаг 1: Получаем email
+            email = update.message.text.strip()
+            if '@' not in email:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Сохраняем email и переходим к следующему шагу
+            context.user_data['icloud_email'] = email
+            context.user_data['icloud_step'] = 'password'
+            
+            keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="icloud_cancel")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                f"🔑 **Шаг 2 из 2: Введи пароль приложения**\n\n"
+                f"Apple ID: `{email}`\n\n"
+                "Отправь пароль приложения (App-Specific Password), который ты создал на appleid.apple.com\n\n"
+                "Формат: `xxxx-xxxx-xxxx-xxxx` (16 символов в 4 группах через дефис)\n\n"
+                "⚠️ **Важно:** Используй пароль приложения, НЕ обычный пароль Apple ID!",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+            return
+        
+        elif icloud_step == 'password':
+            # Шаг 2: Получаем пароль и подключаемся
+            password = update.message.text.strip()
+            email = context.user_data.get('icloud_email')
+            
+            # Валидация формата пароля
+            if '-' not in password or len(password.replace('-', '')) != 16:
+                await update.message.reply_text(
+                    "⚠️ Похоже, что это не пароль приложения!\n\n"
+                    "Пароль приложения имеет формат:\n"
+                    "`xxxx-xxxx-xxxx-xxxx` (16 символов в 4 группах)\n\n"
+                    "Убедись, что:\n"
+                    "• Используешь пароль из раздела 'Пароли приложений'\n"
+                    "• НЕ используешь обычный пароль Apple ID\n"
+                    "• Скопировал пароль полностью со всеми дефисами\n\n"
+                    "Отправь пароль еще раз:",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Подключаемся к iCloud
+            status_msg = await update.message.reply_text(
+                f"🔌 Подключаюсь к iCloud Calendar...\n\n"
+                f"⏳ Пожалуйста, подожди..."
+            )
+            
+            try:
+                from calendar_icloud import ICloudCalendar
+                caldav_url = "https://caldav.icloud.com"
+                calendar = ICloudCalendar(user_id, caldav_url, email, password)
+                
+                if calendar.connect():
+                    # Сохраняем подключение
+                    import json
+                    credentials = json.dumps({
+                        'caldav_url': caldav_url,
+                        'username': email,
+                        'password': password
+                    })
+                    
+                    db.save_calendar_connection(
+                        user_id=user_id,
+                        provider='icloud',
+                        calendar_id='primary',
+                        credentials=credentials
+                    )
+                    
+                    # Очищаем временные данные
+                    context.user_data.pop('icloud_step', None)
+                    context.user_data.pop('icloud_email', None)
+                    
+                    keyboard = [[InlineKeyboardButton("⬅️ Назад в настройки", callback_data="settings_show")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await status_msg.edit_text(
+                        "✅ **iCloud Calendar успешно подключен!**\n\n"
+                        f"События будут синхронизироваться с календарем `{email}`\n\n"
+                        "Попробуй создать событие, например:\n"
+                        "«Встреча завтра в 15:00»",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await status_msg.edit_text(
+                        "❌ **Ошибка подключения к iCloud Calendar**\n\n"
+                        "Проверь:\n"
+                        "✓ Правильность Apple ID (полный email)\n"
+                        "✓ Что использован пароль приложения (не основной пароль!)\n"
+                        "✓ Формат пароля: `xxxx-xxxx-xxxx-xxxx`\n"
+                        "✓ Что включена двухфакторная аутентификация\n\n"
+                        "Попробуй еще раз через /settings",
+                        parse_mode="Markdown"
+                    )
+                    context.user_data.pop('icloud_step', None)
+                    context.user_data.pop('icloud_email', None)
+            
+            except Exception as e:
+                logger.error(f"Ошибка подключения iCloud: {e}", exc_info=True)
+                error_msg = str(e).lower()
+                
+                if 'authentication' in error_msg or 'unauthorized' in error_msg or '401' in error_msg:
+                    detailed_error = (
+                        "❌ **Ошибка аутентификации**\n\n"
+                        "Возможные причины:\n"
+                        "• Неверный Apple ID или пароль\n"
+                        "• Использован обычный пароль вместо пароля приложения\n"
+                        "• Двухфакторная аутентификация не включена\n\n"
+                        "Проверь настройки на appleid.apple.com и попробуй снова."
+                    )
+                else:
+                    detailed_error = f"❌ Ошибка подключения: {str(e)}\n\nПопробуй еще раз через /settings"
+                
+                await status_msg.edit_text(detailed_error, parse_mode="Markdown")
+                context.user_data.pop('icloud_step', None)
+                context.user_data.pop('icloud_email', None)
+            
+            return
+    
     # Проверяем, ожидаем ли мы URL подтверждения Google
     if context.user_data.get('waiting_google_url'):
         # Это URL с кодом подтверждения для Google OAuth
         auth_response = update.message.text
         
         try:
+            # Проверяем, есть ли в URL параметр error
+            if 'error=' in auth_response.lower():
+                error_params = auth_response.split('?')[-1] if '?' in auth_response else auth_response
+                if 'error=access_denied' in error_params.lower() or 'error=access_blocked' in error_params.lower():
+                    await update.message.reply_text(
+                        "❌ **Доступ запрещен**\n\n"
+                        "Google заблокировал доступ к календарю.\n\n"
+                        "**Возможные причины:**\n"
+                        "• Google требует дополнительной проверки безопасности\n"
+                        "• OAuth приложение не настроено правильно\n"
+                        "• Redirect URI не добавлен в список разрешенных\n\n"
+                        "**Что делать:**\n"
+                        "1. Попробуй использовать другой браузер\n"
+                        "2. Войди в Google аккаунт в обычном режиме (не инкогнито)\n"
+                        "3. Убедись, что в Google Cloud Console правильно настроен redirect URI\n"
+                        "4. Попробуй еще раз через несколько минут\n\n"
+                        "Если проблема сохраняется, обратись к администратору бота."
+                    )
+                    context.user_data['waiting_google_url'] = False
+                    return
+            
             calendar = GoogleCalendar(user_id)
             
             if calendar.handle_callback(auth_response):
@@ -1493,15 +1826,57 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     calendar_id='primary',
                     credentials=''  # Credentials хранятся в файле
                 )
-                await update.message.reply_text("✓ Google Calendar успешно подключен!")
+                
+                keyboard = [[InlineKeyboardButton("⬅️ Назад в настройки", callback_data="settings_show")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    "✅ **Google Calendar успешно подключен!**\n\n"
+                    "События будут синхронизироваться с твоим Google Calendar.\n\n"
+                    "Попробуй создать событие, например:\n"
+                    "«Встреча завтра в 15:00»",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
             else:
                 await update.message.reply_text(
-                    "Ошибка подключения. Проверь URL и попробуй снова.\n"
-                    "Или используй /settings для новой попытки."
+                    "❌ **Ошибка подключения Google Calendar**\n\n"
+                    "Не удалось обработать URL авторизации.\n\n"
+                    "**Проверь:**\n"
+                    "• Что скопировал полный URL из адресной строки\n"
+                    "• Что URL содержит параметр `code=`\n"
+                    "• Что URL начинается с `http://` или `https://`\n\n"
+                    "Попробуй еще раз через /settings"
                 )
         except Exception as e:
-            logger.error(f"Ошибка обработки Google OAuth: {e}")
-            await update.message.reply_text(f"Ошибка: {str(e)}\nПопробуй снова через /settings")
+            logger.error(f"Ошибка обработки Google OAuth: {e}", exc_info=True)
+            error_msg = str(e).lower()
+            
+            if 'invalid_grant' in error_msg or 'expired' in error_msg:
+                detailed_error = (
+                    "❌ **Код авторизации истек или недействителен**\n\n"
+                    "Код авторизации действителен только несколько минут.\n\n"
+                    "**Что делать:**\n"
+                    "1. Перейди снова по ссылке авторизации из настроек\n"
+                    "2. Сразу скопируй URL из адресной строки\n"
+                    "3. Отправь его боту\n\n"
+                    "Попробуй еще раз через /settings"
+                )
+            elif 'redirect_uri_mismatch' in error_msg:
+                detailed_error = (
+                    "❌ **Ошибка настройки Redirect URI**\n\n"
+                    "Redirect URI в настройках Google OAuth не совпадает с указанным.\n\n"
+                    "**Это проблема настройки бота.**\n"
+                    "Обратитесь к администратору для исправления настроек OAuth."
+                )
+            else:
+                detailed_error = (
+                    f"❌ **Ошибка подключения**\n\n"
+                    f"Произошла ошибка: {str(e)}\n\n"
+                    "Попробуй еще раз через /settings"
+                )
+            
+            await update.message.reply_text(detailed_error, parse_mode="Markdown")
         
         context.user_data['waiting_google_url'] = False
         return
@@ -2022,6 +2397,9 @@ def main():
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^menu_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^mode_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^disconnect_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^icloud_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^notifications_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^reminder_set_"))
     
     # Обработчик голосовых сообщений (отдельно для лучшей отладки)
     application.add_handler(MessageHandler(

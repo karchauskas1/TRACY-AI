@@ -109,9 +109,22 @@ class Database:
                         user_id BIGINT PRIMARY KEY,
                         timezone TEXT DEFAULT 'Europe/Moscow',
                         locale TEXT DEFAULT 'ru_RU',
+                        notifications_enabled BOOLEAN DEFAULT TRUE,
+                        default_reminder_minutes INTEGER DEFAULT 15,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                
+                # Добавляем новые колонки, если их еще нет (для существующих БД)
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN DEFAULT TRUE")
+                except:
+                    pass  # Колонка уже существует
+                
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS default_reminder_minutes INTEGER DEFAULT 15")
+                except:
+                    pass  # Колонка уже существует
                 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS calendar_connections (
@@ -219,9 +232,22 @@ class Database:
                         user_id INTEGER PRIMARY KEY,
                         timezone TEXT DEFAULT 'Europe/Moscow',
                         locale TEXT DEFAULT 'ru_RU',
+                        notifications_enabled INTEGER DEFAULT 1,
+                        default_reminder_minutes INTEGER DEFAULT 15,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                
+                # Добавляем новые колонки, если их еще нет (для существующих БД)
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN notifications_enabled INTEGER DEFAULT 1")
+                except:
+                    pass  # Колонка уже существует
+                
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN default_reminder_minutes INTEGER DEFAULT 15")
+                except:
+                    pass  # Колонка уже существует
                 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS calendar_connections (
@@ -364,8 +390,41 @@ class Database:
         finally:
             self.return_connection(conn)
     
-    def update_user_settings(self, user_id: int, timezone: Optional[str] = None, locale: Optional[str] = None):
-        """Обновить настройки пользователя."""
+    def get_user_settings(self, user_id: int) -> Dict:
+        """Получить настройки пользователя."""
+        user = self.get_or_create_user(user_id)
+        if not user:
+            return {
+                'timezone': 'Europe/Moscow',
+                'locale': 'ru_RU',
+                'notifications_enabled': True,
+                'default_reminder_minutes': 15
+            }
+        
+        # Преобразуем в словарь с правильными типами
+        settings = {
+            'timezone': user.get('timezone', 'Europe/Moscow'),
+            'locale': user.get('locale', 'ru_RU'),
+            'notifications_enabled': bool(user.get('notifications_enabled', True)),
+            'default_reminder_minutes': int(user.get('default_reminder_minutes', 15))
+        }
+        
+        # Для SQLite преобразуем boolean
+        if not self.use_postgresql:
+            if isinstance(user.get('notifications_enabled'), int):
+                settings['notifications_enabled'] = bool(user.get('notifications_enabled', 1))
+        
+        return settings
+    
+    def update_user_settings(self, user_id: int, timezone: Optional[str] = None, locale: Optional[str] = None, settings_dict: Optional[Dict] = None):
+        """Обновить настройки пользователя.
+        
+        Args:
+            user_id: ID пользователя
+            timezone: Часовой пояс (устаревший параметр, используйте settings_dict)
+            locale: Локаль (устаревший параметр, используйте settings_dict)
+            settings_dict: Словарь с настройками для обновления
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -373,13 +432,37 @@ class Database:
             updates = []
             params = []
             
-            if timezone:
-                updates.append("timezone = %s" if self.use_postgresql else "timezone = ?")
-                params.append(timezone)
-            
-            if locale:
-                updates.append("locale = %s" if self.use_postgresql else "locale = ?")
-                params.append(locale)
+            # Используем settings_dict если передан, иначе используем старые параметры
+            if settings_dict:
+                if 'timezone' in settings_dict:
+                    updates.append("timezone = %s" if self.use_postgresql else "timezone = ?")
+                    params.append(settings_dict['timezone'])
+                
+                if 'locale' in settings_dict:
+                    updates.append("locale = %s" if self.use_postgresql else "locale = ?")
+                    params.append(settings_dict['locale'])
+                
+                if 'notifications_enabled' in settings_dict:
+                    value = settings_dict['notifications_enabled']
+                    if self.use_postgresql:
+                        updates.append("notifications_enabled = %s")
+                        params.append(bool(value))
+                    else:
+                        updates.append("notifications_enabled = ?")
+                        params.append(1 if bool(value) else 0)
+                
+                if 'default_reminder_minutes' in settings_dict:
+                    updates.append("default_reminder_minutes = %s" if self.use_postgresql else "default_reminder_minutes = ?")
+                    params.append(int(settings_dict['default_reminder_minutes']))
+            else:
+                # Обратная совместимость со старым API
+                if timezone:
+                    updates.append("timezone = %s" if self.use_postgresql else "timezone = ?")
+                    params.append(timezone)
+                
+                if locale:
+                    updates.append("locale = %s" if self.use_postgresql else "locale = ?")
+                    params.append(locale)
             
             if updates:
                 params.append(user_id)
