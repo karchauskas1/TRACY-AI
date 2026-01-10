@@ -593,7 +593,10 @@ class DecisionEngine:
         
         # Добавляем информацию о синхронизации с календарями, если были подключены
         if created_in:
-            message += f"\n\n✅ Синхронизировано с: {', '.join(created_in)}"
+            if len(created_in) == 1:
+                message += "\n\nЗаписал в ваш календарь"
+            else:
+                message += "\n\nЗаписал в ваши календари"
         
         return {
             'action': 'created',
