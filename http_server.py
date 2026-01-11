@@ -31,11 +31,13 @@ async def get_events_handler(request: web_request.Request):
         # Получаем user_id из query параметров
         user_id_str = request.query.get('user_id')
         if not user_id_str:
+            logger.warning("❌ HTTP API: user_id не предоставлен")
             return json_response({'error': 'user_id required'}, status=400)
         
         try:
             user_id = int(user_id_str)
         except ValueError:
+            logger.warning(f"❌ HTTP API: неверный user_id: {user_id_str}")
             return json_response({'error': 'Invalid user_id'}, status=400)
         
         # Получаем параметры периода (опционально)
@@ -43,13 +45,20 @@ async def get_events_handler(request: web_request.Request):
         to_date_str = request.query.get('to')
         
         if not db_instance:
+            logger.error("❌ HTTP API: База данных не инициализирована")
             return json_response({'error': 'Database not initialized'}, status=500)
         
         # Получаем настройки пользователя для timezone
-        user = db_instance.get_or_create_user(user_id)
-        if not user:
-            return json_response({'error': 'Failed to get or create user'}, status=500)
-        timezone = user.get('timezone', 'Europe/Moscow')
+        try:
+            user = db_instance.get_or_create_user(user_id)
+            if not user:
+                logger.error(f"❌ HTTP API: Не удалось получить/создать пользователя {user_id}")
+                return json_response({'error': 'Failed to get or create user'}, status=500)
+        except Exception as e:
+            logger.error(f"❌ HTTP API: Ошибка при получении пользователя {user_id}: {e}", exc_info=True)
+            return json_response({'error': f'Database error: {str(e)}'}, status=500)
+        
+        timezone = user.get('timezone', 'Europe/Moscow') if isinstance(user, dict) else 'Europe/Moscow'
         tz = pytz.timezone(timezone)
         now = datetime.now(tz)
         
@@ -75,8 +84,12 @@ async def get_events_handler(request: web_request.Request):
             start_to = now + timedelta(days=365)
         
         # Получаем события из БД
-        events = db_instance.get_events(user_id, limit=200, start_from=start_from, start_to=start_to)
-        logger.info(f"📊 HTTP API: Получено {len(events)} событий для пользователя {user_id}")
+        try:
+            events = db_instance.get_events(user_id, limit=200, start_from=start_from, start_to=start_to)
+            logger.info(f"📊 HTTP API: Получено {len(events)} событий для пользователя {user_id}")
+        except Exception as e:
+            logger.error(f"❌ HTTP API: Ошибка при получении событий для пользователя {user_id}: {e}", exc_info=True)
+            return json_response({'error': f'Failed to get events: {str(e)}'}, status=500)
         
         # Преобразуем события в формат для веб-приложения
         web_events = []
