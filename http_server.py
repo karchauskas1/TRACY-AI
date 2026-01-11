@@ -47,6 +47,8 @@ async def get_events_handler(request: web_request.Request):
         
         # Получаем настройки пользователя для timezone
         user = db_instance.get_or_create_user(user_id)
+        if not user:
+            return json_response({'error': 'Failed to get or create user'}, status=500)
         timezone = user.get('timezone', 'Europe/Moscow')
         tz = pytz.timezone(timezone)
         now = datetime.now(tz)

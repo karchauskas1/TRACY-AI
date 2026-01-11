@@ -105,15 +105,20 @@ export function CalendarPageClient() {
         const apiUrl = `${apiBaseUrl}/api/events?user_id=${user.id}`
         
         try {
+          console.log(`[Calendar] Запрос к API: ${apiUrl}`)
           const response = await fetch(apiUrl, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
             },
+            mode: 'cors',
           })
+          
+          console.log(`[Calendar] Ответ API: status=${response.status}, ok=${response.ok}`)
           
           if (response.ok) {
             const data = await response.json()
+            console.log(`[Calendar] Данные API:`, data)
             if (data.success && Array.isArray(data.events)) {
               console.log(`[Calendar] Получено ${data.events.length} событий через HTTP API`)
               setEvents(data.events)
@@ -136,9 +141,15 @@ export function CalendarPageClient() {
               
               setLoading(false)
               return
+            } else {
+              console.warn(`[Calendar] API вернул неверный формат данных:`, data)
             }
+          } else {
+            const errorText = await response.text()
+            console.error(`[Calendar] API вернул ошибку: ${response.status} ${response.statusText}`, errorText)
           }
         } catch (error) {
+          console.error(`[Calendar] Ошибка при запросе к HTTP API:`, error)
           console.warn(`[Calendar] HTTP API недоступен (${error}), используем fallback механизм через tg.sendData`)
         }
         
