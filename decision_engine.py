@@ -362,7 +362,7 @@ class DecisionEngine:
                 hour = None
                 minute = None
                 
-                # Паттерны для времени
+                # Паттерны для времени (в порядке приоритета)
                 # "в 12:30", "в 12.30", "в 12 30"
                 match = re_module.search(r'в\s+(\d{1,2})[:.\s]+(\d{2})', text_lower)
                 if match:
@@ -380,6 +380,19 @@ class DecisionEngine:
                         if match:
                             hour = int(match.group(1))
                             minute = int(match.group(2)) if match.group(2) else 0
+                        else:
+                            # "в 11 утра", "в 15 дня", "в 20 вечера", "в 23 ночи"
+                            match = re_module.search(r'в\s+(\d{1,2})\s+(утра|дня|вечера|ночи)', text_lower)
+                            if match:
+                                hour = int(match.group(1))
+                                period = match.group(2)
+                                minute = 0
+                                # Корректируем час в зависимости от периода дня
+                                if period == 'вечера' and hour < 12:
+                                    hour += 12  # "в 8 вечера" = 20:00
+                                elif period == 'ночи' and hour < 12:
+                                    hour += 12 if hour < 12 else 0  # "в 11 ночи" = 23:00, "в 1 ночи" = 1:00
+                                # "утра" и "дня" остаются как есть (0-12 утра, 12-18 дня)
                 
                 if hour is not None and 0 <= hour < 24 and 0 <= minute < 60:
                     # Определяем дату
