@@ -131,6 +131,17 @@ async def health_handler(request: web_request.Request):
     """Обработчик для health check."""
     return json_response({'status': 'ok', 'timestamp': datetime.now().isoformat()})
 
+async def root_handler(request: web_request.Request):
+    """Обработчик для корневого пути."""
+    return json_response({
+        'service': 'TRACY API Server',
+        'status': 'running',
+        'endpoints': {
+            '/health': 'Health check',
+            '/api/events': 'Get events (requires ?user_id=XXX)'
+        }
+    })
+
 
 def create_app():
     """Создает и настраивает aiohttp приложение."""
