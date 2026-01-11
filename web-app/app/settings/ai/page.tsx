@@ -12,10 +12,28 @@ export default function AIPage() {
   const router = useRouter()
   const { locale, t } = useLocale()
   const { toast } = useToast()
+  const [user, setUser] = useState<any>(null)
   const [interpretationMode, setInterpretationMode] = useState<"strict" | "soft">("soft")
   const [smartReplyEnabled, setSmartReplyEnabled] = useState(true)
 
   useEffect(() => {
+    // Load user from Telegram Web App or localStorage
+    if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg && tg.initDataUnsafe?.user) {
+        setUser(tg.initDataUnsafe.user)
+      } else {
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser))
+          } catch (e) {
+            console.error("Failed to parse user:", e)
+          }
+        }
+      }
+    }
+
     // Load settings from localStorage
     const savedMode = localStorage.getItem("tracy_ai_mode")
     if (savedMode === "strict" || savedMode === "soft") {
@@ -31,19 +49,43 @@ export default function AIPage() {
     router.push("/settings")
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     localStorage.setItem("tracy_ai_mode", interpretationMode)
     localStorage.setItem("tracy_smart_reply", String(smartReplyEnabled))
     
-    // Send to bot via Telegram Web App API
+    // Send to bot via HTTP API
+    if (user?.id) {
+      try {
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+        await fetch(`${apiBaseUrl}/api/settings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            interpretation_mode: interpretationMode,
+          }),
+          mode: 'cors',
+        })
+      } catch (error) {
+        console.error("Failed to save settings to API:", error)
+      }
+    }
+    
+    // Fallback: Send to bot via Telegram Web App API (if supported)
     if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.sendData(JSON.stringify({
-          action: "update_ai_settings",
-          mode: interpretationMode,
-          smart_reply: smartReplyEnabled,
-        }))
+      if (tg && tg.sendData) {
+        try {
+          tg.sendData(JSON.stringify({
+            action: "update_ai_settings",
+            mode: interpretationMode,
+            smart_reply: smartReplyEnabled,
+          }))
+        } catch (e) {
+          console.error("tg.sendData failed:", e)
+        }
       }
     }
     

@@ -12,12 +12,30 @@ export default function NotificationsPage() {
   const router = useRouter()
   const { locale, t } = useLocale()
   const { toast } = useToast()
+  const [user, setUser] = useState<any>(null)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [morningDigestEnabled, setMorningDigestEnabled] = useState(true)
   const [morningDigest, setMorningDigest] = useState("09:00")
   const [defaultReminder, setDefaultReminder] = useState("15")
 
   useEffect(() => {
+    // Load user from Telegram Web App or localStorage
+    if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg && tg.initDataUnsafe?.user) {
+        setUser(tg.initDataUnsafe.user)
+      } else {
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser))
+          } catch (e) {
+            console.error("Failed to parse user:", e)
+          }
+        }
+      }
+    }
+
     // Load settings from localStorage
     const savedNotifications = localStorage.getItem("tracy_web_notifications_enabled")
     if (savedNotifications !== null) {
@@ -41,18 +59,47 @@ export default function NotificationsPage() {
     router.push("/settings")
   }
 
+  const saveSettingsToAPI = async (updates: any) => {
+    if (user?.id) {
+      try {
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+        await fetch(`${apiBaseUrl}/api/settings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            ...updates
+          }),
+          mode: 'cors',
+        })
+      } catch (error) {
+        console.error("Failed to save settings to API:", error)
+      }
+    }
+  }
+
   const handleToggleNotifications = () => {
     const newValue = !notificationsEnabled
     setNotificationsEnabled(newValue)
     localStorage.setItem("tracy_web_notifications_enabled", String(newValue))
+    
+    // Save to API
+    saveSettingsToAPI({ web_notifications_enabled: newValue })
+
     // Send to bot via Telegram Web App API
     if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.sendData(JSON.stringify({
-          action: "update_notifications",
-          enabled: newValue,
-        }))
+      if (tg && tg.sendData) {
+        try {
+          tg.sendData(JSON.stringify({
+            action: "update_notifications",
+            enabled: newValue,
+          }))
+        } catch (e) {
+          console.error("tg.sendData failed:", e)
+        }
       }
     }
     toast({
@@ -68,16 +115,25 @@ export default function NotificationsPage() {
     setMorningDigestEnabled(newValue)
     localStorage.setItem("tracy_morning_digest_enabled", String(newValue))
     
+    // Save to API
+    saveSettingsToAPI({ 
+      morning_digest_time: newValue ? morningDigest : null 
+    })
+
     // Send to bot via Telegram Web App API
     if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.sendData(JSON.stringify({
-          action: "update_morning_digest",
-          enabled: newValue,
-          time: morningDigest,
-          default_reminder: defaultReminder,
-        }))
+      if (tg && tg.sendData) {
+        try {
+          tg.sendData(JSON.stringify({
+            action: "update_morning_digest",
+            enabled: newValue,
+            time: morningDigest,
+            default_reminder: defaultReminder,
+          }))
+        } catch (e) {
+          console.error("tg.sendData failed:", e)
+        }
       }
     }
     
@@ -94,16 +150,26 @@ export default function NotificationsPage() {
     localStorage.setItem("tracy_web_default_reminder", defaultReminder)
     localStorage.setItem("tracy_morning_digest_enabled", String(morningDigestEnabled))
     
+    // Save to API
+    saveSettingsToAPI({
+      morning_digest_time: morningDigestEnabled ? morningDigest : null,
+      default_reminder_minutes: parseInt(defaultReminder)
+    })
+
     // Send to bot via Telegram Web App API
     if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.sendData(JSON.stringify({
-          action: "update_morning_digest",
-          enabled: morningDigestEnabled,
-          time: morningDigest,
-          default_reminder: defaultReminder,
-        }))
+      if (tg && tg.sendData) {
+        try {
+          tg.sendData(JSON.stringify({
+            action: "update_morning_digest",
+            enabled: morningDigestEnabled,
+            time: morningDigest,
+            default_reminder: defaultReminder,
+          }))
+        } catch (e) {
+          console.error("tg.sendData failed:", e)
+        }
       }
     }
     

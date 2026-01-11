@@ -12,9 +12,27 @@ export default function GeneralPage() {
   const router = useRouter()
   const { locale, setLocale, t } = useLocale()
   const { toast } = useToast()
+  const [user, setUser] = useState<any>(null)
   const [selectedLanguage, setSelectedLanguage] = useState<"ru" | "en">(locale)
 
   useEffect(() => {
+    // Load user from Telegram Web App or localStorage
+    if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg && tg.initDataUnsafe?.user) {
+        setUser(tg.initDataUnsafe.user)
+      } else {
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser))
+          } catch (e) {
+            console.error("Failed to parse user:", e)
+          }
+        }
+      }
+    }
+
     // Load saved language from localStorage
     const savedLocale = localStorage.getItem('tracy_locale') as "ru" | "en" | null
     if (savedLocale && (savedLocale === "ru" || savedLocale === "en")) {
@@ -43,6 +61,27 @@ export default function GeneralPage() {
       // Обновляем HTML lang атрибут
       if (typeof document !== 'undefined') {
         document.documentElement.lang = selectedLanguage
+      }
+
+      // Сохраняем в API
+      if (user?.id) {
+        try {
+          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+          const lang_code = selectedLanguage === 'ru' ? 'ru_RU' : 'en_US'
+          await fetch(`${apiBaseUrl}/api/settings`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user_id: user.id,
+              locale: lang_code,
+            }),
+            mode: 'cors',
+          })
+        } catch (error) {
+          console.error("Failed to save settings to API:", error)
+        }
       }
       
       toast({

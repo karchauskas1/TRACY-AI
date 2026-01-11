@@ -216,16 +216,16 @@ class ReminderScheduler:
                     time_str = "некоторое время"
                 
                 message = (
-                    f"🔔 **Напоминание**\n\n"
+                    f"🔔 Напоминание\n\n"
                     f"Через {time_str} у тебя событие:\n\n"
-                    f"📅 **{event_title}**\n"
+                    f"📅 {event_title}\n"
                     f"🕐 {self._format_datetime(event_start_time)}"
                 )
             else:
                 # Напоминание о начале события
                 message = (
-                    f"⏰ **Событие начинается сейчас**\n\n"
-                    f"📅 **{event_title}**\n"
+                    f"⏰ Событие начинается сейчас\n\n"
+                    f"📅 {event_title}\n"
                     f"🕐 {self._format_datetime(event_start_time)}"
                 )
             
@@ -497,14 +497,14 @@ class ReminderScheduler:
             # Формируем список событий для сообщения
             if not events:
                 message = (
-                    "☀️ **Доброе утро!**\n\n"
+                    "☀️ Доброе утро!\n\n"
                     "У тебя нет запланированных событий на сегодня. Отличный день для отдыха или спонтанных планов!"
                 )
             else:
                 # Генерируем мотивационную цитату на основе событий
                 motivational_quote = await self._generate_motivational_quote(events, user_timezone)
                 
-                events_text = "**📅 События на сегодня:**\n\n"
+                events_text = "📅 События на сегодня:\n\n"
                 for event in events:
                     title = event.get('title', 'Без названия')
                     start_time = event.get('start_time')
@@ -520,7 +520,7 @@ class ReminderScheduler:
                         events_text += f"📅 {title}\n"
                 
                 message = (
-                    f"☀️ **Доброе утро!**\n\n"
+                    f"☀️ Доброе утро!\n\n"
                     f"{motivational_quote}\n\n"
                     f"{events_text}"
                 )

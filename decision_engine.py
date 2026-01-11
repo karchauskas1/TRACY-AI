@@ -1291,8 +1291,8 @@ class DecisionEngine:
         if not confirmed:
             return {
                 'action': 'delete_all_confirmation',
-                'message': f"⚠️ **Вы точно хотите удалить все события?**\n\n"
-                          f"Будет удалено **{events_count}** событий из календаря.\n\n"
+                'message': f"⚠️ Вы точно хотите удалить все события?\n\n"
+                          f"Будет удалено {events_count} событий из календаря.\n\n"
                           f"Это действие нельзя отменить. Подтверди удаление, написав \"да\" или \"подтверждаю\".",
                 'needs_confirmation': True,
                 'confirmation_type': 'delete_all'
@@ -1366,7 +1366,7 @@ class DecisionEngine:
         
         return {
             'action': 'deleted_all',
-            'message': f"✅ **Все события удалены**\n\nУдалено событий: **{deleted_count}**\nИз внешних календарей: **{deleted_from_calendars}**",
+            'message': f"✅ Все события удалены\n\nУдалено событий: {deleted_count}\nИз внешних календарей: {deleted_from_calendars}",
             'needs_confirmation': False
         }
     
@@ -1891,7 +1891,7 @@ class DecisionEngine:
             }
         
         # Формируем красивое подробное сообщение со всеми деталями
-        message = f"📅 **Все события на {period_name}** ({len(all_events)}):\n\n"
+        message = f"📅 Все события на {period_name} ({len(all_events)}):\n\n"
         
         current_date = None
         event_number = 0
@@ -1928,9 +1928,9 @@ class DecisionEngine:
                     # Если это сегодня или завтра, показываем это
                     today = now.date()
                     if event_date == today:
-                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 **Сегодня** ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 Сегодня ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     elif event_date == (now + timedelta(days=1)).date():
-                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 **Завтра** ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 Завтра ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     else:
                         date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 {weekday}, {day} {month}\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     
@@ -1951,7 +1951,7 @@ class DecisionEngine:
                 location = event.get('location')
                 description = event.get('description')
                 
-                message += f"**{event_number}. {title}**\n"
+                message += f"{event_number}. {title}\n"
                 message += f"   ⏰ Время: {time_display}\n"
                 
                 if location:

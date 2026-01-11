@@ -142,6 +142,46 @@ async def get_events_handler(request: web_request.Request):
         return json_response({'error': str(e)}, status=500)
 
 
+async def update_settings_handler(request: web_request.Request):
+    """Обработчик POST запроса для обновления настроек пользователя."""
+    try:
+        data = await request.json()
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        if not db_instance:
+            return json_response({'error': 'Database not initialized'}, status=500)
+        
+        # Обновляем настройки в БД
+        settings_to_update = {}
+        if 'timezone' in data:
+            settings_to_update['timezone'] = data['timezone']
+        if 'locale' in data:
+            settings_to_update['locale'] = data['locale']
+        if 'notifications_enabled' in data:
+            settings_to_update['notifications_enabled'] = data['notifications_enabled']
+        if 'default_reminder_minutes' in data:
+            settings_to_update['default_reminder_minutes'] = data['default_reminder_minutes']
+        if 'morning_digest_time' in data:
+            settings_to_update['morning_digest_time'] = data['morning_digest_time']
+        if 'web_notifications_enabled' in data:
+            settings_to_update['web_notifications_enabled'] = data['web_notifications_enabled']
+        if 'interpretation_mode' in data:
+            settings_to_update['interpretation_mode'] = data['interpretation_mode']
+        
+        if settings_to_update:
+            db_instance.update_user_settings(int(user_id), settings_dict=settings_to_update)
+            logger.info(f"⚙️ HTTP API: Обновлены настройки для пользователя {user_id}: {settings_to_update}")
+        
+        return json_response({'success': True})
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка HTTP API update_settings: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
 async def health_handler(request: web_request.Request):
     """Обработчик для health check."""
     return json_response({'status': 'ok', 'timestamp': datetime.now().isoformat()})
@@ -186,6 +226,7 @@ def create_app():
     app.router.add_get('/', root_handler)
     app.router.add_get('/health', health_handler)
     app.router.add_get('/api/events', get_events_handler)
+    app.router.add_post('/api/settings', update_settings_handler)
     
     return app
 
