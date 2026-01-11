@@ -1901,6 +1901,84 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 logger.info(f"Отправлен статус календарей для пользователя {user_id}: Google={google_connected}, iCloud={icloud_connected}")
                 return
+            
+            elif action == 'submit_google_oauth_url':
+                # Веб-приложение отправляет URL из адресной строки после OAuth (кнопка "Перенести")
+                auth_response = (data.get('url') or '').strip()
+                if not auth_response:
+                    await update.message.reply_text("❌ Не получил URL. Вставь URL и нажми «Перенести» ещё раз.")
+                    return
+                
+                try:
+                    # Проверяем, есть ли в URL параметр error (как и в текстовом сценарии)
+                    if 'error=' in auth_response.lower():
+                        error_params = auth_response.split('?')[-1] if '?' in auth_response else auth_response
+                        if 'error=access_denied' in error_params.lower() or 'error=access_blocked' in error_params.lower():
+                            await update.message.reply_text(
+                                "❌ **Доступ запрещен**\n\n"
+                                "Google заблокировал доступ к календарю.\n\n"
+                                "**Возможные причины:**\n"
+                                "• Google требует дополнительной проверки безопасности\n"
+                                "• OAuth приложение не настроено правильно\n"
+                                "• Redirect URI не добавлен в список разрешенных\n\n"
+                                "**Что делать:**\n"
+                                "1. Попробуй использовать другой браузер\n"
+                                "2. Войди в Google аккаунт в обычном режиме (не инкогнито)\n"
+                                "3. Убедись, что в Google Cloud Console правильно настроен redirect URI\n"
+                                "4. Попробуй еще раз через несколько минут\n\n"
+                                "Если проблема сохраняется, обратись к администратору бота.",
+                                parse_mode="Markdown"
+                            )
+                            # Сбрасываем ожидание, если оно было включено из /settings
+                            context.user_data['waiting_google_url'] = False
+                            return
+                    
+                    calendar = GoogleCalendar(user_id)
+                    if calendar.handle_callback(auth_response):
+                        db.save_calendar_connection(
+                            user_id=user_id,
+                            provider='google',
+                            calendar_id='primary',
+                            credentials=''  # Credentials хранятся в файле
+                        )
+                        
+                        keyboard = [[InlineKeyboardButton("⬅️ Назад в настройки", callback_data="settings_show")]]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        await update.message.reply_text(
+                            "✅ **Google Calendar успешно подключен!**\n\n"
+                            "События будут синхронизироваться с твоим Google Calendar.\n\n"
+                            "Попробуй создать событие, например:\n"
+                            "«Встреча завтра в 15:00»",
+                            reply_markup=reply_markup,
+                            parse_mode="Markdown"
+                        )
+                        
+                        # Обновляем статус календарей для веб-приложения
+                        await send_calendar_status_to_web_app(user_id, context)
+                    else:
+                        await update.message.reply_text(
+                            "❌ **Ошибка подключения Google Calendar**\n\n"
+                            "Не удалось обработать URL авторизации.\n\n"
+                            "**Проверь:**\n"
+                            "• Что скопировал полный URL из адресной строки\n"
+                            "• Что URL содержит параметр `code=`\n"
+                            "• Что URL начинается с `http://` или `https://`\n\n"
+                            "Попробуй еще раз через /settings",
+                            parse_mode="Markdown"
+                        )
+                except Exception as e:
+                    logger.error(f"Ошибка обработки Google OAuth из веб-приложения: {e}", exc_info=True)
+                    await update.message.reply_text(
+                        f"❌ **Ошибка подключения**\n\n"
+                        f"Произошла ошибка: {str(e)}\n\n"
+                        "Попробуй еще раз через /settings",
+                        parse_mode="Markdown"
+                    )
+                finally:
+                    # Сбрасываем ожидание, если оно было включено из /settings
+                    context.user_data['waiting_google_url'] = False
+                return
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"Ошибка обработки web_app_data: {e}")
             # Продолжаем обычную обработку
