@@ -401,10 +401,10 @@ class DecisionEngine:
         
         # Если похожих событий нет или они недостаточно похожи - создаем новое событие
         
-        # Если нет времени ИЛИ (низкая уверенность И время не указано явно) - создаем draft
+        # Если нет времени - создаем draft
         # ВАЖНО: Если время явно указано (has_explicit_time = True), НЕ создаем draft, даже если confidence низкая
-        confidence = extracted_data.get('confidence', 0.8)  # По умолчанию 0.8, если не указано
-        if not has_explicit_time or (confidence < 0.7 and not has_explicit_time):
+        # Только если время НЕ указано явно - создаем draft
+        if not has_explicit_time:
             # Сохраняем как draft в БД
             event_id = self.db.save_event(
                 user_id=user_id,
