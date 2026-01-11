@@ -236,24 +236,43 @@ class ICloudCalendar:
             return False
     
     def delete_event(self, event_uid: str) -> bool:
-        """Удалить событие."""
+        """Удалить событие по UID."""
         try:
             if not self.calendar:
                 if not self.connect():
                     return False
             
-            events = self.calendar.search(event_uid=event_uid)
+            # Найти событие по UID (аналогично update_event)
+            events = self.calendar.events()
+            target_event = None
             
-            if not events:
+            for event in events:
+                try:
+                    import icalendar
+                    ical = icalendar.Calendar.from_ical(event.data)
+                    for component in ical.walk():
+                        if component.name == "VEVENT":
+                            uid = str(component.get('uid', ''))
+                            if uid == event_uid:
+                                target_event = event
+                                break
+                    if target_event:
+                        break
+                except Exception:
+                    continue
+            
+            if not target_event:
+                logger.warning(f"Событие {event_uid} не найдено для удаления")
                 return False
             
-            events[0].delete()
+            # Удаляем событие
+            target_event.delete()
             
-            logger.info(f"Удалено событие из iCloud Calendar: {event_uid}")
+            logger.info(f"✅ Событие {event_uid} успешно удалено из iCloud календаря")
             return True
         
         except Exception as e:
-            logger.error(f"Ошибка удаления события: {e}")
+            logger.error(f"❌ Ошибка удаления события {event_uid} из iCloud календаря: {e}", exc_info=True)
             return False
     
     def search_events(self, query: str, time_min: Optional[datetime] = None,
