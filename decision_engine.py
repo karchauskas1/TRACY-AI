@@ -353,6 +353,7 @@ class DecisionEngine:
         if not start_time and original_text and not has_explicit_time:
             try:
                 import pytz
+                import re as re_module  # Импортируем re модуль локально
                 tz = pytz.timezone(timezone)
                 now = datetime.now(tz)
                 
@@ -363,19 +364,19 @@ class DecisionEngine:
                 
                 # Паттерны для времени
                 # "в 12:30", "в 12.30", "в 12 30"
-                match = re.search(r'в\s+(\d{1,2})[:.\s]+(\d{2})', text_lower)
+                match = re_module.search(r'в\s+(\d{1,2})[:.\s]+(\d{2})', text_lower)
                 if match:
                     hour = int(match.group(1))
                     minute = int(match.group(2))
                 else:
                     # "12:30", "12.30"
-                    match = re.search(r'(\d{1,2})[:.](\d{2})', text_lower)
+                    match = re_module.search(r'(\d{1,2})[:.](\d{2})', text_lower)
                     if match:
                         hour = int(match.group(1))
                         minute = int(match.group(2))
                     else:
                         # "в 12 часов", "в 12 часов 30 минут"
-                        match = re.search(r'в\s+(\d{1,2})\s+(?:час|часа|часов)(?:\s+(\d{1,2})\s+(?:минут|минуты|минуту))?', text_lower)
+                        match = re_module.search(r'в\s+(\d{1,2})\s+(?:час|часа|часов)(?:\s+(\d{1,2})\s+(?:минут|минуты|минуту))?', text_lower)
                         if match:
                             hour = int(match.group(1))
                             minute = int(match.group(2)) if match.group(2) else 0
