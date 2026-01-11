@@ -336,16 +336,44 @@ class DecisionEngine:
         
         start_time = extracted_data.get('start_time')
         has_explicit_time = extracted_data.get('has_explicit_time', False)
+        original_text = extracted_data.get('_original_text', '')
         
-        logger.info(f"DEBUG _handle_event: start_time={start_time}, has_explicit_time={has_explicit_time}")
+        logger.info(f"DEBUG _handle_event: start_time={start_time}, has_explicit_time={has_explicit_time}, original_text='{original_text}'")
         
-        # Fallback: если start_time указан и время != 00:00:00, считаем время явно указанным
+        # Fallback 1: Если start_time указан и время != 00:00:00, считаем время явно указанным
         if start_time and not has_explicit_time:
             if start_time.hour != 0 or start_time.minute != 0:
                 has_explicit_time = True
-                logger.info(f"✅ Fallback: время явно указано ({start_time.hour}:{start_time.minute:02d}), устанавливаем has_explicit_time=True")
+                logger.info(f"✅ Fallback 1: время явно указано ({start_time.hour}:{start_time.minute:02d}), устанавливаем has_explicit_time=True")
         
-        logger.info(f"DEBUG _handle_event: после fallback has_explicit_time={has_explicit_time}, будет создан draft: {not has_explicit_time}")
+        # Fallback 2: Если start_time=None, но в тексте есть время - пытаемся извлечь
+        if not start_time and original_text and not has_explicit_time:
+            try:
+                import dateparser
+                import pytz
+                tz = pytz.timezone(timezone)
+                
+                # Пытаемся распарсить время из текста
+                parsed_time = dateparser.parse(
+                    original_text,
+                    settings={
+                        'TIMEZONE': timezone,
+                        'RETURN_AS_TIMEZONE_AWARE': True,
+                        'RELATIVE_BASE': datetime.now(tz)
+                    }
+                )
+                
+                if parsed_time:
+                    # Если время не 00:00:00, значит время явно указано
+                    if parsed_time.hour != 0 or parsed_time.minute != 0:
+                        start_time = parsed_time.astimezone(tz)
+                        has_explicit_time = True
+                        extracted_data['start_time'] = start_time
+                        logger.info(f"✅ Fallback 2: извлечено время из текста ({start_time.hour}:{start_time.minute:02d}), устанавливаем has_explicit_time=True")
+            except Exception as e:
+                logger.warning(f"Ошибка при fallback извлечении времени из текста: {e}")
+        
+        logger.info(f"DEBUG _handle_event: после fallback start_time={start_time}, has_explicit_time={has_explicit_time}, будет создан draft: {not has_explicit_time}")
         
         # Если есть дата, но нет времени (только дата без времени), устанавливаем 12:00
         if start_time and has_explicit_time:
