@@ -141,6 +141,9 @@ class DecisionEngine:
         # Если оригинальный текст не сохранен, используем title или description
         if not original_text:
             original_text = (extracted_data.get('title', '') or extracted_data.get('description', '')).lower().strip()
+            # ВАЖНО: Сохраняем original_text обратно в extracted_data для использования в _handle_event
+            if original_text:
+                extracted_data['_original_text'] = original_text
         
         # Убираем знаки препинания для более надежной проверки
         text_for_check = original_text.replace('.', '').replace(',', '').replace('!', '').replace('?', '').strip()
