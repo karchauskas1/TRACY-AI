@@ -99,23 +99,60 @@ export function CalendarPageClient() {
           console.log(`[Calendar] Нет сохраненных событий в localStorage`)
         }
         
-        // Запрашиваем свежие данные у бота через sendData
-        // ВАЖНО: Бот обработает запрос и отправит ответ в чат
-        // Так как веб-приложение не может читать ответы автоматически, используем механизм:
-        // 1. Бот отправляет события в формате TRACY_EVENTS_SYNC:{base64_json} в чат
-        // 2. После создания события в боте, события автоматически отправляются в этом формате
-        // 3. Веб-приложение использует polling для получения обновлений
+        // НОВОЕ РЕШЕНИЕ: Используем прямой вызов HTTP API бота для получения событий
+        // Для production используем Render.com API, для локальной разработки - localhost:8080
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+        const apiUrl = `${apiBaseUrl}/api/events?user_id=${user.id}`
+        
+        try {
+          const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && Array.isArray(data.events)) {
+              console.log(`[Calendar] Получено ${data.events.length} событий через HTTP API`)
+              setEvents(data.events)
+              
+              // Сохраняем в localStorage
+              localStorage.setItem("tracy_events", JSON.stringify(data.events))
+              localStorage.setItem("tracy_events_timestamp", data.timestamp)
+              
+              // Обновляем counts по датам
+              const counts: Record<string, number> = {}
+              data.events.forEach((event: Event) => {
+                try {
+                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                  counts[dateKey] = (counts[dateKey] || 0) + 1
+                } catch (e) {
+                  console.error("Error parsing event date:", e, event)
+                }
+              })
+              setEventsByDate(counts)
+              
+              setLoading(false)
+              return
+            }
+          }
+        } catch (error) {
+          console.warn(`[Calendar] HTTP API недоступен (${error}), используем fallback механизм через tg.sendData`)
+        }
+        
+        // Fallback: Используем старый механизм через tg.sendData
         const requestData = JSON.stringify({ action: "get_events", user_id: user.id })
         tg.sendData(requestData)
-        console.log(`[Calendar] Отправлен запрос событий для пользователя ${user.id}`)
+        console.log(`[Calendar] Отправлен запрос событий через tg.sendData для пользователя ${user.id}`)
         
         // Устанавливаем таймер для завершения loading
-        // События будут обновляться через периодический polling (каждые 15 секунд)
         if (!storedEvents || forceRefresh) {
           setTimeout(() => {
             setLoading(false)
             console.log(`[Calendar] Loading завершен. Событий в состоянии: ${events.length}`)
-          }, 2000)
+          }, 3000)
         } else {
           setLoading(false)
         }
@@ -170,17 +207,59 @@ export function CalendarPageClient() {
     if (user?.id) {
       loadEvents(true)
     }
+    
+    // Обрабатываем события из URL параметров (если есть)
+    // Это происходит, когда бот отправляет события через WebApp URL
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search)
+      const eventsParam = urlParams.get("events")
+      if (eventsParam) {
+        try {
+          // Декодируем base64 данные
+          const decodedData = atob(eventsParam)
+          const eventsData = JSON.parse(decodedData)
+          
+          if (eventsData.action === 'sync_events' && Array.isArray(eventsData.events)) {
+            console.log(`[Calendar] Получены события из URL параметров: ${eventsData.count} событий`)
+            setEvents(eventsData.events)
+            
+            // Сохраняем в localStorage
+            localStorage.setItem("tracy_events", JSON.stringify(eventsData.events))
+            localStorage.setItem("tracy_events_timestamp", eventsData.timestamp)
+            
+            // Обновляем counts по датам
+            const counts: Record<string, number> = {}
+            eventsData.events.forEach((event: Event) => {
+              try {
+                const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                counts[dateKey] = (counts[dateKey] || 0) + 1
+              } catch (e) {
+                console.error("Error parsing event date:", e, event)
+              }
+            })
+            setEventsByDate(counts)
+            
+            // Удаляем параметр из URL после обработки
+            window.history.replaceState({}, '', window.location.pathname)
+            
+            setLoading(false)
+          }
+        } catch (e) {
+          console.error("[Calendar] Ошибка декодирования событий из URL:", e)
+        }
+      }
+    }
   }, [user?.id])
   
   useEffect(() => {
     // Автоматическое обновление событий при открытом веб-приложении
     const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
     if (tg && user?.id) {
-      // Обновление каждые 15 секунд (достаточно часто для синхронизации)
+      // Обновление каждые 10 секунд (более частое для лучшей синхронизации)
       const intervalId = setInterval(() => {
         console.log(`[Calendar] Автоматическое обновление событий для пользователя ${user.id}`)
         loadEvents(true)
-      }, 15000) // Обновление каждые 15 секунд
+      }, 10000) // Обновление каждые 10 секунд для лучшей синхронизации
       
       // Обновление при возвращении на вкладку (focus)
       const handleFocus = () => {
