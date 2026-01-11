@@ -87,24 +87,32 @@ class MediaProcessor:
                         return None
                 
                 # Конвертируем в WAV для Google Speech Recognition
-                wav_io = io.BytesIO()
-                audio_data.export(wav_io, format="wav")
-                wav_io.seek(0)
+                # AudioFile требует файл на диске, не BytesIO
+                import tempfile
+                import os
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+                    audio_data.export(temp_file.name, format="wav")
+                    temp_file_path = temp_file.name
                 
-                # Используем WAV для распознавания
-                with sr.AudioFile(wav_io) as source:
-                    self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                    audio = self.recognizer.record(source)
+                try:
+                    # Используем WAV для распознавания
+                    with sr.AudioFile(temp_file_path) as source:
+                        self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                        audio = self.recognizer.record(source)
                 
-                # Распознавание через Google Speech Recognition
-                text = self.recognizer.recognize_google(
-                    audio, 
-                    language=language if language != "ru" else "ru-RU"
-                )
-                
-                if text and text.strip():
-                    logger.info(f"Распознан текст через Google: {text[:50]}...")
-                    return text.strip()
+                    # Распознавание через Google Speech Recognition
+                    text = self.recognizer.recognize_google(
+                        audio, 
+                        language=language if language != "ru" else "ru-RU"
+                    )
+                    
+                    if text and text.strip():
+                        logger.info(f"Распознан текст через Google: {text[:50]}...")
+                        return text.strip()
+                finally:
+                    # Удаляем временный файл
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
                     
             except sr.UnknownValueError:
                 logger.warning("Не удалось распознать речь (речь не распознана)")

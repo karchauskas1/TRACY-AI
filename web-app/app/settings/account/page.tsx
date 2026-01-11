@@ -6,9 +6,11 @@ import { X, User, ArrowLeft } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar"
 import { Button } from "../../../components/ui/button"
+import { useLocale } from "../../../lib/locale-context"
 
 export default function AccountPage() {
   const router = useRouter()
+  const { t } = useLocale()
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export default function AccountPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-lg font-semibold">Аккаунт</h1>
+          <h1 className="text-lg font-semibold">{t("settings.account")}</h1>
           <div className="w-5" />
         </div>
       </header>
@@ -79,7 +81,7 @@ export default function AccountPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
-                Профиль
+                {t("settings.profile")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -101,27 +103,27 @@ export default function AccountPage() {
               <div className="space-y-4 pt-4 border-t border-border">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground mb-1 block">
-                    Имя
+                    {t("settings.firstName")}
                   </label>
                   <p className="text-base">{user?.first_name || "—"}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground mb-1 block">
-                    Фамилия
+                    {t("settings.lastName")}
                   </label>
                   <p className="text-base">{user?.last_name || "—"}</p>
                 </div>
                 {user?.username && (
                   <div>
                     <label className="text-sm font-medium text-muted-foreground mb-1 block">
-                      Username
+                      {t("settings.username")}
                     </label>
                     <p className="text-base">@{user.username}</p>
                   </div>
                 )}
                 <div>
                   <label className="text-sm font-medium text-muted-foreground mb-1 block">
-                    ID
+                    {t("settings.id")}
                   </label>
                   <p className="text-base font-mono text-sm">{user?.id || "—"}</p>
                 </div>

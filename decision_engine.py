@@ -145,14 +145,19 @@ class DecisionEngine:
         # Убираем знаки препинания для более надежной проверки
         text_for_check = original_text.replace('.', '').replace(',', '').replace('!', '').replace('?', '').strip()
         
+        # Определяем наличие слова "удали" или "удалить" для более строгих проверок
+        has_delete_word = any(word in text_for_check for word in ['удали', 'удалить', 'очистить']) if original_text else False
+        
         if original_text:
             # Проверяем "удали все планы/события" - ВЫСШИЙ ПРИОРИТЕТ (переопределяем даже если NLP вернул другой intent)
+            # ВАЖНО: Проверяем ТОЛЬКО если в тексте есть явное слово "удали" или "удалить", чтобы не перехватывать запросы на создание
             delete_all_patterns = [
                 'удали все планы', 'удалить все планы', 'удали все события', 'удалить все события',
                 'удали все мои события', 'удалить все мои события', 'удали все мои планы',
-                'очистить все', 'удали все', 'удалить все'
+                'очистить все события', 'очистить все планы'
             ]
-            if any(phrase in text_for_check for phrase in delete_all_patterns):
+            # Более строгая проверка - только если есть слово "удали" или "удалить"
+            if has_delete_word and any(phrase in text_for_check for phrase in delete_all_patterns):
                 intent = 'delete_all'
                 logger.warning(f"Fallback: переопределил intent '{original_intent}' → 'delete_all' из текста: '{original_text}'")
                 extracted_data['intent'] = 'delete_all'
@@ -167,6 +172,17 @@ class DecisionEngine:
                 extracted_data['intent'] = 'list_events'
                 extracted_data['time_period'] = 'all'
             
+            # Проверяем "какие события на завтра/сегодня/неделю" (с указанием периода)
+            elif any(phrase in text_for_check for phrase in ['какие события на завтра', 'что на завтра', 'события на завтра', 'планы на завтра']):
+                intent = 'list_events'
+                logger.info(f"Fallback: переопределил intent '{original_intent}' → 'list_events' (tomorrow) из текста: '{original_text}'")
+                extracted_data['intent'] = 'list_events'
+                extracted_data['time_period'] = 'tomorrow'
+            elif any(phrase in text_for_check for phrase in ['какие события сегодня', 'что сегодня', 'события сегодня', 'планы сегодня']):
+                intent = 'list_events'
+                logger.info(f"Fallback: переопределил intent '{original_intent}' → 'list_events' (today) из текста: '{original_text}'")
+                extracted_data['intent'] = 'list_events'
+                extracted_data['time_period'] = 'today'
             # Проверяем "покажи события/планы" (без "все")
             elif any(phrase in text_for_check for phrase in [
                 'покажи события', 'покажи планы', 'покажи дела', 'какие планы', 'что у меня', 'что запланировано'
@@ -177,8 +193,8 @@ class DecisionEngine:
                 if not extracted_data.get('time_period'):
                     extracted_data['time_period'] = 'week'
             
-            # Проверяем "удали все за период"
-            elif any(phrase in text_for_check for phrase in ['удали все за', 'удали планы на', 'удали все на', 'удали за']):
+            # Проверяем "удали все за период" - ТОЛЬКО если есть слово "удали" или "удалить"
+            elif has_delete_word and any(phrase in text_for_check for phrase in ['удали все за', 'удали планы на', 'удали все на', 'удали за']):
                 intent = 'delete_by_period'
                 logger.warning(f"Fallback: переопределил intent '{original_intent}' → 'delete_by_period' из текста: '{original_text}'")
                 extracted_data['intent'] = 'delete_by_period'
@@ -335,16 +351,49 @@ class DecisionEngine:
                     start_time = start_time.astimezone(tz)
         
         # Дедупликация: проверяем похожие события
-        similar_events = self.db.find_similar_events(
-            user_id, title, start_time, days_window=7
-        )
-        
-        # Если нашли похожее событие и есть время - обновляем
-        if similar_events and start_time:
-            best_match = similar_events[0]
-            return await self._update_existing_event(
-                user_id, best_match, extracted_data, calendar_connections, timezone
+        # ВАЖНО: Проверяем только если start_time указан, и только для очень похожих событий (точное совпадение названия и близкое время)
+        # НЕ обновляем автоматически - пользователь может хотеть создать новое событие, даже если похожее уже есть
+        similar_events = []
+        if start_time:
+            similar_events = self.db.find_similar_events(
+                user_id, title, start_time, days_window=1  # Уменьшаем окно до 1 дня для более строгой проверки
             )
+            
+            # Обновляем ТОЛЬКО если:
+            # 1. Есть очень похожее событие (точное совпадение названия или почти точное)
+            # 2. И время совпадает очень близко (в пределах 1 часа)
+            if similar_events:
+                best_match = similar_events[0]
+                match_start_time = best_match.get('start_time')
+                
+                # Проверяем, что это действительно похожее событие (название совпадает почти точно)
+                match_title = best_match.get('title', '').lower().strip()
+                if title.lower().strip() in match_title or match_title in title.lower().strip():
+                    # Проверяем, что время очень близкое (в пределах 1 часа)
+                    if match_start_time:
+                        if isinstance(match_start_time, str):
+                            try:
+                                match_start_time = datetime.fromisoformat(match_start_time.replace('Z', '+00:00'))
+                            except:
+                                match_start_time = None
+                        
+                        if match_start_time:
+                            import pytz
+                            tz = pytz.timezone(timezone)
+                            if match_start_time.tzinfo is None:
+                                match_start_time = tz.localize(match_start_time)
+                            else:
+                                match_start_time = match_start_time.astimezone(tz)
+                            
+                            time_diff = abs((start_time - match_start_time).total_seconds())
+                            # Если время отличается меньше чем на 1 час, обновляем событие
+                            if time_diff < 3600:  # 1 час = 3600 секунд
+                                logger.info(f"Найдено очень похожее событие (ID={best_match.get('id')}), обновляю вместо создания нового")
+                                return await self._update_existing_event(
+                                    user_id, best_match, extracted_data, calendar_connections, timezone
+                                )
+        
+        # Если похожих событий нет или они недостаточно похожи - создаем новое событие
         
         # Если нет времени или низкая уверенность - создаем draft
         if not has_explicit_time or extracted_data.get('confidence', 0) < 0.7:
@@ -392,6 +441,16 @@ class DecisionEngine:
             priority=extracted_data.get('priority', 0),
             status='confirmed'  # События с явным временем считаются подтвержденными
         )
+        
+        # Проверяем, что событие действительно сохранилось
+        if not db_event_id or db_event_id == 0:
+            logger.error(f"❌ ОШИБКА: Не удалось сохранить событие в БД! title={title}, start_time={start_time}")
+            return {
+                'action': 'error',
+                'message': '❌ Не удалось сохранить событие в календарь. Попробуй еще раз или обратись к администратору.',
+                'needs_confirmation': False
+            }
+        
         logger.info(f"✓ Событие сохранено в БД: ID={db_event_id}, title={title}, start_time={start_time}")
         
         # Сохраняем последнее событие в контекст сразу после создания
@@ -1037,6 +1096,38 @@ class DecisionEngine:
         
         self.db.update_event(event_id, **updates)
         
+        # Если обновлено время начала события, нужно пересоздать напоминания
+        if 'start_time' in updates:
+            new_start_time = updates['start_time']
+            # Удаляем старые напоминания
+            self.db.delete_reminders_for_event(event_id)
+            
+            # Создаем новые напоминания (если reminder_scheduler доступен)
+            if hasattr(self, 'reminder_scheduler') and self.reminder_scheduler:
+                try:
+                    # Получаем настройки пользователя для напоминаний
+                    user = self.db.get_or_create_user(user_id)
+                    default_reminder_minutes = user.get('default_reminder_minutes', 15)
+                    
+                    # Конвертируем new_start_time в datetime если это строка
+                    if isinstance(new_start_time, str):
+                        from datetime import datetime
+                        import pytz
+                        new_start_time = datetime.fromisoformat(new_start_time.replace('Z', '+00:00'))
+                        if new_start_time.tzinfo is None:
+                            new_start_time = pytz.UTC.localize(new_start_time)
+                    
+                    # Создаем новые напоминания
+                    self.reminder_scheduler.create_reminders_for_event(
+                        user_id=user_id,
+                        event_id=event_id,
+                        event_start_time=new_start_time,
+                        reminder_minutes=[default_reminder_minutes]
+                    )
+                    logger.info(f"Созданы новые напоминания для перенесенного события {event_id}")
+                except Exception as e:
+                    logger.error(f"Ошибка создания новых напоминаний для события {event_id}: {e}", exc_info=True)
+        
         # Обновляем в календаре
         if external_id and provider:
             try:
@@ -1102,14 +1193,51 @@ class DecisionEngine:
             'needs_confirmation': False
         }
     
-    async def _handle_delete_all(self, user_id: int, calendar_connections: List[Dict]) -> Dict:
+    async def _handle_delete_all(self, user_id: int, calendar_connections: List[Dict], confirmed: bool = False) -> Dict:
         """Обработать удаление всех событий."""
-        # Сначала получаем список событий БЕЗ удаления из БД
+        # Сначала получаем количество событий для подтверждения
+        param_placeholder = "%s" if self.db.use_postgresql else "?"
         conn = self.db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, external_id, provider FROM events WHERE user_id = ?", (user_id,))
-        events = [dict(row) for row in cursor.fetchall()]
-        conn.close()
+        cursor.execute(f"SELECT COUNT(*) FROM events WHERE user_id = {param_placeholder}", (user_id,))
+        count_result = cursor.fetchone()
+        events_count = count_result[0] if count_result else 0
+        self.db.return_connection(conn)
+        
+        # Если не подтверждено, запрашиваем подтверждение
+        if not confirmed:
+            return {
+                'action': 'delete_all_confirmation',
+                'message': f"⚠️ **Вы точно хотите удалить все события?**\n\n"
+                          f"Будет удалено **{events_count}** событий из календаря.\n\n"
+                          f"Это действие нельзя отменить. Подтверди удаление, написав \"да\" или \"подтверждаю\".",
+                'needs_confirmation': True,
+                'confirmation_type': 'delete_all'
+            }
+        
+        # Если подтверждено, выполняем удаление
+        # Сначала получаем список событий БЕЗ удаления из БД
+        param_placeholder = "%s" if self.db.use_postgresql else "?"
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        if self.db.use_postgresql:
+            from psycopg2.extras import RealDictCursor
+            cursor.close()
+            dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
+            dict_cursor.execute(f"SELECT id, external_id, provider FROM events WHERE user_id = {param_placeholder}", (user_id,))
+            events = [dict(row) for row in dict_cursor.fetchall()]
+            dict_cursor.close()
+        else:
+            cursor.execute(f"SELECT id, external_id, provider FROM events WHERE user_id = {param_placeholder}", (user_id,))
+            rows = cursor.fetchall()
+            # Преобразуем в словари для SQLite
+            events = []
+            columns = [desc[0] for desc in cursor.description]
+            for row in rows:
+                events.append(dict(zip(columns, row)))
+        
+        self.db.return_connection(conn)
         
         # Удаляем из календарей ПЕРЕД удалением из БД
         deleted_from_calendars = 0
@@ -1507,27 +1635,39 @@ class DecisionEngine:
         
         # Если период не указан явно, пытаемся определить из текста запроса
         if not time_period or time_period == 'null':
-            query_text = (extracted_data.get('title', '') or extracted_data.get('description', '') or '').lower()
-            if any(word in query_text for word in ['сегодня', 'today', 'на сегодня']):
-                time_period = 'today'
-            elif any(word in query_text for word in ['завтра', 'tomorrow', 'на завтра']):
+            # Сначала проверяем original_text, потом title/description
+            query_text = extracted_data.get('_original_text', '').lower()
+            if not query_text:
+                query_text = (extracted_data.get('title', '') or extracted_data.get('description', '') or '').lower()
+            
+            # Более точная проверка периодов (проверяем более специфичные фразы первыми)
+            if any(phrase in query_text for phrase in ['на завтра', 'завтра', 'tomorrow']):
                 time_period = 'tomorrow'
-            elif any(word in query_text for word in ['месяц', 'month', 'на месяц', 'в месяц']):
-                time_period = 'month'
-            elif any(word in query_text for word in ['все', 'all', 'все события', 'все дела']):
+            elif any(phrase in query_text for phrase in ['на сегодня', 'сегодня', 'today']):
+                time_period = 'today'
+            elif any(phrase in query_text for phrase in ['все события', 'все дела', 'все планы', 'все']):
                 time_period = 'all'
+            elif any(phrase in query_text for phrase in ['на месяц', 'месяц', 'month']):
+                time_period = 'month'
+            elif any(phrase in query_text for phrase in ['на неделю', 'неделю', 'неделя', 'week']):
+                time_period = 'week'
             else:
                 time_period = 'week'  # По умолчанию неделя
+        
+        logger.info(f"📋 Получение событий для периода: {time_period} (из extracted_data: {extracted_data.get('time_period')}, original_text: {extracted_data.get('_original_text', '')[:50]})")
         
         # Вычисляем диапазон дат
         if time_period == 'today':
             start_from = now.replace(hour=0, minute=0, second=0, microsecond=0)
             start_to = now.replace(hour=23, minute=59, second=59, microsecond=999999)
             period_name = "сегодня"
+            logger.info(f"📅 Период 'today': {start_from} - {start_to}")
         elif time_period == 'tomorrow':
-            start_from = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            start_to = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=999999)
+            tomorrow_date = now + timedelta(days=1)
+            start_from = tomorrow_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            start_to = tomorrow_date.replace(hour=23, minute=59, second=59, microsecond=999999)
             period_name = "завтра"
+            logger.info(f"📅 Период 'tomorrow': {start_from} - {start_to}")
         elif time_period == 'week':
             start_from = now.replace(hour=0, minute=0, second=0, microsecond=0)
             start_to = now + timedelta(days=7)
@@ -1547,7 +1687,9 @@ class DecisionEngine:
             period_name = "ближайшую неделю"
         
         # Получаем события из БД
+        logger.info(f"📊 Запрос событий из БД: user_id={user_id}, start_from={start_from}, start_to={start_to}, limit=100")
         db_events = self.db.get_events(user_id, limit=100, start_from=start_from, start_to=start_to)
+        logger.info(f"📊 Получено {len(db_events)} событий из БД для периода {period_name}")
         
         # Используем множество для отслеживания уже добавленных событий (по external_id)
         seen_event_ids = set()
@@ -1560,23 +1702,34 @@ class DecisionEngine:
                 if isinstance(event['start_time'], str):
                     try:
                         event['start_time'] = datetime.fromisoformat(event['start_time'].replace('Z', '+00:00'))
-                    except:
+                    except Exception as e:
+                        logger.warning(f"Ошибка парсинга start_time события {event.get('id')}: {e}")
                         continue
                 if event['start_time'].tzinfo is None:
                     event['start_time'] = tz.localize(event['start_time'])
                 else:
                     event['start_time'] = event['start_time'].astimezone(tz)
-            
-            # Проверяем диапазон дат
-            if start_from and event.get('start_time') and event['start_time'] < start_from:
-                continue
-            if start_to and event.get('start_time') and event['start_time'] > start_to:
-                continue
+                
+                # Проверяем диапазон дат (дополнительная проверка, так как БД уже фильтрует)
+                event_date = event['start_time'].date()
+                if start_from and event_date < start_from.date():
+                    logger.debug(f"Событие {event.get('id')} вне диапазона (раньше start_from): {event_date} < {start_from.date()}")
+                    continue
+                if start_to and event_date > start_to.date():
+                    logger.debug(f"Событие {event.get('id')} вне диапазона (позже start_to): {event_date} > {start_to.date()}")
+                    continue
+            else:
+                # Событие без времени - пропускаем для периодов с датами
+                if start_from or start_to:
+                    continue
             
             event_id = event.get('external_id') or f"db_{event.get('id')}"
             if event_id not in seen_event_ids:
                 seen_event_ids.add(event_id)
                 all_events.append(event)
+                logger.debug(f"✓ Добавлено событие: {event.get('title')} на {event.get('start_time')}")
+        
+        logger.info(f"📊 После фильтрации осталось {len(all_events)} событий для отображения")
         
         # Добавляем события из подключенных календарей
         for conn in calendar_connections:
@@ -1641,12 +1794,14 @@ class DecisionEngine:
                 'needs_confirmation': False
             }
         
-        # Формируем красивое сообщение
-        message = f"📅 События на {period_name} ({len(all_events)}):\n\n"
+        # Формируем красивое подробное сообщение со всеми деталями
+        message = f"📅 **Все события на {period_name}** ({len(all_events)}):\n\n"
         
         current_date = None
+        event_number = 0
         for event in all_events:
             start_time = event.get('start_time')
+            end_time = event.get('end_time')
             
             if start_time:
                 # Форматируем дату для группировки
@@ -1654,6 +1809,12 @@ class DecisionEngine:
                     start_time = tz.localize(start_time)
                 else:
                     start_time = start_time.astimezone(tz)
+                
+                if end_time:
+                    if end_time.tzinfo is None:
+                        end_time = tz.localize(end_time)
+                    else:
+                        end_time = end_time.astimezone(tz)
                 
                 event_date = start_time.date()
                 
@@ -1671,28 +1832,44 @@ class DecisionEngine:
                     # Если это сегодня или завтра, показываем это
                     today = now.date()
                     if event_date == today:
-                        date_header = f"\n📆 Сегодня ({weekday}, {day} {month})"
+                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 **Сегодня** ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     elif event_date == (now + timedelta(days=1)).date():
-                        date_header = f"\n📆 Завтра ({weekday}, {day} {month})"
+                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 **Завтра** ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     else:
-                        date_header = f"\n📆 {weekday}, {day} {month}"
+                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 {weekday}, {day} {month}\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     
-                    message += date_header + "\n"
+                    message += date_header + "\n\n"
                 
-                # Добавляем событие
+                # Добавляем событие с подробной информацией
+                event_number += 1
                 time_str = start_time.strftime("%H:%M")
+                
+                # Если есть end_time, показываем диапазон времени
+                if end_time:
+                    end_time_str = end_time.strftime("%H:%M")
+                    time_display = f"{time_str} - {end_time_str}"
+                else:
+                    time_display = time_str
+                
                 title = event.get('title', 'Без названия')
                 location = event.get('location')
                 description = event.get('description')
                 
-                message += f"  ⏰ {time_str} — {title}\n"
+                message += f"**{event_number}. {title}**\n"
+                message += f"   ⏰ Время: {time_display}\n"
                 
                 if location:
-                    message += f"     📍 {location}\n"
+                    message += f"   📍 Место: {location}\n"
                 
                 if description and len(description.strip()) > 0:
-                    desc_preview = description[:50] + "..." if len(description) > 50 else description
-                    message += f"     📝 {desc_preview}\n"
+                    # Показываем полное описание, если оно не слишком длинное, иначе обрезаем
+                    if len(description) > 200:
+                        desc_preview = description[:200] + "..."
+                    else:
+                        desc_preview = description
+                    message += f"   📝 Описание: {desc_preview}\n"
+                
+                message += "\n"
             else:
                 # Событие без времени
                 title = event.get('title', 'Без названия')

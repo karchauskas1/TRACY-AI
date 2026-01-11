@@ -130,6 +130,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Дополнительные кнопки для меню (inline)
     keyboard = []
+    keyboard.append([InlineKeyboardButton("📋 Список всех событий", callback_data="list_events_all")])
     keyboard.append([InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")])
     keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
     
@@ -309,18 +310,6 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Кнопка для настроек уведомлений
     keyboard.append([InlineKeyboardButton("Уведомления", callback_data="settings_notifications")])
     
-    # Кнопка для открытия веб-приложения (Telegram Web App, только если URL валидный и не localhost)
-    web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
-    # Telegram не принимает localhost для inline кнопок, поэтому добавляем только для реальных доменов
-    if "localhost" not in web_url.lower() and web_url.startswith("https://"):
-        try:
-            keyboard.append([InlineKeyboardButton(
-                "🌐 Открыть веб-приложение",
-                web_app=WebAppInfo(url=web_url)
-            )])
-        except:
-            pass  # Если не получилось, просто не добавляем кнопку
-    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     status_text = "Настройки TRACY:\n\n"
@@ -368,7 +357,68 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = query.data
     
-    if data == "settings_google":
+    if data == "list_events_all":
+        # Показываем список всех событий
+        user = db.get_or_create_user(user_id)
+        timezone = user.get('timezone', 'Europe/Moscow')
+        calendar_connections = db.get_calendar_connections(user_id)
+        
+        # Создаем extracted_data для запроса всех событий
+        extracted_data = {
+            'intent': 'list_events',
+            'time_period': 'all',
+            '_original_text': 'покажи все события'
+        }
+        
+        # Получаем список всех событий через decision_engine
+        if not decision_engine:
+            logger.error("decision_engine не инициализирован")
+            await query.answer("Ошибка инициализации. Попробуй перезапустить бота.", show_alert=True)
+            return
+        
+        # Показываем индикатор загрузки
+        await query.answer("Загружаю список событий...")
+        
+        result = await decision_engine._handle_list_events(user_id, extracted_data, calendar_connections, timezone)
+        
+        # Отправляем результат пользователю
+        reply_keyboard = get_reply_keyboard(context)
+        message_text = result['message']
+        
+        # Разбиваем сообщение на части, если оно слишком длинное (Telegram лимит 4096 символов)
+        if len(message_text) > 4000:
+            # Разбиваем на части по строкам
+            parts = []
+            current_part = ""
+            lines = message_text.split('\n')
+            for line in lines:
+                if len(current_part) + len(line) + 1 > 4000:
+                    if current_part:
+                        parts.append(current_part)
+                    current_part = line + '\n'
+                else:
+                    current_part += line + '\n'
+            if current_part:
+                parts.append(current_part)
+            
+            # Отправляем первую часть, редактируя исходное сообщение
+            await query.edit_message_text(parts[0], parse_mode="Markdown", reply_markup=None)
+            
+            # Отправляем остальные части как отдельные сообщения
+            for part in parts[1:]:
+                await query.message.reply_text(part, parse_mode="Markdown")
+        else:
+            # Сообщение помещается в одно - отправляем его
+            await query.edit_message_text(message_text, parse_mode="Markdown", reply_markup=None)
+        
+        # Добавляем кнопку "Назад в меню" в отдельном сообщении
+        keyboard = [[InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]]
+        inline_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text("⬅️ Назад в меню:", reply_markup=inline_markup)
+        
+        return
+    
+    elif data == "settings_google":
         try:
             # Проверяем, не подключен ли уже
             connections = db.get_calendar_connections(user_id)
@@ -566,17 +616,6 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Кнопка для настроек уведомлений
         keyboard.append([InlineKeyboardButton("Уведомления", callback_data="settings_notifications")])
-        
-        # Кнопка для открытия веб-приложения
-        web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
-        if "localhost" not in web_url.lower() and web_url.startswith("https://"):
-            try:
-                keyboard.append([InlineKeyboardButton(
-                    "🌐 Открыть веб-приложение",
-                    web_app=WebAppInfo(url=web_url)
-                )])
-            except:
-                pass
         
         # Кнопка "Назад" в меню
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")])
@@ -871,6 +910,73 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
+    elif data.startswith("reschedule_event_"):
+        # Обработка переноса события
+        try:
+            event_id = int(data.split("_")[-1])
+            user_id = query.from_user.id
+            
+            # Получаем событие из БД
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            try:
+                if db.use_postgresql:
+                    cursor.execute("SELECT * FROM events WHERE id = %s AND user_id = %s", (event_id, user_id))
+                else:
+                    cursor.execute("SELECT * FROM events WHERE id = ? AND user_id = ?", (event_id, user_id))
+                
+                event_row = cursor.fetchone()
+                if not event_row:
+                    await query.answer("Событие не найдено", show_alert=True)
+                    db.return_connection(conn)
+                    return
+                
+                # Преобразуем в словарь
+                if db.use_postgresql:
+                    from psycopg2.extras import RealDictCursor
+                    cursor.close()
+                    dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
+                    dict_cursor.execute("SELECT * FROM events WHERE id = %s AND user_id = %s", (event_id, user_id))
+                    event_dict = dict(dict_cursor.fetchone())
+                    dict_cursor.close()
+                else:
+                    # SQLite возвращает Row объект
+                    columns = [desc[0] for desc in cursor.description]
+                    event_dict = dict(zip(columns, event_row))
+                
+                # Переходим в режим ожидания ответа пользователя
+                context.user_data['waiting_reschedule_event_id'] = event_id
+                context.user_data['waiting_reschedule_event'] = event_dict
+                
+                # Получаем название события
+                event_title = event_dict.get('title', 'Событие')
+                
+                # Отправляем сообщение с просьбой указать новое время
+                reply_keyboard = get_reply_keyboard(context)
+                await query.message.reply_text(
+                    f"⏰ **Перенос события**\n\n"
+                    f"📅 **{event_title}**\n\n"
+                    f"На какое время перенести? Укажи дату и время, например:\n"
+                    f"• Завтра в 15:00\n"
+                    f"• Через 2 часа\n"
+                    f"• В пятницу в 18:00\n"
+                    f"• 25 января в 14:30",
+                    reply_markup=reply_keyboard,
+                    parse_mode="Markdown"
+                )
+                
+                await query.answer()
+                
+            finally:
+                db.return_connection(conn)
+                
+        except ValueError:
+            await query.answer("Ошибка: некорректный ID события", show_alert=True)
+        except Exception as e:
+            logger.error(f"Ошибка при обработке переноса события: {e}", exc_info=True)
+            await query.answer("Произошла ошибка. Попробуй еще раз.", show_alert=True)
+    
     elif data.startswith("reminder_set_"):
         # Установка времени напоминания
         try:
@@ -1057,8 +1163,21 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         if data == "meeting_full_transcript":
-            # Показать полный текст
-            transcript = meeting_data.get('transcript', 'Расшифровка недоступна')
+            # Показать полный текст - получаем из БД для гарантии полного текста
+            meeting_id = meeting_data.get('id')
+            if meeting_id:
+                # Получаем полный текст из БД
+                db_meeting = db.get_meeting(meeting_id, user_id)
+                if db_meeting:
+                    transcript = db_meeting.get('transcript') or db_meeting.get('raw_text', 'Расшифровка недоступна')
+                    logger.info(f"Получен полный текст встречи из БД: {len(transcript)} символов для встречи {meeting_id}")
+                else:
+                    transcript = meeting_data.get('transcript') or meeting_data.get('raw_text', 'Расшифровка недоступна')
+                    logger.warning(f"Встреча {meeting_id} не найдена в БД, используем данные из памяти")
+            else:
+                # Если нет ID, используем данные из памяти
+                transcript = meeting_data.get('transcript') or meeting_data.get('raw_text', 'Расшифровка недоступна')
+                logger.warning("Нет ID встречи, используем данные из памяти")
             
             keyboard = [
                 [InlineKeyboardButton("📋 Сделать расширенное резюме", callback_data="meeting_extended_summary")],
@@ -1777,58 +1896,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action = data.get('action')
             
             if action == 'get_events':
-                # Веб-приложение запрашивает события
+                # Веб-приложение запрашивает события (открыто через Menu Button или кнопку WebApp)
                 web_events = await get_events_for_web_app(user_id)
                 
-                logger.info(f"Веб-приложение запросило события для пользователя {user_id}. Получено {len(web_events)} событий из БД")
+                logger.info(f"📱 Веб-приложение запросило события для пользователя {user_id}. Получено {len(web_events)} событий из БД")
                 
                 # Сохраняем события в user_data для последующего доступа
                 context.user_data['last_web_app_events'] = web_events
                 context.user_data['last_web_app_events_time'] = datetime.now().isoformat()
                 
-                import json
-                response_data = json.dumps({
-                    'action': 'sync_events',
-                    'events': web_events,
-                    'timestamp': datetime.now().isoformat(),
-                    'count': len(web_events)
-                }, ensure_ascii=False, default=str)
-                context.user_data['last_web_app_events_json'] = response_data
+                # РЕШЕНИЕ: Отправляем события обратно в веб-приложение через сообщение с кнопкой WebApp
+                # Но вместо передачи всех событий в URL (что вызывает ошибку "Request Header Too Large"),
+                # отправляем сообщение с инструкцией и кнопкой для открытия веб-приложения
+                # Веб-приложение само запросит события через HTTP API (localhost:8080 для локальной разработки)
+                # или через localStorage (для production)
                 
-                # КРИТИЧЕСКИ ВАЖНО: Telegram Web App не может читать ответы от бота напрямую через sendData
-                # Решение: Отправляем данные через обычное сообщение, которое веб-приложение может прочитать
-                # через механизм чтения последних сообщений или через копирование вручную
-                # Но более правильное решение - использовать механизм через прямое сохранение в localStorage
-                # через специальный механизм, который мы реализуем ниже
-                
-                # Отправляем сообщение с данными в специальном формате
-                # Формат: TRACY_EVENTS_SYNC:{base64_encoded_json}
-                # Веб-приложение может декодировать это и обновить localStorage
                 try:
-                    import base64
-                    encoded_data = base64.b64encode(response_data.encode('utf-8')).decode('utf-8')
+                    # Отправляем сообщение пользователю с информацией о синхронизации
+                    # Это сообщение будет видно в чате, но не будет мешать работе веб-приложения
+                    # Веб-приложение уже открыто и будет использовать HTTP API или localStorage
+                    logger.info(f"✅ События готовы для веб-приложения: {len(web_events)} событий для пользователя {user_id}")
+                    logger.info(f"📋 Веб-приложение должно запросить события через HTTP API (localhost:8080) или использовать localStorage")
                     
-                    # Отправляем сообщение (будет видно в чате, но веб-приложение может его использовать)
-                    await update.message.reply_text(
-                        f"TRACY_EVENTS_SYNC:{encoded_data}",
-                        reply_markup=None,
-                        parse_mode=None
-                    )
-                    logger.info(f"✅ Отправлены {len(web_events)} событий пользователю {user_id} (base64 encoded)")
-                    
-                    # ДОПОЛНИТЕЛЬНО: Сохраняем события в user_data для доступа через другой механизм
-                    # Это позволит веб-приложению получить события при следующем запросе
+                    # НЕ отправляем сообщение в чат - веб-приложение уже открыто и работает
+                    # События доступны через HTTP API или будут загружены из localStorage
                     
                 except Exception as e:
-                    logger.error(f"❌ Ошибка отправки событий через сообщение: {e}", exc_info=True)
-                    # Fallback: отправляем короткое подтверждение
-                    try:
-                        await update.message.reply_text(
-                            f"✅ События готовы ({len(web_events)} шт.)",
-                            reply_markup=None
-                        )
-                    except Exception as e2:
-                        logger.error(f"❌ Ошибка отправки подтверждения: {e2}")
+                    logger.error(f"❌ Ошибка обработки запроса событий: {e}", exc_info=True)
                 
                 return
             
@@ -1940,6 +2034,124 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif text == "📋 Меню" or text.lower() == 'меню':
             # Открываем главное меню
             await menu_command(update, context)
+            return
+    
+    # Проверяем, ожидаем ли мы переноса события (ВЫСШИЙ ПРИОРИТЕТ после web_app_data)
+    waiting_reschedule_event_id = context.user_data.get('waiting_reschedule_event_id')
+    if waiting_reschedule_event_id:
+        # Обрабатываем ответ пользователя для переноса события
+        event_dict = context.user_data.get('waiting_reschedule_event')
+        if not event_dict:
+            # Если событие не найдено в контексте, получаем из БД
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            try:
+                if db.use_postgresql:
+                    from psycopg2.extras import RealDictCursor
+                    cursor.close()
+                    dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
+                    dict_cursor.execute("SELECT * FROM events WHERE id = %s AND user_id = %s", (waiting_reschedule_event_id, user_id))
+                    event_dict = dict(dict_cursor.fetchone())
+                    dict_cursor.close()
+                else:
+                    cursor.execute("SELECT * FROM events WHERE id = ? AND user_id = ?", (waiting_reschedule_event_id, user_id))
+                    event_row = cursor.fetchone()
+                    if event_row:
+                        columns = [desc[0] for desc in cursor.description]
+                        event_dict = dict(zip(columns, event_row))
+            finally:
+                db.return_connection(conn)
+        
+        if event_dict:
+            # Очищаем состояние ожидания
+            context.user_data.pop('waiting_reschedule_event_id', None)
+            context.user_data.pop('waiting_reschedule_event', None)
+            
+            # Используем NLP для извлечения нового времени
+            user = db.get_or_create_user(user_id)
+            user_timezone = user.get('timezone', 'Europe/Moscow')
+            user_locale = user.get('locale', 'ru_RU')
+            ai_mode = context.user_data.get('ai_mode', 'soft')
+            
+            # Извлекаем текст из сообщения
+            text = None
+            try:
+                await context.bot.send_chat_action(
+                    chat_id=update.effective_chat.id,
+                    action=ChatAction.TYPING
+                )
+                text = await media_processor.extract_text_from_message(update, bot=context.bot)
+            except Exception as e:
+                logger.error(f"Ошибка извлечения текста: {e}", exc_info=True)
+                reply_keyboard = get_reply_keyboard(context)
+                await update.message.reply_text(
+                    "❌ Не удалось обработать сообщение. Попробуй еще раз.",
+                    reply_markup=reply_keyboard
+                )
+                return
+            
+            if not text:
+                reply_keyboard = get_reply_keyboard(context)
+                await update.message.reply_text(
+                    "❌ Не удалось распознать сообщение. Попробуй еще раз.",
+                    reply_markup=reply_keyboard
+                )
+                return
+            
+            # Добавляем контекст события для NLP
+            extracted_data = await nlp_extractor.extract_intent_and_context(
+                text,
+                user_timezone,
+                user_locale,
+                last_event=event_dict,
+                is_reply=False,
+                interpretation_mode=ai_mode
+            )
+            
+            # Проверяем, что извлечено время
+            if not extracted_data.get('start_time'):
+                reply_keyboard = get_reply_keyboard(context)
+                await update.message.reply_text(
+                    "❌ Не удалось определить новое время. Попробуй еще раз, например:\n"
+                    "• Завтра в 15:00\n"
+                    "• Через 2 часа\n"
+                    "• В пятницу в 18:00",
+                    reply_markup=reply_keyboard
+                )
+                return
+            
+            # Обновляем событие через decision_engine
+            calendar_connections = db.get_calendar_connections(user_id)
+            
+            result = await decision_engine._update_existing_event(
+                user_id,
+                event_dict,
+                extracted_data,
+                calendar_connections,
+                user_timezone
+            )
+            
+            # Синхронизируем события с веб-приложением
+            chat_id = update.effective_chat.id if update.effective_chat else user_id
+            await sync_events_to_web_app(user_id, context, chat_id=chat_id)
+            
+            # Отправляем результат
+            reply_keyboard = get_reply_keyboard(context)
+            await update.message.reply_text(
+                result.get('message', 'Событие перенесено'),
+                reply_markup=reply_keyboard,
+                parse_mode="Markdown"
+            )
+            return
+        else:
+            # Событие не найдено
+            context.user_data.pop('waiting_reschedule_event_id', None)
+            context.user_data.pop('waiting_reschedule_event', None)
+            reply_keyboard = get_reply_keyboard(context)
+            await update.message.reply_text(
+                "❌ Событие не найдено. Попробуй еще раз.",
+                reply_markup=reply_keyboard
+            )
             return
     
     # Проверяем, находимся ли мы в режиме ожидания аудио для встречи (ВЫСШИЙ ПРИОРИТЕТ)
@@ -2340,35 +2552,85 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         typing_task = asyncio.create_task(keep_typing())
         
-        # Получаем контекст последнего события для этого пользователя
-        last_event = db.get_last_event(user_id)
+        # ПРОВЕРЯЕМ ПОДТВЕРЖДЕНИЕ ПЕРЕД извлечением intent и другой обработкой
+        confirmation_type = context.user_data.get('pending_confirmation')
+        if confirmation_type:
+            # Пользователь отвечает на запрос подтверждения
+            confirmation_text = text.lower().strip()
+            if confirmation_text in ['да', 'подтверждаю', 'подтвердить', 'yes', 'y', 'конечно', 'удали', 'удалить все', 'удалить']:
+                # Подтверждение получено
+                context.user_data.pop('pending_confirmation', None)
+                
+                # Проверяем, что decision_engine инициализирован
+                if not decision_engine:
+                    logger.error("decision_engine не инициализирован")
+                    await update.message.reply_text("Ошибка инициализации. Попробуй перезапустить бота.")
+                    return
+                
+                # Выполняем действие с подтверждением
+                if confirmation_type == 'delete_all':
+                    calendar_connections = db.get_calendar_connections(user_id)
+                    result = await decision_engine._handle_delete_all(user_id, calendar_connections, confirmed=True)
+                else:
+                    # Для других типов подтверждений - извлекаем intent и обрабатываем
+                    if not nlp_extractor:
+                        logger.error("nlp_extractor не инициализирован")
+                        await update.message.reply_text("Ошибка инициализации. Попробуй перезапустить бота.")
+                        return
+                    
+                    # Получаем контекст для других типов подтверждений
+                    last_event = db.get_last_event(user_id)
+                    reply_to_event = None
+                    if update.message.reply_to_message:
+                        reply_to_event = last_event
+                    
+                    # Получаем режим интерпретации из user_data (по умолчанию 'soft')
+                    ai_mode = context.user_data.get('ai_mode', 'soft')
+                    extracted_data = await nlp_extractor.extract_intent_and_context(
+                        text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message),
+                        interpretation_mode=ai_mode
+                    )
+                    result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
+            else:
+                # Отмена подтверждения
+                context.user_data.pop('pending_confirmation', None)
+                result = {
+                    'action': 'cancelled',
+                    'message': '❌ Удаление отменено.',
+                    'needs_confirmation': False
+                }
+        else:
+            # Обычная обработка запроса (без ожидания подтверждения)
+            # Получаем контекст последнего события для этого пользователя
+            last_event = db.get_last_event(user_id)
+            
+            # Проверяем, является ли это reply к сообщению (для привязки заметок к событиям)
+            reply_to_event = None
+            if update.message.reply_to_message:
+                # Если это reply, пытаемся найти событие из предыдущего сообщения
+                # Можно расширить логику для поиска события по тексту reply_to_message
+                reply_to_event = last_event  # Пока используем последнее событие
+            
+            # Проверяем, что компоненты инициализированы
+            if not nlp_extractor:
+                logger.error("nlp_extractor не инициализирован")
+                await update.message.reply_text("Ошибка инициализации. Попробуй перезапустить бота.")
+                return
+            
+            if not decision_engine:
+                logger.error("decision_engine не инициализирован")
+                await update.message.reply_text("Ошибка инициализации. Попробуй перезапустить бота.")
+                return
+            
+            # Извлекаем intent и контекст (передаем информацию о последнем событии)
+            extracted_data = await nlp_extractor.extract_intent_and_context(
+                text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message)
+            )
+            
+            # Принимаем решение и выполняем действие
+            result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
         
-        # Проверяем, является ли это reply к сообщению (для привязки заметок к событиям)
-        reply_to_event = None
-        if update.message.reply_to_message:
-            # Если это reply, пытаемся найти событие из предыдущего сообщения
-            # Можно расширить логику для поиска события по тексту reply_to_message
-            reply_to_event = last_event  # Пока используем последнее событие
-        
-        # Проверяем, что компоненты инициализированы
-        if not nlp_extractor:
-            logger.error("nlp_extractor не инициализирован")
-            await update.message.reply_text("Ошибка инициализации. Попробуй перезапустить бота.")
-            return
-        
-        if not decision_engine:
-            logger.error("decision_engine не инициализирован")
-            await update.message.reply_text("Ошибка инициализации. Попробуй перезапустить бота.")
-            return
-        
-        # Извлекаем intent и контекст (передаем информацию о последнем событии)
-        extracted_data = await nlp_extractor.extract_intent_and_context(
-            text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message)
-        )
-        
-        # Принимаем решение и выполняем действие
-        result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
-        
+        # Код ниже выполняется для обоих случаев (подтверждение и обычная обработка)
         # Форматируем сообщение для лучшей читаемости
         formatted_message = format_message_for_user(result['message'])
         
@@ -2378,42 +2640,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Устанавливаем постоянную клавиатуру для всех ответов
         reply_keyboard = get_reply_keyboard(context)
         
+        # Если требуется подтверждение, сохраняем тип подтверждения в user_data
+        if result.get('needs_confirmation') and result.get('confirmation_type'):
+            context.user_data['pending_confirmation'] = result['confirmation_type']
+        
         # Отправляем результат пользователю с постоянной клавиатурой
         await update.message.reply_text(formatted_message, reply_markup=reply_keyboard)
         
-        # Если событие было создано или обновлено, синхронизируем с веб-приложением
-        # Отправляем обновленные события сразу после создания, чтобы веб-приложение могло их получить
-        if result.get('action') in ['created', 'updated', 'created_draft']:
-            # Сразу отправляем обновленные события для синхронизации с веб-приложением
+        # Если событие было создано или обновлено, сохраняем события в user_data для синхронизации
+        if result.get('action') in ['created', 'updated', 'created_draft', 'deleted']:
             try:
+                # Получаем все события для пользователя и сохраняем в user_data
                 web_events = await get_events_for_web_app(user_id)
-                import json
-                import base64
-                
-                response_data = json.dumps({
-                    'action': 'sync_events',
-                    'events': web_events,
-                    'timestamp': datetime.now().isoformat(),
-                    'count': len(web_events)
-                }, ensure_ascii=False, default=str)
-                
-                # Отправляем события в специальном формате для веб-приложения
-                # Веб-приложение может прочитать это сообщение при следующем обновлении
-                encoded_data = base64.b64encode(response_data.encode('utf-8')).decode('utf-8')
-                
-                # Отправляем как отдельное сообщение с данными для веб-приложения
-                await update.message.reply_text(
-                    f"TRACY_EVENTS_SYNC:{encoded_data}",
-                    reply_markup=None,
-                    parse_mode=None
-                )
-                
-                logger.info(f"✅ События синхронизированы с веб-приложением: {len(web_events)} событий отправлено пользователю {user_id}")
+                if len(web_events) > 0:
+                    # Сохраняем события в user_data для последующего запроса веб-приложением
+                    context.user_data['last_web_app_events'] = web_events
+                    context.user_data['last_web_app_events_time'] = datetime.now().isoformat()
+                    logger.info(f"✅ События сохранены для синхронизации ({len(web_events)} событий) пользователю {user_id}. Используйте Menu Button для открытия веб-приложения.")
             except Exception as e:
-                logger.error(f"Ошибка синхронизации событий с веб-приложением: {e}", exc_info=True)
-            
-            # Также обновляем в user_data для последующего доступа
-            await sync_events_to_web_app(user_id, context)
+                logger.error(f"❌ Ошибка сохранения событий для синхронизации: {e}", exc_info=True)
     
     except Exception as e:
         # Останавливаем typing при ошибке
@@ -2470,7 +2715,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
 
 
-async def sync_events_to_web_app(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+async def sync_events_to_web_app(user_id: int, context: ContextTypes.DEFAULT_TYPE, chat_id: int = None):
     """Синхронизирует события с веб-приложением (вызывается после создания/обновления события)."""
     try:
         # Обновляем события в user_data, чтобы веб-приложение могло их получить при следующем запросе
@@ -2479,17 +2724,59 @@ async def sync_events_to_web_app(user_id: int, context: ContextTypes.DEFAULT_TYP
         context.user_data['last_web_app_events_time'] = datetime.now().isoformat()
         
         import json
-        response_data = json.dumps({
+        import base64
+        
+        response_data = {
             'action': 'sync_events',
             'events': web_events,
             'timestamp': datetime.now().isoformat(),
             'count': len(web_events)
-        }, ensure_ascii=False)
-        context.user_data['last_web_app_events_json'] = response_data
+        }
         
-        logger.info(f"События синхронизированы для пользователя {user_id}: {len(web_events)} событий готовы для веб-приложения")
+        json_str = json.dumps(response_data, ensure_ascii=False, default=str)
+        encoded_data = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
+        
+        context.user_data['last_web_app_events_json'] = json_str
+        context.user_data['last_web_app_events_encoded'] = encoded_data
+        
+        # ОТПРАВЛЯЕМ СОБЫТИЯ В ВЕБ-ПРИЛОЖЕНИЕ через кнопку WebApp с данными в URL параметрах
+        # Это работает для production (GitHub Pages) - веб-приложение обработает параметры и сохранит в localStorage
+        if chat_id is None:
+            chat_id = user_id  # По умолчанию используем user_id как chat_id (для личных чатов)
+        
+        try:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+            
+            # Создаем URL веб-приложения с событиями в параметрах
+            web_app_url = config.WEB_APP_URL or "https://karchauskas1.github.io/TRACY-AI/"
+            web_app_url_with_events = f"{web_app_url}calendar?events={encoded_data}"
+            
+            # Отправляем кнопку WebApp с событиями в URL параметрах
+            # Пользователь может нажать на кнопку, чтобы обновить события в веб-приложении
+            keyboard = [[InlineKeyboardButton(
+                "📅 Обновить события в календаре",
+                web_app=WebAppInfo(url=web_app_url_with_events)
+            )]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Отправляем сообщение с кнопкой (только если событий больше 0)
+            if len(web_events) > 0:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"✅ События синхронизированы! Нажми кнопку ниже, чтобы обновить календарь в веб-приложении ({len(web_events)} событий).",
+                    reply_markup=reply_markup
+                )
+                logger.info(f"✅ Отправлена кнопка WebApp для синхронизации событий пользователя {user_id}: {len(web_events)} событий")
+            else:
+                logger.info(f"✅ События синхронизированы для пользователя {user_id}: 0 событий")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки кнопки WebApp: {e}", exc_info=True)
+            # Fallback: просто логируем
+            logger.info(f"✅ События синхронизированы для пользователя {user_id}: {len(web_events)} событий готовы для веб-приложения")
+            
     except Exception as e:
-        logger.error(f"Ошибка синхронизации событий: {e}", exc_info=True)
+        logger.error(f"❌ Ошибка синхронизации событий: {e}", exc_info=True)
 
 
 async def send_calendar_status_to_web_app(user_id: int, context: ContextTypes.DEFAULT_TYPE):
@@ -2867,6 +3154,7 @@ def main():
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^icloud_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^notifications_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^reminder_set_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^reschedule_event_"))
     
     # Обработчик голосовых сообщений (отдельно для лучшей отладки)
     application.add_handler(MessageHandler(
@@ -2892,6 +3180,40 @@ def main():
         filters.TEXT & ~filters.COMMAND,  # Только текст, исключая команды
         handle_message
     ))
+    
+    # Запускаем HTTP сервер для веб-приложения (в отдельной задаче)
+    # ВАЖНО: HTTP сервер работает только на localhost, поэтому для production нужен публичный URL
+    # или механизм через ngrok/туннель. Для веб-приложения на GitHub Pages используется
+    # механизм через URL параметры и tg.sendData как fallback
+    import asyncio
+    import threading
+    
+    try:
+        from http_server import start_http_server, set_database
+        
+        # Устанавливаем ссылку на БД в HTTP сервере
+        set_database(db)
+        
+        # Запускаем HTTP сервер в отдельном потоке (так как он блокирующий)
+        http_host = config.HOST or 'localhost'
+        http_port = config.PORT or 8080
+        
+        def run_http_server():
+            """Запускает HTTP сервер в отдельном потоке."""
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(start_http_server(host=http_host, port=http_port))
+                # Держим сервер запущенным
+                loop.run_forever()
+            except Exception as e:
+                logger.error(f"❌ Ошибка HTTP сервера: {e}", exc_info=True)
+        
+        http_thread = threading.Thread(target=run_http_server, daemon=True)
+        http_thread.start()
+        logger.info("✅ HTTP сервер запущен в отдельном потоке")
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось запустить HTTP сервер: {e}. Веб-приложение будет использовать fallback механизм.")
     
     # Запускаем бота
     logger.info("Запуск бота TRACY...")

@@ -23,7 +23,7 @@ class NLPExtractor:
     
     async def extract_intent_and_context(self, text: str, user_timezone: str = "Europe/Moscow",
                                         user_locale: str = "ru_RU", last_event: Optional[Dict] = None,
-                                        is_reply: bool = False) -> Dict:
+                                        is_reply: bool = False, interpretation_mode: str = "soft") -> Dict:
         """
         Извлечь intent и контекст из текста пользователя.
         
@@ -63,6 +63,13 @@ class NLPExtractor:
             if is_reply:
                 last_event_info += "\n\n⚠️ Это reply к сообщению. Если это заметка/примечание без даты - это intent 'add_note' к последнему событию."
             
+            # Добавляем информацию о режиме интерпретации в промпт
+            interpretation_note = ""
+            if interpretation_mode == "strict":
+                interpretation_note = "\n\n⚠️ РЕЖИМ: СТРОГИЙ - Точно следуй инструкциям, не делай предположений. Если информация неоднозначна, верни 'unknown' intent."
+            else:
+                interpretation_note = "\n\n⚠️ РЕЖИМ: МЯГКИЙ - Используй гибкую интерпретацию, делай разумные предположения на основе контекста."
+            
             # Компактный промпт для извлечения структурированных данных
             system_prompt = """Ты ассистент для управления календарем. Извлеки структурированную информацию из сообщения.
 
@@ -96,13 +103,17 @@ Intent (проверяй в порядке):
    - ВАЖНО: "напомни в [время] [действие]" = "event" с start_time = [время]
    - ВАЖНО: "напомни [действие] в [время]" = "event" с start_time = [время]
    - ВАЖНО: "напомни завтра/сегодня [действие]" = "event" с start_time = завтра/сегодня
-   - ВАЖНО: Если указан диапазон времени (например, "с 11 утра до 15 часов", "с 10:00 до 14:00", "11:00-15:00", "зарядка с 11 утра до 15 часов дня"), то:
-     * start_time = время начала (11:00, 10:00 и т.д.)
-     * end_time = время окончания (15:00, 14:00 и т.д.)
+   - ВАЖНО: Если указан диапазон времени (например, "с 11 утра до 15 часов", "с 10:00 до 14:00", "11:00-15:00", "зарядка с 11 утра до 15 часов дня", "с 14 до 18", "с 14 часов до 18"), то:
+     * start_time = время начала (11:00, 10:00, 14:00 и т.д.)
+     * end_time = время окончания (15:00, 14:00, 18:00 и т.д.)
      * Если дата указана только для начала, используй ту же дату для end_time
+     * Если указано только время без даты (например, "с 14 до 18"), используй сегодняшнюю дату
      * Примеры: "зарядка с 11 утра до 15 часов" → start_time="11:00", end_time="15:00" на ту же дату
                "встреча завтра с 10:00 до 12:00" → start_time="завтра 10:00", end_time="завтра 12:00"
                "работа с 9 до 18 часов" → start_time="09:00", end_time="18:00" на сегодня
+               "с 14 до 18" → start_time="14:00", end_time="18:00" на сегодня
+               "с 14 часов до 18" → start_time="14:00", end_time="18:00" на сегодня
+               "завтра с 14 до 18" → start_time="завтра 14:00", end_time="завтра 18:00"
 10. "update" - "измени/перенеси событие X" (update_fields)
 11. "update_many" - "перенеси все X"
 12. "delete" - "удали событие X"
@@ -123,19 +134,25 @@ Intent (проверяй в порядке):
 Отвечай только JSON.
 
 Текущая дата и время: {current_time}
-Часовой пояс: {timezone}{last_event_info}""".format(
+Часовой пояс: {timezone}{last_event_info}{interpretation_note}""".format(
                 current_time=now.strftime("%Y-%m-%d %H:%M:%S %Z"),
                 timezone=user_timezone,
-                last_event_info=last_event_info
+                last_event_info=last_event_info,
+                interpretation_note=interpretation_note
             )
             
             user_prompt = f"""Извлеки информацию из сообщения: "{text}"
 
 ВАЖНО для диапазонов времени:
-- Если есть "с X до Y" / "X-Y" / "X до Y часов" / "от X до Y" → извлекай оба: start_time (начало) и end_time (окончание)
+- Если есть "с X до Y" / "X-Y" / "X до Y часов" / "от X до Y" / "с X часов до Y" → извлекай оба: start_time (начало) и end_time (окончание)
+- Если указано только время без даты (например, "с 14 до 18"), используй сегодняшнюю дату для обоих времен
+- Если указано только число (например, "14", "18"), интерпретируй как часы (14:00, 18:00)
 - Примеры: "зарядка с 11 утра до 15 часов" → start_time="11:00", end_time="15:00" (на ту же дату)
           "встреча завтра с 10:00 до 12:00" → start_time="завтра 10:00", end_time="завтра 12:00"
           "работа с 9 до 18" → start_time="09:00", end_time="18:00" (на сегодня)
+          "с 14 до 18" → start_time="14:00", end_time="18:00" (на сегодня)
+          "с 14 часов до 18" → start_time="14:00", end_time="18:00" (на сегодня)
+          "завтра с 14 до 18" → start_time="завтра 14:00", end_time="завтра 18:00"
 
 Верни JSON:
 {{
@@ -232,14 +249,21 @@ Intent (проверяй в порядке):
                 # Если end_time раньше start_time (например, разница в дате не учтена), корректируем
                 if end_time < start_time:
                     # Предполагаем, что end_time должен быть в тот же день, что и start_time
-                    # Если end_time явно меньше по часам, возможно это следующая дата, но для простоты
-                    # используем ту же дату что и start_time, но с временем из end_time
+                    # Используем ту же дату что и start_time, но с временем из end_time
                     end_time = start_time.replace(hour=end_time.hour, minute=end_time.minute, second=end_time.second, microsecond=end_time.microsecond)
-                    # Если все равно меньше, добавляем день
+                    # Если все равно меньше (например, 02:00 < 23:00 предыдущего дня), добавляем день
                     if end_time < start_time:
                         end_time = end_time + timedelta(days=1)
                     result["end_time"] = end_time
                     logger.info(f"Скорректирован end_time для диапазона: start={start_time}, end={end_time}")
+                else:
+                    # Если end_time >= start_time, но даты разные, убеждаемся что end_time в правильном формате
+                    # Если end_time имеет только время без даты (сегодняшняя дата), используем дату start_time
+                    if end_time.date() == now.date() and start_time.date() != now.date():
+                        # end_time имеет сегодняшнюю дату, но start_time - другую, переносим end_time на дату start_time
+                        end_time = start_time.replace(hour=end_time.hour, minute=end_time.minute, second=end_time.second, microsecond=end_time.microsecond)
+                        result["end_time"] = end_time
+                        logger.info(f"Скорректирована дата end_time для диапазона: start={start_time}, end={end_time}")
             elif start_time and not end_time:
                 # Если есть start_time но нет end_time, добавляем час по умолчанию
                 result["end_time"] = start_time + timedelta(hours=1)

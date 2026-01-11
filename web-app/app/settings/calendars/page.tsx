@@ -71,7 +71,7 @@ export default function CalendarsPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-lg font-semibold">Подключенные календари</h1>
+          <h1 className="text-lg font-semibold">{t("settings.connectedCalendars")}</h1>
           <div className="w-5" />
         </div>
       </header>
@@ -82,7 +82,7 @@ export default function CalendarsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5" />
-                Подключенные календари
+                {t("settings.connectedCalendars")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -94,9 +94,9 @@ export default function CalendarsPage() {
                       <span className="text-white font-bold text-sm">G</span>
                     </div>
                     <div>
-                      <p className="font-medium">Google Calendar</p>
+                      <p className="font-medium">{t("settings.googleCalendar")}</p>
                       <p className="text-xs text-muted-foreground">
-                        {googleConnected ? "Подключен" : "Не подключен"}
+                        {googleConnected ? t("settings.connected") : t("settings.notConnected")}
                       </p>
                     </div>
                   </div>
@@ -116,12 +116,12 @@ export default function CalendarsPage() {
                     >
                       {googleInstructionsOpen ? (
                         <>
-                          Скрыть инструкцию
+                          {t("settings.hideInstructions")}
                           <ChevronUp className="ml-2 h-4 w-4" />
                         </>
                       ) : (
                         <>
-                          Показать инструкцию по подключению
+                          {t("settings.showInstructions")}
                           <ChevronDown className="ml-2 h-4 w-4" />
                         </>
                       )}
@@ -166,9 +166,9 @@ export default function CalendarsPage() {
                       <span className="text-white font-bold text-sm">i</span>
                     </div>
                     <div>
-                      <p className="font-medium">iCloud Calendar</p>
+                      <p className="font-medium">{t("settings.icloudCalendar")}</p>
                       <p className="text-xs text-muted-foreground">
-                        {icloudConnected ? "Подключен" : "Не подключен"}
+                        {icloudConnected ? t("settings.connected") : t("settings.notConnected")}
                       </p>
                     </div>
                   </div>

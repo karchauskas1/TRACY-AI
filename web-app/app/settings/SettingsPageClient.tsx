@@ -6,6 +6,7 @@ import { ChevronRight, User, Globe, Bell, Brain, Calendar, X, MoreVertical, Arro
 import { Card, CardContent } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
+import { useLocale } from "../../lib/locale-context"
 
 interface SettingsPageClientProps {
   user: {
@@ -20,6 +21,7 @@ interface SettingsPageClientProps {
 
 export function SettingsPageClient({ user: initialUser }: SettingsPageClientProps) {
   const router = useRouter()
+  const { t } = useLocale()
   const [user, setUser] = useState(initialUser)
 
   useEffect(() => {
@@ -72,27 +74,27 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
   const settingsItems = [
     {
       icon: User,
-      label: "Аккаунт",
+      label: t("settings.account"),
       href: "/settings/account",
     },
     {
       icon: Globe,
-      label: "Общие",
+      label: t("settings.general"),
       href: "/settings/general",
     },
     {
       icon: Bell,
-      label: "Уведомления",
+      label: t("settings.notifications"),
       href: "/settings/notifications",
     },
     {
       icon: Brain,
-      label: "ИИ",
+      label: t("settings.ai"),
       href: "/settings/ai",
     },
     {
       icon: Calendar,
-      label: "Календари",
+      label: t("settings.calendars"),
       href: "/settings/calendars",
     },
   ]
@@ -120,7 +122,7 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
             <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center">
               <span className="text-xs font-bold text-primary-foreground">T</span>
             </div>
-            <span className="text-sm font-medium">Tracy | умный ассистент</span>
+            <span className="text-sm font-medium">{t("settings.tracyAssistant")}</span>
           </div>
           <button
             onClick={handleClose}
@@ -134,7 +136,7 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
       <div className="flex-1 overflow-y-auto">
         <div className="container mx-auto max-w-2xl px-4 py-6">
           <div className="mb-6">
-            <h1 className="text-3xl font-semibold">Настройки</h1>
+            <h1 className="text-3xl font-semibold">{t("settings.title")}</h1>
           </div>
 
           {/* Profile Header */}

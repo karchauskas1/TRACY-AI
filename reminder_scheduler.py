@@ -239,6 +239,17 @@ class ReminderScheduler:
                     desc = desc[:200] + "..."
                 message += f"\n\n📝 {desc}"
             
+            # Добавляем кнопку "Перенести" для переноса события
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            event_id = reminder.get('event_id')
+            keyboard = []
+            if event_id:
+                keyboard.append([InlineKeyboardButton(
+                    "⏰ Перенести",
+                    callback_data=f"reschedule_event_{event_id}"
+                )])
+            reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+            
             # Отправляем сообщение пользователю
             logger.info(f"Отправка сообщения пользователю {user_id} (chat_id={user_id}): {message[:100]}...")
             
@@ -249,11 +260,12 @@ class ReminderScheduler:
                 raise ValueError(error_msg)
             
             try:
-                # Пытаемся отправить сообщение
+                # Пытаемся отправить сообщение с кнопкой
                 result = await self.bot.send_message(
                     chat_id=user_id,
                     text=message,
-                    parse_mode="Markdown"
+                    parse_mode="Markdown",
+                    reply_markup=reply_markup
                 )
                 
                 if result and result.message_id:

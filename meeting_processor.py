@@ -47,36 +47,12 @@ class MeetingProcessor:
             - speakers: информация о спикерах (если определена)
         """
         try:
-            # Скачиваем файл в временный файл (правильный способ для python-telegram-bot)
-            import tempfile
-            import os
-            
-            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                temp_path = temp_file.name
-            
-            try:
-                # В python-telegram-bot используется метод download() с путем к файлу
-                await audio_file.download(temp_path)
-                logger.info(f"Файл успешно загружен в {temp_path}")
-                
-                # Читаем файл в BytesIO
-                audio_io = io.BytesIO()
-                with open(temp_path, 'rb') as f:
-                    audio_io.write(f.read())
-                audio_io.seek(0)
-                
-                # Удаляем временный файл
-                os.unlink(temp_path)
-                logger.info("Файл загружен в память, временный файл удален")
-            except Exception as download_error:
-                # Если не удалось загрузить, удаляем временный файл и поднимаем ошибку
-                if os.path.exists(temp_path):
-                    try:
-                        os.unlink(temp_path)
-                    except:
-                        pass
-                logger.error(f"Ошибка загрузки файла: {download_error}", exc_info=True)
-                raise download_error
+            # Скачиваем файл в память (правильный способ для python-telegram-bot)
+            # Используем download_to_memory() как в media_processor.py
+            audio_io = io.BytesIO()
+            await audio_file.download_to_memory(audio_io)
+            audio_io.seek(0)
+            logger.info(f"Файл успешно загружен в память, размер: {len(audio_io.getvalue())} bytes")
             
             # Проверяем, что файл не пустой
             file_size = len(audio_io.getvalue())
@@ -349,7 +325,6 @@ class MeetingProcessor:
                 # Проверяем, что recognizer инициализирован
                 if not hasattr(self, 'recognizer') or self.recognizer is None:
                     logger.warning("recognizer не инициализирован, создаю новый...")
-                    import speech_recognition as sr
                     self.recognizer = sr.Recognizer()
                 
                 # Используем WAV файл для распознавания
