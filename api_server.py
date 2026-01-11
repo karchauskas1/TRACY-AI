@@ -3,9 +3,14 @@
 Использует существующий код из http_server.py
 """
 import os
+import sys
 import logging
 import asyncio
 from aiohttp import web
+
+# Добавляем текущий каталог в Python path для поиска модулей
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from http_server import create_app, set_database
 from database import Database
 
