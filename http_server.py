@@ -168,8 +168,9 @@ def create_app():
     app.middlewares.append(cors_middleware)
     
     # Регистрируем routes
-    app.router.add_get('/api/events', get_events_handler)
+    app.router.add_get('/', root_handler)
     app.router.add_get('/health', health_handler)
+    app.router.add_get('/api/events', get_events_handler)
     
     return app
 
