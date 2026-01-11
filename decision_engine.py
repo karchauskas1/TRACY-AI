@@ -346,30 +346,56 @@ class DecisionEngine:
                 has_explicit_time = True
                 logger.info(f"✅ Fallback 1: время явно указано ({start_time.hour}:{start_time.minute:02d}), устанавливаем has_explicit_time=True")
         
-        # Fallback 2: Если start_time=None, но в тексте есть время - пытаемся извлечь
+        # Fallback 2: Если start_time=None, но в тексте есть время - пытаемся извлечь с помощью regex
         if not start_time and original_text and not has_explicit_time:
             try:
-                import dateparser
                 import pytz
                 tz = pytz.timezone(timezone)
+                now = datetime.now(tz)
                 
-                # Пытаемся распарсить время из текста
-                parsed_time = dateparser.parse(
-                    original_text,
-                    settings={
-                        'TIMEZONE': timezone,
-                        'RETURN_AS_TIMEZONE_AWARE': True,
-                        'RELATIVE_BASE': datetime.now(tz)
-                    }
-                )
+                # Используем regex для извлечения времени из русского текста
+                text_lower = original_text.lower()
+                hour = None
+                minute = None
                 
-                if parsed_time:
-                    # Если время не 00:00:00, значит время явно указано
-                    if parsed_time.hour != 0 or parsed_time.minute != 0:
-                        start_time = parsed_time.astimezone(tz)
-                        has_explicit_time = True
-                        extracted_data['start_time'] = start_time
-                        logger.info(f"✅ Fallback 2: извлечено время из текста ({start_time.hour}:{start_time.minute:02d}), устанавливаем has_explicit_time=True")
+                # Паттерны для времени
+                # "в 12:30", "в 12.30", "в 12 30"
+                match = re.search(r'в\s+(\d{1,2})[:.\s]+(\d{2})', text_lower)
+                if match:
+                    hour = int(match.group(1))
+                    minute = int(match.group(2))
+                else:
+                    # "12:30", "12.30"
+                    match = re.search(r'(\d{1,2})[:.](\d{2})', text_lower)
+                    if match:
+                        hour = int(match.group(1))
+                        minute = int(match.group(2))
+                    else:
+                        # "в 12 часов", "в 12 часов 30 минут"
+                        match = re.search(r'в\s+(\d{1,2})\s+(?:час|часа|часов)(?:\s+(\d{1,2})\s+(?:минут|минуты|минуту))?', text_lower)
+                        if match:
+                            hour = int(match.group(1))
+                            minute = int(match.group(2)) if match.group(2) else 0
+                
+                if hour is not None and 0 <= hour < 24 and 0 <= minute < 60:
+                    # Определяем дату
+                    date = now.date()
+                    if 'завтра' in text_lower:
+                        date = date + timedelta(days=1)
+                    elif 'послезавтра' in text_lower:
+                        date = date + timedelta(days=2)
+                    
+                    # Создаем datetime
+                    start_time = datetime.combine(date, datetime.min.time().replace(hour=hour, minute=minute))
+                    start_time = tz.localize(start_time)
+                    
+                    # Если время уже прошло сегодня и не указано "завтра", считаем что это завтра
+                    if start_time < now and 'завтра' not in text_lower and 'послезавтра' not in text_lower:
+                        start_time = start_time + timedelta(days=1)
+                    
+                    has_explicit_time = True
+                    extracted_data['start_time'] = start_time
+                    logger.info(f"✅ Fallback 2: извлечено время из текста regex ({start_time.hour}:{start_time.minute:02d}), устанавливаем has_explicit_time=True")
             except Exception as e:
                 logger.warning(f"Ошибка при fallback извлечении времени из текста: {e}")
         
