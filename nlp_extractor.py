@@ -15,11 +15,23 @@ class NLPExtractor:
     """Класс для NLP обработки и извлечения intent и контекста."""
     
     def __init__(self):
-        self.client = OpenAI(
-            api_key=config.OPENROUTER_API_KEY,
-            base_url=config.OPENROUTER_BASE_URL
-        )
         self.model = config.OPENROUTER_MODEL
+        self._api_key = getattr(config, "OPENROUTER_API_KEY", None)
+        self._base_url = getattr(config, "OPENROUTER_BASE_URL", None)
+
+        # Не валим весь бот, если ключ не настроен: используем fallback-логику.
+        self.client = None
+        if self._api_key and str(self._api_key).strip():
+            try:
+                self.client = OpenAI(
+                    api_key=self._api_key,
+                    base_url=self._base_url
+                )
+            except Exception as e:
+                logger.warning(f"Не удалось инициализировать OpenAI/OpenRouter client: {e}")
+                self.client = None
+        else:
+            logger.warning("OPENROUTER_API_KEY не задан — NLPExtractor будет работать в fallback-режиме.")
     
     async def extract_intent_and_context(self, text: str, user_timezone: str = "Europe/Moscow",
                                         user_locale: str = "ru_RU", last_event: Optional[Dict] = None,
@@ -40,6 +52,9 @@ class NLPExtractor:
             - confidence: уверенность в извлечении
         """
         try:
+            if not self.client:
+                return self._fallback_extraction(text, user_timezone)
+
             tz = pytz.timezone(user_timezone)
             now = datetime.now(tz)
             
