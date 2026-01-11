@@ -28,7 +28,12 @@ if DATABASE_PATH:
 
 # Server
 HOST = os.getenv("HOST", "localhost")
-PORT = int(os.getenv("PORT", 8080))
+# Обрабатываем PORT, учитывая что он может быть пустой строкой
+_port_str = os.getenv("PORT", "8080")
+try:
+    PORT = int(_port_str) if _port_str else 8080
+except ValueError:
+    PORT = 8080
 
 # Defaults
 DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "Europe/Moscow")
