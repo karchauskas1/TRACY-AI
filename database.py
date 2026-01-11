@@ -383,30 +383,39 @@ class Database:
     def get_or_create_user(self, user_id: int) -> Dict:
         """Получить или создать пользователя."""
         conn = self.get_connection()
-        cursor = conn.cursor()
         
         try:
             if self.use_postgresql:
-                cursor.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
+                from psycopg2.extras import RealDictCursor
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
             else:
-                cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+                cursor = conn.cursor()
             
-            user = cursor.fetchone()
-            
-            if not user:
+            try:
                 if self.use_postgresql:
-                    cursor.execute("INSERT INTO users (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
                     cursor.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
                 else:
-                    cursor.execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
                     cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+                
                 user = cursor.fetchone()
-                conn.commit()
-            
-            if self.use_postgresql:
-                return dict(user) if user else None
-            else:
-                return dict(user) if user else None
+                
+                if not user:
+                    if self.use_postgresql:
+                        cursor.execute("INSERT INTO users (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
+                        cursor.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
+                    else:
+                        cursor.execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
+                        cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+                    user = cursor.fetchone()
+                    conn.commit()
+                
+                # Для PostgreSQL RealDictCursor уже возвращает словарь
+                if self.use_postgresql:
+                    return dict(user) if user else None
+                else:
+                    return dict(user) if user else None
+            finally:
+                cursor.close()
         except Exception as e:
             logger.error(f"Ошибка get_or_create_user: {e}", exc_info=True)
             conn.rollback()
