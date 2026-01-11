@@ -337,6 +337,12 @@ class DecisionEngine:
         start_time = extracted_data.get('start_time')
         has_explicit_time = extracted_data.get('has_explicit_time', False)
         
+        # Fallback: если start_time указан и время != 00:00:00, считаем время явно указанным
+        if start_time and not has_explicit_time:
+            if start_time.hour != 0 or start_time.minute != 0:
+                has_explicit_time = True
+                logger.info(f"Fallback: время явно указано ({start_time.hour}:{start_time.minute:02d}), устанавливаем has_explicit_time=True")
+        
         # Если есть дата, но нет времени (только дата без времени), устанавливаем 12:00
         if start_time and has_explicit_time:
             import pytz
