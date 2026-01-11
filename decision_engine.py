@@ -181,7 +181,7 @@ class DecisionEngine:
                 logger.info(f"Fallback: переопределил intent '{original_intent}' → 'list_events' (tomorrow) из текста: '{original_text}'")
                 extracted_data['intent'] = 'list_events'
                 extracted_data['time_period'] = 'tomorrow'
-            elif any(phrase in text_for_check for phrase in ['какие события сегодня', 'что сегодня', 'события сегодня', 'планы сегодня']):
+            elif any(phrase in text_for_check for phrase in ['какие события сегодня', 'что сегодня', 'события сегодня', 'планы сегодня', 'покажи все события на сегодня', 'покажи события на сегодня', 'события на сегодня']):
                 intent = 'list_events'
                 logger.info(f"Fallback: переопределил intent '{original_intent}' → 'list_events' (today) из текста: '{original_text}'")
                 extracted_data['intent'] = 'list_events'
@@ -1366,7 +1366,7 @@ class DecisionEngine:
         
         return {
             'action': 'deleted_all',
-            'message': f"✓ Удалено всех событий: {deleted_count} (из календарей: {deleted_from_calendars})",
+            'message': f"✅ **Все события удалены**\n\nУдалено событий: **{deleted_count}**\nИз внешних календарей: **{deleted_from_calendars}**",
             'needs_confirmation': False
         }
     
@@ -1724,12 +1724,25 @@ class DecisionEngine:
                 query_text = (extracted_data.get('title', '') or extracted_data.get('description', '') or '').lower()
             
             # Более точная проверка периодов (проверяем более специфичные фразы первыми)
+            # ВАЖНО: проверяем "на сегодня/завтра" ПЕРЕД "все события", чтобы "покажи все события на сегодня" обрабатывалось как today
             if any(phrase in query_text for phrase in ['на завтра', 'завтра', 'tomorrow']):
                 time_period = 'tomorrow'
             elif any(phrase in query_text for phrase in ['на сегодня', 'сегодня', 'today']):
                 time_period = 'today'
-            elif any(phrase in query_text for phrase in ['все события', 'все дела', 'все планы', 'все']):
-                time_period = 'all'
+            elif any(phrase in query_text for phrase in ['все события', 'все дела', 'все планы']):
+                # Проверяем "все" только если нет указания на конкретный день
+                if 'сегодня' not in query_text and 'завтра' not in query_text:
+                    time_period = 'all'
+                else:
+                    # Если есть "все события на сегодня/завтра", используем today/tomorrow
+                    if 'сегодня' in query_text:
+                        time_period = 'today'
+                    elif 'завтра' in query_text:
+                        time_period = 'tomorrow'
+            elif 'все' in query_text:
+                # Общее "все" без контекста даты - только если нет других указаний
+                if 'сегодня' not in query_text and 'завтра' not in query_text:
+                    time_period = 'all'
             elif any(phrase in query_text for phrase in ['на месяц', 'месяц', 'month']):
                 time_period = 'month'
             elif any(phrase in query_text for phrase in ['на неделю', 'неделю', 'неделя', 'week']):
