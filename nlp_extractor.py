@@ -282,7 +282,7 @@ Intent (проверяй в порядке):
     
     def _fallback_extraction(self, text: str, user_timezone: str) -> Dict:
         """Резервный метод извлечения при ошибке LLM."""
-        return {
+        result = {
             "intent": "note",
             "title": text[:50],
             "description": text,
@@ -291,8 +291,10 @@ Intent (проверяй в порядке):
             "location": None,
             "priority": 0,
             "has_explicit_time": False,
-            "confidence": 0.3
+            "confidence": 0.3,
+            "_original_text": text  # Сохраняем оригинальный текст для fallback логики
         }
+        return result
     
     def is_command(self, text: str) -> Optional[str]:
         """Проверить, является ли текст командой."""
