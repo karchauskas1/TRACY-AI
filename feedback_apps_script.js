@@ -49,8 +49,8 @@ function getOrCreateSheet(sheetName) {
     // Создаем новый лист
     sheet = ss.insertSheet(sheetName);
     
-    // Добавляем заголовки
-    const headers = [['№', 'Дата', 'Тип', 'User ID', 'Комментарий', 'Ссылка на скриншот']];
+    // Добавляем заголовки (строка 1)
+    const headers = [['№', 'Дата', 'Содержание комментария', 'Скриншот', 'Тип комментария', 'Статус']];
     sheet.getRange(1, 1, 1, 6).setValues(headers);
     
     // Форматируем заголовки
@@ -60,12 +60,21 @@ function getOrCreateSheet(sheetName) {
     headerRange.setFontColor('#ffffff');
     
     // Настраиваем ширину колонок
-    sheet.setColumnWidth(1, 50);  // №
+    sheet.setColumnWidth(1, 50);   // №
     sheet.setColumnWidth(2, 150);  // Дата
-    sheet.setColumnWidth(3, 100);  // Тип
-    sheet.setColumnWidth(4, 100);  // User ID
-    sheet.setColumnWidth(5, 400); // Комментарий
-    sheet.setColumnWidth(6, 300); // Ссылка на скриншот
+    sheet.setColumnWidth(3, 400);  // Содержание комментария
+    sheet.setColumnWidth(4, 300);  // Скриншот
+    sheet.setColumnWidth(5, 150);  // Тип комментария
+    sheet.setColumnWidth(6, 100);  // Статус
+    
+    // Добавляем выпадающий список для "Тип комментария" (Column E)
+    const typeValidation = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['Баг', 'Предложение'], true)
+      .setAllowInvalid(false)
+      .build();
+    // Применяем валидацию ко всей колонке E (начиная со 2-й строки)
+    const typeColumn = sheet.getRange(2, 5, 1000, 1); // E2:E1001
+    typeColumn.setDataValidation(typeValidation);
   }
   
   return sheet;
@@ -93,39 +102,41 @@ function addFeedback(feedbackType, userId, comment, screenshotUrl) {
     const sheetName = getSheetNameForUser(userId);
     const sheet = getOrCreateSheet(sheetName);
     
-    // Получаем последний номер
+    // Получаем последний номер (начинаем со 2-й строки, первая - заголовки)
     const lastRow = sheet.getLastRow();
-    const nextNumber = lastRow; // Номер = номер строки (первая строка - заголовок)
+    const nextRow = lastRow < 1 ? 2 : lastRow + 1; // Если таблица пустая, начинаем с 2-й строки
+    const nextNumber = nextRow - 1; // Номер = номер строки минус 1 (так как первая строка - заголовок)
     
     // Форматируем дату
     const now = new Date();
     const dateStr = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
     
-    // Подготавливаем данные
+    // Подготавливаем данные в правильном порядке столбцов:
+    // A: №, B: Дата, C: Содержание комментария, D: Скриншот, E: Тип комментария, F: Статус
     const rowData = [
-      nextNumber,
-      dateStr,
-      feedbackType,
-      String(userId),
-      comment,
-      screenshotUrl || ''
+      nextNumber,                    // A: №
+      dateStr,                       // B: Дата
+      comment,                        // C: Содержание комментария
+      screenshotUrl || '',            // D: Скриншот
+      feedbackType === 'баг' ? 'Баг' : 'Предложение', // E: Тип комментария (Баг/Предложение)
+      ''                              // F: Статус (пусто по умолчанию)
     ];
     
-    // Записываем данные
-    sheet.appendRow(rowData);
+    // Записываем данные в нужную строку
+    const range = sheet.getRange(nextRow, 1, 1, 6);
+    range.setValues([rowData]);
     
-    // Форматируем строку
-    const newRow = lastRow + 1;
-    const rowRange = sheet.getRange(newRow, 1, 1, 6);
-    
-    // Добавляем ссылку на скриншот, если есть
+    // Добавляем ссылку на скриншот, если есть (Column D)
     if (screenshotUrl) {
-      const linkCell = sheet.getRange(newRow, 6);
+      const linkCell = sheet.getRange(nextRow, 4); // Column D
       linkCell.setFormula('=HYPERLINK("' + screenshotUrl + '"; "Открыть скриншот")');
     }
     
+    // Форматируем строку
+    const rowRange = sheet.getRange(nextRow, 1, 1, 6);
+    
     // Чередование цветов для читаемости
-    if (newRow % 2 === 0) {
+    if (nextRow % 2 === 0) {
       rowRange.setBackground('#f8f9fa');
     }
     

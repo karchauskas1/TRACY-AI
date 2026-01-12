@@ -402,13 +402,17 @@ class FeedbackService:
         now = datetime.now()
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
         
+        # Порядок столбцов: A: №, B: Дата, C: Содержание комментария, D: Скриншот, E: Тип комментария, F: Статус
+        # Преобразуем тип: "баг" -> "Баг", "предложение" -> "Предложение"
+        type_display = "Баг" if feedback_type.lower() == "баг" else "Предложение"
+        
         values = [[
-            row_number - 1,  # № (минус 1, так как первая строка - заголовок)
-            date_str,
-            feedback_type,
-            str(self.user_id),
-            comment,
-            screenshot_url or ""
+            row_number - 1,  # A: № (минус 1, так как первая строка - заголовок)
+            date_str,        # B: Дата
+            comment,         # C: Содержание комментария
+            screenshot_url or "",  # D: Скриншот
+            type_display,    # E: Тип комментария (Баг/Предложение)
+            ""               # F: Статус (пусто по умолчанию)
         ]]
         
         body = {'values': values}
