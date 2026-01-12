@@ -62,7 +62,7 @@ if env_feedback_mapping:
 # Apps Script Webhook для обратной связи (альтернативный способ записи)
 FEEDBACK_APPS_SCRIPT_URL = os.getenv(
     "FEEDBACK_APPS_SCRIPT_URL",
-    "https://script.google.com/macros/s/AKfycbz5ehkf4tw9BVmwbgJ9JFb7HDj4ehC8cH_sI9N0M5igzm7RxE6yc_cojEOcfZCZUgvp5w/exec"
+    "https://script.google.com/macros/s/AKfycbzuZ0Srf4nrFXdQsFbw-sfPD5lT3jhP8-lmBcZNweEQvg6qILXS2xMgv5xhAdi7F6gwnA/exec"
 )
 
 # Супер-пользователь (может просматривать всю обратную связь)
