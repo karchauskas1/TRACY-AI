@@ -65,3 +65,6 @@ FEEDBACK_APPS_SCRIPT_URL = os.getenv(
     "https://script.google.com/macros/s/AKfycbz5ehkf4tw9BVmwbgJ9JFb7HDj4ehC8cH_sI9N0M5igzm7RxE6yc_cojEOcfZCZUgvp5w/exec"
 )
 
+# Супер-пользователь (может просматривать всю обратную связь)
+SUPER_USER_ID = int(os.getenv("SUPER_USER_ID", "308477378"))
+

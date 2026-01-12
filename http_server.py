@@ -142,7 +142,6 @@ async def get_events_handler(request: web_request.Request):
         return json_response({'error': str(e)}, status=500)
 
 
-<<<<<<< HEAD
 async def get_meetings_handler(request: web_request.Request):
     """Обработчик GET запроса для получения списка встреч."""
     try:
@@ -239,32 +238,6 @@ async def create_event_from_meeting_handler(request: web_request.Request):
             event_data = data.get('event_data', {})
         except:
             return json_response({'error': 'Invalid request body'}, status=400)
-=======
-async def update_settings_handler(request: web_request.Request):
-    """Обработчик POST запроса для обновления настроек пользователя."""
-    try:
-        data = await request.json()
-        user_id = data.get('user_id')
->>>>>>> 64db250f3be291011436cab0c82b5c00a6f1ef64
-        
-        if not user_id:
-            return json_response({'error': 'user_id required'}, status=400)
-        
-        if not db_instance:
-            return json_response({'error': 'Database not initialized'}, status=500)
-        
-<<<<<<< HEAD
-        # Получаем встречу
-        try:
-            meeting_id = int(meeting_id_str)
-            meeting = db_instance.get_meeting(meeting_id, user_id)
-            if not meeting:
-                return json_response({'error': 'Meeting not found'}, status=404)
-        except ValueError:
-            return json_response({'error': 'Invalid meeting_id'}, status=400)
-        except Exception as e:
-            logger.error(f"Ошибка получения встречи: {e}", exc_info=True)
-            return json_response({'error': str(e)}, status=500)
         
         # Создание события из встречи должно происходить через бота
         # так как требуется decision_engine и reminder_scheduler
@@ -273,12 +246,26 @@ async def update_settings_handler(request: web_request.Request):
             'success': True,
             'message': 'Event creation from meeting requires bot context',
             'action': 'open_bot',
-            'bot_command': f'/start create_event_from_meeting_{meeting_id}',
+            'bot_command': f'/start create_event_from_meeting_{meeting_id_str}',
             'note': 'Use Telegram bot command to create events from meetings. The bot has full context and can properly process event data.'
         })
     except Exception as e:
         logger.error(f"Ошибка HTTP API create_event_from_meeting: {e}", exc_info=True)
-=======
+        return json_response({'error': str(e)}, status=500)
+
+
+async def update_settings_handler(request: web_request.Request):
+    """Обработчик POST запроса для обновления настроек пользователя."""
+    try:
+        data = await request.json()
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        if not db_instance:
+            return json_response({'error': 'Database not initialized'}, status=500)
+        
         # Обновляем настройки в БД
         settings_to_update = {}
         if 'timezone' in data:
@@ -304,8 +291,65 @@ async def update_settings_handler(request: web_request.Request):
         
     except Exception as e:
         logger.error(f"❌ Ошибка HTTP API update_settings: {e}", exc_info=True)
->>>>>>> 64db250f3be291011436cab0c82b5c00a6f1ef64
         return json_response({'error': str(e)}, status=500)
+
+
+async def get_feedback_handler(request: web_request.Request):
+    """Обработчик GET запроса для получения обратной связи (только для супер-пользователя)."""
+    try:
+        user_id_str = request.query.get('user_id')
+        if not user_id_str:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+        
+        if user_id != config.SUPER_USER_ID:
+            return json_response({'error': 'Access denied'}, status=403)
+        
+        limit = int(request.query.get('limit', 100))
+        offset = int(request.query.get('offset', 0))
+        
+        if not db_instance:
+            return json_response({'error': 'Database not initialized'}, status=500)
+        
+        try:
+            feedback_list = db_instance.get_all_feedback(limit=limit, offset=offset)
+            total_count = db_instance.get_feedback_count()
+        except Exception as e:
+            logger.error(f"❌ HTTP API: Ошибка при получении обратной связи: {e}", exc_info=True)
+            return json_response({'error': f'Failed to get feedback: {str(e)}'}, status=500)
+        
+        web_feedback = []
+        for item in feedback_list:
+            created_at = item.get('created_at')
+            if isinstance(created_at, datetime):
+                created_at_str = created_at.isoformat()
+            elif isinstance(created_at, str):
+                created_at_str = created_at
+            else:
+                created_at_str = None
+            
+            web_feedback.append({
+                'id': item.get('id'),
+                'user_id': item.get('user_id'),
+                'feedback_type': item.get('feedback_type'),
+                'comment': item.get('comment'),
+                'screenshot_url': item.get('screenshot_url'),
+                'created_at': created_at_str
+            })
+        
+        return json_response({
+            'feedback': web_feedback,
+            'total': total_count,
+            'limit': limit,
+            'offset': offset
+        })
+    except Exception as e:
+        logger.error(f"❌ HTTP API: Неожиданная ошибка get_feedback: {e}", exc_info=True)
+        return json_response({'error': f'Internal server error: {str(e)}'}, status=500)
 
 
 async def health_handler(request: web_request.Request):
@@ -352,13 +396,11 @@ def create_app():
     app.router.add_get('/', root_handler)
     app.router.add_get('/health', health_handler)
     app.router.add_get('/api/events', get_events_handler)
-<<<<<<< HEAD
     app.router.add_get('/api/meetings', get_meetings_handler)
     app.router.add_get('/api/meetings/{meeting_id}', get_meeting_handler)
-    app.router.post('/api/meetings/{meeting_id}/create-event', create_event_from_meeting_handler)
-=======
+    app.router.add_post('/api/meetings/{meeting_id}/create-event', create_event_from_meeting_handler)
     app.router.add_post('/api/settings', update_settings_handler)
->>>>>>> 64db250f3be291011436cab0c82b5c00a6f1ef64
+    app.router.add_get('/api/feedback', get_feedback_handler)
     
     return app
 

@@ -271,6 +271,19 @@ class Database:
                 except:
                     pass
                 
+                # Таблица для обратной связи
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS feedback (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        feedback_type TEXT NOT NULL,
+                        comment TEXT NOT NULL,
+                        screenshot_url TEXT,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                
                 # Индексы
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time)")
@@ -408,6 +421,19 @@ class Database:
                         duration INTEGER DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                
+                # Таблица для обратной связи
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS feedback (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        feedback_type TEXT NOT NULL,
+                        comment TEXT NOT NULL,
+                        screenshot_url TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     )
                 """)
@@ -1628,5 +1654,81 @@ class Database:
             logger.error(f"Ошибка удаления встречи: {e}", exc_info=True)
             conn.rollback()
             return False
+        finally:
+            self.return_connection(conn)
+    
+    def save_feedback(self, user_id: int, feedback_type: str, comment: str, screenshot_url: Optional[str] = None) -> Optional[int]:
+        """Сохранить обратную связь в БД."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    INSERT INTO feedback (user_id, feedback_type, comment, screenshot_url)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
+                """, (user_id, feedback_type, comment, screenshot_url))
+                feedback_id = cursor.fetchone()[0]
+            else:
+                cursor.execute("""
+                    INSERT INTO feedback (user_id, feedback_type, comment, screenshot_url)
+                    VALUES (?, ?, ?, ?)
+                """, (user_id, feedback_type, comment, screenshot_url))
+                feedback_id = cursor.lastrowid
+            
+            conn.commit()
+            return feedback_id
+        except Exception as e:
+            logger.error(f"Ошибка сохранения обратной связи: {e}", exc_info=True)
+            conn.rollback()
+            return None
+        finally:
+            self.return_connection(conn)
+    
+    def get_all_feedback(self, limit: int = 100, offset: int = 0) -> List[Dict]:
+        """Получить весь список обратной связи (для супер-пользователя)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    SELECT id, user_id, feedback_type, comment, screenshot_url, created_at
+                    FROM feedback
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s
+                """, (limit, offset))
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
+            else:
+                cursor.execute("""
+                    SELECT id, user_id, feedback_type, comment, screenshot_url, created_at
+                    FROM feedback
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                """, (limit, offset))
+                columns = [desc[0] for desc in cursor.description]
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Ошибка получения обратной связи: {e}", exc_info=True)
+            return []
+        finally:
+            self.return_connection(conn)
+    
+    def get_feedback_count(self) -> int:
+        """Получить общее количество записей обратной связи."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("SELECT COUNT(*) FROM feedback")
+            else:
+                cursor.execute("SELECT COUNT(*) FROM feedback")
+            return cursor.fetchone()[0]
+        except Exception as e:
+            logger.error(f"Ошибка подсчета обратной связи: {e}", exc_info=True)
+            return 0
         finally:
             self.return_connection(conn)

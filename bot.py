@@ -743,6 +743,14 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 use_apps_script=use_apps_script
             )
             
+            # Сохраняем в БД
+            db.save_feedback(
+                user_id=user_id,
+                feedback_type=feedback_type,
+                comment=feedback_text,
+                screenshot_url=None
+            )
+            
             # Очищаем данные
             context.user_data.pop('feedback_type', None)
             context.user_data.pop('feedback_step', None)
@@ -2554,54 +2562,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Используем Apps Script, если URL указан (не требует загрузки в Drive)
                     use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
                     
-                    if use_apps_script:
-                        # При использовании Apps Script скриншот можно отправить напрямую
-                        # Пока сохраняем файл для отправки через Apps Script
+                    # Всегда загружаем скриншот в Drive (даже при использовании Apps Script)
+                    # Проверяем авторизацию
+                    if not feedback_service.get_credentials():
+                        # Нужна авторизация
+                        auth_url = feedback_service.get_authorization_url()
+                        keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
                         await update.message.reply_text(
-                            "ℹ️ Скриншот будет отправлен через Apps Script. Продолжаю без загрузки в Drive."
+                            "🔐 Требуется авторизация Google\n\n"
+                            "Для загрузки скриншота нужно авторизоваться в Google.\n\n"
+                            "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
+                            reply_markup=reply_markup
                         )
-                        screenshot_url = None  # Apps Script может обработать файл отдельно
-                        context.user_data['feedback_screenshot'] = None
+                        context.user_data['waiting_google_auth'] = True
+                        context.user_data['auth_type'] = 'feedback'
+                        context.user_data['pending_photo_file'] = photo_file
+                        return
+                    
+                    # Загружаем фото в память
+                    from io import BytesIO
+                    photo_io = BytesIO()
+                    await photo_file.download_to_memory(photo_io)
+                    photo_io.seek(0)
+                    
+                    # Загружаем в Drive
+                    filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                    screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
+                    
+                    if screenshot_url:
+                        context.user_data['feedback_screenshot'] = screenshot_url
+                        await update.message.reply_text(
+                            "✅ Скриншот загружен в Drive! Продолжаю отправку обратной связи..."
+                        )
                     else:
-                        # Загружаем в Drive только если используем прямой API
-                        # Проверяем авторизацию
-                        if not feedback_service.get_credentials():
-                            # Нужна авторизация
-                            auth_url = feedback_service.get_authorization_url()
-                            keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
-                            reply_markup = InlineKeyboardMarkup(keyboard)
-                            
-                            await update.message.reply_text(
-                                "🔐 Требуется авторизация Google\n\n"
-                                "Для загрузки скриншота нужно авторизоваться в Google.\n\n"
-                                "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
-                                reply_markup=reply_markup
-                            )
-                            context.user_data['waiting_google_auth'] = True
-                            context.user_data['auth_type'] = 'feedback'
-                            context.user_data['pending_photo_file'] = photo_file
-                            return
-                        
-                        # Загружаем фото в память
-                        from io import BytesIO
-                        photo_io = BytesIO()
-                        await photo_file.download_to_memory(photo_io)
-                        photo_io.seek(0)
-                        
-                        # Загружаем в Drive
-                        filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                        screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
-                        
-                        if screenshot_url:
-                            context.user_data['feedback_screenshot'] = screenshot_url
-                            await update.message.reply_text(
-                                "✅ Скриншот загружен! Продолжаю отправку обратной связи..."
-                            )
-                        else:
-                            await update.message.reply_text(
-                                "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
-                            )
-                            screenshot_url = None
+                        await update.message.reply_text(
+                            "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
+                        )
+                        screenshot_url = None
+                        context.user_data['feedback_screenshot'] = None
                     
                     # Переходим к отправке обратной связи
                     feedback_type = context.user_data.get('feedback_type')
@@ -2617,6 +2617,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 comment=feedback_text,
                                 screenshot_url=screenshot_url,
                                 use_apps_script=use_apps_script
+                            )
+                            
+                            # Сохраняем в БД
+                            db.save_feedback(
+                                user_id=user_id,
+                                feedback_type=feedback_type,
+                                comment=feedback_text,
+                                screenshot_url=screenshot_url
                             )
                             
                             # Очищаем данные
@@ -2776,39 +2784,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Если был отложенный скриншот, обрабатываем его
                     pending_photo_file = context.user_data.pop('pending_photo_file', None)
                     if pending_photo_file and context.user_data.get('feedback_step') == 'screenshot':
-                        use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
-                        
-                        if use_apps_script:
-                            # При использовании Apps Script скриншот можно отправить напрямую
-                            await update.message.reply_text(
-                                "ℹ️ Скриншот будет отправлен через Apps Script. Продолжаю без загрузки в Drive."
-                            )
-                            screenshot_url = None
-                        else:
-                            # Загружаем в Drive только если используем прямой API
-                            try:
-                                from io import BytesIO
-                                photo_io = BytesIO()
-                                await pending_photo_file.download_to_memory(photo_io)
-                                photo_io.seek(0)
-                                
-                                filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                                screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
-                                
-                                if screenshot_url:
-                                    context.user_data['feedback_screenshot'] = screenshot_url
-                                    await update.message.reply_text(
-                                        "✅ Скриншот загружен! Продолжаю отправку обратной связи..."
-                                    )
-                                else:
-                                    await update.message.reply_text(
-                                        "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
-                                    )
-                            except Exception as e:
-                                logger.error(f"Ошибка обработки отложенного скриншота: {e}", exc_info=True)
+                        # Всегда загружаем скриншот в Drive
+                        try:
+                            from io import BytesIO
+                            photo_io = BytesIO()
+                            await pending_photo_file.download_to_memory(photo_io)
+                            photo_io.seek(0)
+                            
+                            filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                            screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
+                            
+                            if screenshot_url:
+                                context.user_data['feedback_screenshot'] = screenshot_url
                                 await update.message.reply_text(
-                                    "⚠️ Ошибка загрузки скриншота. Продолжаю без скриншота."
+                                    "✅ Скриншот загружен в Drive! Продолжаю отправку обратной связи..."
                                 )
+                            else:
+                                await update.message.reply_text(
+                                    "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
+                                )
+                                context.user_data['feedback_screenshot'] = None
+                        except Exception as e:
+                            logger.error(f"Ошибка обработки отложенного скриншота: {e}", exc_info=True)
+                            await update.message.reply_text(
+                                "⚠️ Ошибка загрузки скриншота. Продолжаю без скриншота."
+                            )
+                            context.user_data['feedback_screenshot'] = None
                     
                     # Продолжаем процесс обратной связи
                     feedback_type = context.user_data.get('feedback_type')
@@ -2818,6 +2819,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if feedback_type and feedback_text:
                         try:
                             result = feedback_service.submit_feedback(
+                                feedback_type=feedback_type,
+                                comment=feedback_text,
+                                screenshot_url=screenshot_url
+                            )
+                            
+                            # Сохраняем в БД
+                            db.save_feedback(
+                                user_id=user_id,
                                 feedback_type=feedback_type,
                                 comment=feedback_text,
                                 screenshot_url=screenshot_url
