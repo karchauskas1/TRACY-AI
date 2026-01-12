@@ -1719,27 +1719,22 @@ class Database:
                     })
                 return result
             else:
-                # Для SQLite проверяем наличие колонок sheet_name и sheet_row_number
-                cursor.execute("PRAGMA table_info(feedback)")
-                columns_info = cursor.fetchall()
-                column_names = [col[1] for col in columns_info]
-                
-                # Формируем список колонок для SELECT
-                select_columns = ['id', 'user_id', 'feedback_type', 'comment', 'screenshot_url', 'created_at']
-                if 'sheet_name' in column_names:
-                    select_columns.append('sheet_name')
-                if 'sheet_row_number' in column_names:
-                    select_columns.append('sheet_row_number')
-                
-                columns_str = ', '.join(select_columns)
-                cursor.execute(f"""
-                    SELECT {columns_str}
+                # Для SQLite выбираем только существующие колонки (без sheet_name и sheet_row_number, если их нет)
+                cursor.execute("""
+                    SELECT id, user_id, feedback_type, comment, screenshot_url, created_at
                     FROM feedback
                     ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
                 """, (limit, offset))
                 columns = [desc[0] for desc in cursor.description]
-                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                result = []
+                for row in cursor.fetchall():
+                    row_dict = dict(zip(columns, row))
+                    # Добавляем None для отсутствующих колонок
+                    row_dict['sheet_name'] = None
+                    row_dict['sheet_row_number'] = None
+                    result.append(row_dict)
+                return result
         except Exception as e:
             logger.error(f"Ошибка получения обратной связи: {e}", exc_info=True)
             return []

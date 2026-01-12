@@ -316,8 +316,11 @@ async def get_feedback_handler(request: web_request.Request):
             return json_response({'error': 'Database not initialized'}, status=500)
         
         try:
+            logger.info(f"📊 HTTP API: Запрос обратной связи для user_id={user_id}, limit={limit}, offset={offset}")
             feedback_list = db_instance.get_all_feedback(limit=limit, offset=offset)
+            logger.info(f"📊 HTTP API: Получено {len(feedback_list)} записей из get_all_feedback")
             total_count = db_instance.get_feedback_count()
+            logger.info(f"📊 HTTP API: Всего записей в БД: {total_count}")
         except Exception as e:
             logger.error(f"❌ HTTP API: Ошибка при получении обратной связи: {e}", exc_info=True)
             return json_response({'error': f'Failed to get feedback: {str(e)}'}, status=500)
