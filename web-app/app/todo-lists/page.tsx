@@ -250,7 +250,7 @@ export default function TodoListsPage() {
                 <Card
                   key={list.id}
                   className="border-border hover:bg-accent/50 transition-colors cursor-pointer"
-                  onClick={() => router.push(`/todo-lists/${list.id}`)}
+                  onClick={() => router.push(`/todo-lists/detail?id=${list.id}`)}
                 >
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
