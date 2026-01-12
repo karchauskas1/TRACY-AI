@@ -337,7 +337,10 @@ async def get_feedback_handler(request: web_request.Request):
                 # Преобразуем в список словарей
                 feedback_list = []
                 for row in direct_rows:
-                    row_dict = dict(zip(columns, row))
+                    # row - это кортеж, преобразуем в словарь
+                    row_dict = {}
+                    for i, col_name in enumerate(columns):
+                        row_dict[col_name] = row[i]
                     row_dict['sheet_name'] = None
                     row_dict['sheet_row_number'] = None
                     feedback_list.append(row_dict)
