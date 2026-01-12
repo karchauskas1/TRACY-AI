@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare } from "lucide-react"
+import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
@@ -150,6 +150,25 @@ export default function AssistantPage() {
                       <h3 className="text-lg font-semibold mb-1">История расшифровок</h3>
                       <p className="text-sm text-muted-foreground">
                         Просмотр всех расшифрованных встреч
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
+            {/* Списки задач */}
+            <Link href="/todo-lists">
+              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <ListTodo className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold mb-1">Списки задач</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Создание и управление списками задач
                       </p>
                     </div>
                   </div>

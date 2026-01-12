@@ -451,6 +451,248 @@ async def root_handler(request: web_request.Request):
     })
 
 
+# === To-Do Lists API Handlers ===
+
+async def get_todo_lists_handler(request: web_request.Request):
+    """GET /api/todo-lists?user_id=XXX - Получить все списки задач пользователя."""
+    try:
+        user_id_str = request.query.get('user_id')
+        if not user_id_str:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+        
+        db = db_instance or Database()
+        lists = db.get_todo_lists(user_id)
+        
+        return json_response({
+            'success': True,
+            'lists': lists
+        })
+    except Exception as e:
+        logger.error(f"Ошибка получения списков задач: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def create_todo_list_handler(request: web_request.Request):
+    """POST /api/todo-lists - Создать новый список задач."""
+    try:
+        data = await request.json()
+        user_id = data.get('user_id')
+        title = data.get('title')
+        
+        if not user_id or not title:
+            return json_response({'error': 'user_id and title required'}, status=400)
+        
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+        
+        if not title.strip():
+            return json_response({'error': 'Title cannot be empty'}, status=400)
+        
+        db = db_instance or Database()
+        list_id = db.create_todo_list(user_id, title.strip())
+        
+        if list_id:
+            return json_response({
+                'success': True,
+                'list_id': list_id
+            }, status=201)
+        else:
+            return json_response({'error': 'Failed to create list'}, status=500)
+    except Exception as e:
+        logger.error(f"Ошибка создания списка задач: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def get_todo_list_handler(request: web_request.Request):
+    """GET /api/todo-lists/{list_id}?user_id=XXX - Получить конкретный список задач."""
+    try:
+        list_id_str = request.match_info.get('list_id')
+        user_id_str = request.query.get('user_id')
+        
+        if not list_id_str or not user_id_str:
+            return json_response({'error': 'list_id and user_id required'}, status=400)
+        
+        try:
+            list_id = int(list_id_str)
+            user_id = int(user_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid list_id or user_id'}, status=400)
+        
+        db = db_instance or Database()
+        todo_list = db.get_todo_list(list_id, user_id)
+        
+        if not todo_list:
+            return json_response({'error': 'List not found'}, status=404)
+        
+        # Получаем задачи списка
+        items = db.get_todo_items(list_id)
+        
+        return json_response({
+            'success': True,
+            'list': todo_list,
+            'items': items
+        })
+    except Exception as e:
+        logger.error(f"Ошибка получения списка задач: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def update_todo_list_handler(request: web_request.Request):
+    """PUT /api/todo-lists/{list_id} - Обновить список задач."""
+    try:
+        list_id_str = request.match_info.get('list_id')
+        data = await request.json()
+        user_id = data.get('user_id')
+        title = data.get('title')
+        
+        if not list_id_str or not user_id or not title:
+            return json_response({'error': 'list_id, user_id and title required'}, status=400)
+        
+        try:
+            list_id = int(list_id_str)
+            user_id = int(user_id)
+        except ValueError:
+            return json_response({'error': 'Invalid list_id or user_id'}, status=400)
+        
+        if not title.strip():
+            return json_response({'error': 'Title cannot be empty'}, status=400)
+        
+        db = db_instance or Database()
+        updated = db.update_todo_list(list_id, user_id, title.strip())
+        
+        if updated:
+            return json_response({'success': True})
+        else:
+            return json_response({'error': 'List not found or update failed'}, status=404)
+    except Exception as e:
+        logger.error(f"Ошибка обновления списка задач: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def delete_todo_list_handler(request: web_request.Request):
+    """DELETE /api/todo-lists/{list_id}?user_id=XXX - Удалить список задач."""
+    try:
+        list_id_str = request.match_info.get('list_id')
+        user_id_str = request.query.get('user_id')
+        
+        if not list_id_str or not user_id_str:
+            return json_response({'error': 'list_id and user_id required'}, status=400)
+        
+        try:
+            list_id = int(list_id_str)
+            user_id = int(user_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid list_id or user_id'}, status=400)
+        
+        db = db_instance or Database()
+        deleted = db.delete_todo_list(list_id, user_id)
+        
+        if deleted:
+            return json_response({'success': True})
+        else:
+            return json_response({'error': 'List not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Ошибка удаления списка задач: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def create_todo_item_handler(request: web_request.Request):
+    """POST /api/todo-lists/{list_id}/items - Создать задачу в списке."""
+    try:
+        list_id_str = request.match_info.get('list_id')
+        data = await request.json()
+        text = data.get('text')
+        
+        if not list_id_str or not text:
+            return json_response({'error': 'list_id and text required'}, status=400)
+        
+        try:
+            list_id = int(list_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid list_id'}, status=400)
+        
+        if not text.strip():
+            return json_response({'error': 'Text cannot be empty'}, status=400)
+        
+        db = db_instance or Database()
+        item_id = db.create_todo_item(list_id, text.strip())
+        
+        if item_id:
+            return json_response({
+                'success': True,
+                'item_id': item_id
+            }, status=201)
+        else:
+            return json_response({'error': 'Failed to create item'}, status=500)
+    except Exception as e:
+        logger.error(f"Ошибка создания задачи: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def update_todo_item_handler(request: web_request.Request):
+    """PUT /api/todo-items/{item_id} - Обновить задачу."""
+    try:
+        item_id_str = request.match_info.get('item_id')
+        data = await request.json()
+        
+        if not item_id_str:
+            return json_response({'error': 'item_id required'}, status=400)
+        
+        try:
+            item_id = int(item_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid item_id'}, status=400)
+        
+        text = data.get('text')
+        completed = data.get('completed')
+        
+        if text is not None and not text.strip():
+            return json_response({'error': 'Text cannot be empty'}, status=400)
+        
+        db = db_instance or Database()
+        updated = db.update_todo_item(item_id, text.strip() if text else None, completed)
+        
+        if updated:
+            return json_response({'success': True})
+        else:
+            return json_response({'error': 'Item not found or update failed'}, status=404)
+    except Exception as e:
+        logger.error(f"Ошибка обновления задачи: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def delete_todo_item_handler(request: web_request.Request):
+    """DELETE /api/todo-items/{item_id} - Удалить задачу."""
+    try:
+        item_id_str = request.match_info.get('item_id')
+        
+        if not item_id_str:
+            return json_response({'error': 'item_id required'}, status=400)
+        
+        try:
+            item_id = int(item_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid item_id'}, status=400)
+        
+        db = db_instance or Database()
+        deleted = db.delete_todo_item(item_id)
+        
+        if deleted:
+            return json_response({'success': True})
+        else:
+            return json_response({'error': 'Item not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Ошибка удаления задачи: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
 def create_app():
     """Создает и настраивает aiohttp приложение."""
     app = web.Application()
@@ -468,7 +710,7 @@ def create_app():
             
             response = await handler(request)
             response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
             return response
         return middleware_handler
@@ -484,6 +726,16 @@ def create_app():
     app.router.add_post('/api/meetings/{meeting_id}/create-event', create_event_from_meeting_handler)
     app.router.add_post('/api/settings', update_settings_handler)
     app.router.add_get('/api/feedback', get_feedback_handler)
+    
+    # To-Do Lists API
+    app.router.add_get('/api/todo-lists', get_todo_lists_handler)
+    app.router.add_post('/api/todo-lists', create_todo_list_handler)
+    app.router.add_get('/api/todo-lists/{list_id}', get_todo_list_handler)
+    app.router.add_put('/api/todo-lists/{list_id}', update_todo_list_handler)
+    app.router.add_delete('/api/todo-lists/{list_id}', delete_todo_list_handler)
+    app.router.add_post('/api/todo-lists/{list_id}/items', create_todo_item_handler)
+    app.router.add_put('/api/todo-items/{item_id}', update_todo_item_handler)
+    app.router.add_delete('/api/todo-items/{item_id}', delete_todo_item_handler)
     
     return app
 

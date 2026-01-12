@@ -284,6 +284,31 @@ class Database:
                     )
                 """)
                 
+                # Таблица для списков задач
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS todo_lists (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        title TEXT NOT NULL,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                
+                # Таблица для задач в списках
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS todo_items (
+                        id SERIAL PRIMARY KEY,
+                        list_id INTEGER NOT NULL,
+                        text TEXT NOT NULL,
+                        completed BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (list_id) REFERENCES todo_lists(id) ON DELETE CASCADE
+                    )
+                """)
+                
                 # Индексы
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time)")
@@ -294,6 +319,8 @@ class Database:
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_sent ON reminders(sent)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_meetings_user_id ON meetings(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_meetings_created_at ON meetings(created_at)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_todo_lists_user_id ON todo_lists(user_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_todo_items_list_id ON todo_items(list_id)")
                 
             else:
                 # SQLite схемы (оригинальные)
@@ -435,6 +462,31 @@ class Database:
                         screenshot_url TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                
+                # Таблица для списков задач
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS todo_lists (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        title TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                
+                # Таблица для задач в списках
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS todo_items (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        list_id INTEGER NOT NULL,
+                        text TEXT NOT NULL,
+                        completed INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (list_id) REFERENCES todo_lists(id) ON DELETE CASCADE
                     )
                 """)
                 
@@ -1762,5 +1814,327 @@ class Database:
         except Exception as e:
             logger.error(f"Ошибка подсчета обратной связи: {e}", exc_info=True)
             return 0
+        finally:
+            self.return_connection(conn)
+    
+    # === Методы для работы с To-Do списками ===
+    
+    def create_todo_list(self, user_id: int, title: str) -> Optional[int]:
+        """Создать новый список задач."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    INSERT INTO todo_lists (user_id, title)
+                    VALUES (%s, %s)
+                    RETURNING id
+                """, (user_id, title))
+                list_id = cursor.fetchone()[0]
+            else:
+                cursor.execute("""
+                    INSERT INTO todo_lists (user_id, title)
+                    VALUES (?, ?)
+                """, (user_id, title))
+                list_id = cursor.lastrowid
+            
+            conn.commit()
+            logger.info(f"Создан список задач {list_id} для пользователя {user_id}")
+            return list_id
+        except Exception as e:
+            logger.error(f"Ошибка создания списка задач: {e}", exc_info=True)
+            conn.rollback()
+            return None
+        finally:
+            self.return_connection(conn)
+    
+    def get_todo_lists(self, user_id: int) -> List[Dict]:
+        """Получить все списки задач пользователя."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                from psycopg2.extras import RealDictCursor
+                cursor.close()
+                dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
+                dict_cursor.execute("""
+                    SELECT id, user_id, title, created_at, updated_at
+                    FROM todo_lists
+                    WHERE user_id = %s
+                    ORDER BY updated_at DESC
+                """, (user_id,))
+                rows = dict_cursor.fetchall()
+                dict_cursor.close()
+                return [dict(row) for row in rows]
+            else:
+                cursor.execute("""
+                    SELECT id, user_id, title, created_at, updated_at
+                    FROM todo_lists
+                    WHERE user_id = ?
+                    ORDER BY updated_at DESC
+                """, (user_id,))
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка получения списков задач: {e}", exc_info=True)
+            return []
+        finally:
+            self.return_connection(conn)
+    
+    def get_todo_list(self, list_id: int, user_id: int) -> Optional[Dict]:
+        """Получить список задач по ID."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                from psycopg2.extras import RealDictCursor
+                cursor.close()
+                dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
+                dict_cursor.execute("""
+                    SELECT id, user_id, title, created_at, updated_at
+                    FROM todo_lists
+                    WHERE id = %s AND user_id = %s
+                """, (list_id, user_id))
+                row = dict_cursor.fetchone()
+                dict_cursor.close()
+                return dict(row) if row else None
+            else:
+                cursor.execute("""
+                    SELECT id, user_id, title, created_at, updated_at
+                    FROM todo_lists
+                    WHERE id = ? AND user_id = ?
+                """, (list_id, user_id))
+                row = cursor.fetchone()
+                if row:
+                    columns = [desc[0] for desc in cursor.description]
+                    return dict(zip(columns, row))
+                return None
+        except Exception as e:
+            logger.error(f"Ошибка получения списка задач: {e}", exc_info=True)
+            return None
+        finally:
+            self.return_connection(conn)
+    
+    def update_todo_list(self, list_id: int, user_id: int, title: str) -> bool:
+        """Обновить название списка задач."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    UPDATE todo_lists
+                    SET title = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND user_id = %s
+                """, (title, list_id, user_id))
+            else:
+                cursor.execute("""
+                    UPDATE todo_lists
+                    SET title = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND user_id = ?
+                """, (title, list_id, user_id))
+            
+            updated = cursor.rowcount > 0
+            conn.commit()
+            return updated
+        except Exception as e:
+            logger.error(f"Ошибка обновления списка задач: {e}", exc_info=True)
+            conn.rollback()
+            return False
+        finally:
+            self.return_connection(conn)
+    
+    def delete_todo_list(self, list_id: int, user_id: int) -> bool:
+        """Удалить список задач (каскадно удалит все задачи)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    DELETE FROM todo_lists
+                    WHERE id = %s AND user_id = %s
+                """, (list_id, user_id))
+            else:
+                cursor.execute("""
+                    DELETE FROM todo_lists
+                    WHERE id = ? AND user_id = ?
+                """, (list_id, user_id))
+            
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
+        except Exception as e:
+            logger.error(f"Ошибка удаления списка задач: {e}", exc_info=True)
+            conn.rollback()
+            return False
+        finally:
+            self.return_connection(conn)
+    
+    def create_todo_item(self, list_id: int, text: str) -> Optional[int]:
+        """Создать задачу в списке."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    INSERT INTO todo_items (list_id, text)
+                    VALUES (%s, %s)
+                    RETURNING id
+                """, (list_id, text))
+                item_id = cursor.fetchone()[0]
+            else:
+                cursor.execute("""
+                    INSERT INTO todo_items (list_id, text)
+                    VALUES (?, ?)
+                """, (list_id, text))
+                item_id = cursor.lastrowid
+            
+            # Обновляем updated_at у списка
+            if self.use_postgresql:
+                cursor.execute("""
+                    UPDATE todo_lists
+                    SET updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (list_id,))
+            else:
+                cursor.execute("""
+                    UPDATE todo_lists
+                    SET updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (list_id,))
+            
+            conn.commit()
+            return item_id
+        except Exception as e:
+            logger.error(f"Ошибка создания задачи: {e}", exc_info=True)
+            conn.rollback()
+            return None
+        finally:
+            self.return_connection(conn)
+    
+    def get_todo_items(self, list_id: int) -> List[Dict]:
+        """Получить все задачи из списка."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                from psycopg2.extras import RealDictCursor
+                cursor.close()
+                dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
+                dict_cursor.execute("""
+                    SELECT id, list_id, text, completed, created_at, updated_at
+                    FROM todo_items
+                    WHERE list_id = %s
+                    ORDER BY created_at ASC
+                """, (list_id,))
+                rows = dict_cursor.fetchall()
+                dict_cursor.close()
+                return [dict(row) for row in rows]
+            else:
+                cursor.execute("""
+                    SELECT id, list_id, text, completed, created_at, updated_at
+                    FROM todo_items
+                    WHERE list_id = ?
+                    ORDER BY created_at ASC
+                """, (list_id,))
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                result = []
+                for row in rows:
+                    row_dict = dict(zip(columns, row))
+                    # SQLite возвращает 0/1 для BOOLEAN, конвертируем в bool
+                    row_dict['completed'] = bool(row_dict['completed'])
+                    result.append(row_dict)
+                return result
+        except Exception as e:
+            logger.error(f"Ошибка получения задач: {e}", exc_info=True)
+            return []
+        finally:
+            self.return_connection(conn)
+    
+    def update_todo_item(self, item_id: int, text: Optional[str] = None, completed: Optional[bool] = None) -> bool:
+        """Обновить задачу (текст или статус выполнения)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            updates = []
+            params = []
+            
+            if text is not None:
+                updates.append("text = ?" if not self.use_postgresql else "text = %s")
+                params.append(text)
+            
+            if completed is not None:
+                updates.append("completed = ?" if not self.use_postgresql else "completed = %s")
+                params.append(completed)
+            
+            if not updates:
+                return False
+            
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            params.append(item_id)
+            
+            query = f"""
+                UPDATE todo_items
+                SET {', '.join(updates)}
+                WHERE id = {'?' if not self.use_postgresql else '%s'}
+            """
+            
+            # Заменяем ? на %s для PostgreSQL
+            if self.use_postgresql:
+                query = query.replace('?', '%s')
+            
+            cursor.execute(query, params)
+            
+            # Обновляем updated_at у списка
+            if self.use_postgresql:
+                cursor.execute("""
+                    UPDATE todo_lists
+                    SET updated_at = CURRENT_TIMESTAMP
+                    WHERE id = (SELECT list_id FROM todo_items WHERE id = %s)
+                """, (item_id,))
+            else:
+                cursor.execute("""
+                    UPDATE todo_lists
+                    SET updated_at = CURRENT_TIMESTAMP
+                    WHERE id = (SELECT list_id FROM todo_items WHERE id = ?)
+                """, (item_id,))
+            
+            updated = cursor.rowcount > 0
+            conn.commit()
+            return updated
+        except Exception as e:
+            logger.error(f"Ошибка обновления задачи: {e}", exc_info=True)
+            conn.rollback()
+            return False
+        finally:
+            self.return_connection(conn)
+    
+    def delete_todo_item(self, item_id: int) -> bool:
+        """Удалить задачу."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("DELETE FROM todo_items WHERE id = %s", (item_id,))
+            else:
+                cursor.execute("DELETE FROM todo_items WHERE id = ?", (item_id,))
+            
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
+        except Exception as e:
+            logger.error(f"Ошибка удаления задачи: {e}", exc_info=True)
+            conn.rollback()
+            return False
         finally:
             self.return_connection(conn)
