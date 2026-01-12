@@ -827,7 +827,15 @@ class Database:
             all_events_count = len(all_rows)
             logger.info(f"🔍 БД: Всего событий у пользователя {user_id} в базе: {all_events_count}")
             if all_events_count > 0:
-                logger.info(f"🔍 БД: Примеры событий: {[dict(r).get('title') for r in all_rows[:3]]}")
+                # В PostgreSQL cursor.fetchall() возвращает кортежи, если не RealDictCursor
+                try:
+                    if self.use_postgresql:
+                        # Просто берем первый элемент кортежа, если знаем индекс, или не логируем title
+                        logger.info(f"🔍 БД: Первые {min(all_events_count, 3)} событий найдены")
+                    else:
+                        logger.info(f"🔍 БД: Примеры событий: {[dict(r).get('title') for r in all_rows[:3]]}")
+                except Exception as log_err:
+                    logger.debug(f"Ошибка логирования примеров: {log_err}")
             
             if start_from:
                 query += f" AND start_time >= {param_placeholder}"
