@@ -47,6 +47,9 @@ def get_feedback_sheet_mapping():
 class FeedbackService:
     """Класс для работы с обратной связью через Google Sheets и Drive."""
     
+    # Название папки для скриншотов обратной связи
+    FEEDBACK_FOLDER_NAME = "TRACY Feedback Screenshots"
+    
     def __init__(self, user_id: int):
         self.user_id = user_id
         # Используем тот же токен, что и для Google Calendar (если есть)
@@ -54,6 +57,7 @@ class FeedbackService:
         self.token_path = os.path.join(config.TOKENS_DIR, f"google_feedback_token_{user_id}.json")
         self.sheets_service = None
         self.drive_service = None
+        self._feedback_folder_id = None  # Кэш ID папки для скриншотов
     
     def get_credentials(self) -> Optional[Credentials]:
         """Получить credentials пользователя."""
@@ -287,16 +291,76 @@ class FeedbackService:
         # Иначе возвращаем следующую строку после последней
         return len(values) + 1
     
+    def _get_or_create_feedback_folder(self) -> Optional[str]:
+        """Получить или создать папку для скриншотов обратной связи."""
+        if self._feedback_folder_id:
+            return self._feedback_folder_id
+        
+        try:
+            drive_service = self._get_drive_service()
+            
+            # Ищем существующую папку
+            query = f"name='{self.FEEDBACK_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            results = drive_service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name)'
+            ).execute()
+            
+            folders = results.get('files', [])
+            
+            if folders:
+                # Папка уже существует
+                self._feedback_folder_id = folders[0]['id']
+                logger.info(f"Найдена существующая папка для скриншотов: {self.FEEDBACK_FOLDER_NAME} (ID: {self._feedback_folder_id})")
+                return self._feedback_folder_id
+            
+            # Создаем новую папку
+            folder_metadata = {
+                'name': self.FEEDBACK_FOLDER_NAME,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            
+            folder = drive_service.files().create(
+                body=folder_metadata,
+                fields='id, name'
+            ).execute()
+            
+            self._feedback_folder_id = folder.get('id')
+            logger.info(f"Создана папка для скриншотов: {self.FEEDBACK_FOLDER_NAME} (ID: {self._feedback_folder_id})")
+            
+            # Делаем папку доступной для всех (чтобы скриншоты внутри были доступны)
+            drive_service.permissions().create(
+                fileId=self._feedback_folder_id,
+                body={'role': 'reader', 'type': 'anyone'}
+            ).execute()
+            
+            return self._feedback_folder_id
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении/создании папки для скриншотов: {e}", exc_info=True)
+            return None
+    
     def upload_screenshot_to_drive(self, photo_file: BytesIO, filename: str) -> Optional[str]:
         """Загрузить скриншот в Google Drive и вернуть ссылку."""
         try:
             drive_service = self._get_drive_service()
             
+            # Получаем или создаем папку для скриншотов
+            folder_id = self._get_or_create_feedback_folder()
+            
             # Создаем файл в Drive
             file_metadata = {
-                'name': filename,
-                'parents': []  # Можно указать папку, если нужно
+                'name': filename
             }
+            
+            # Если папка найдена/создана, загружаем в неё
+            if folder_id:
+                file_metadata['parents'] = [folder_id]
+            else:
+                # Если не удалось создать папку, загружаем в корень
+                logger.warning("Не удалось получить папку для скриншотов, загружаю в корень Drive")
+                file_metadata['parents'] = []
             
             photo_file.seek(0)
             media = {
@@ -316,6 +380,7 @@ class FeedbackService:
                 body={'role': 'reader', 'type': 'anyone'}
             ).execute()
             
+            logger.info(f"Скриншот загружен в Drive: {filename} (ID: {file['id']})")
             return file.get('webViewLink')
         except Exception as e:
             logger.error(f"Ошибка загрузки скриншота в Drive: {e}", exc_info=True)
