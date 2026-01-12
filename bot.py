@@ -1445,33 +1445,42 @@ def is_audio_file(message) -> bool:
         doc = message.document
         # Проверяем расширение файла ПЕРВЫМ (более надежно для M4A из iPhone)
         if doc.file_name:
-            audio_extensions = ['.mp3', '.m4a', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.wma', '.amr', '.3gp', '.mka', '.mp4']
+            audio_extensions = ['.mp3', '.m4a', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.wma', '.amr', '.3gp', '.mka', '.mp4', '.m4p', '.m4b']
             file_ext = doc.file_name.lower()
             if any(file_ext.endswith(ext) for ext in audio_extensions):
-                logger.info(f"Аудиофайл определен по расширению: {file_ext}")
+                logger.info(f"✅ Аудиофайл определен по расширению: {file_ext}")
                 return True
         
-        # Проверяем mime_type (M4A может быть audio/mp4 или audio/x-m4a)
+        # Проверяем mime_type (M4A может быть audio/mp4, audio/x-m4a, video/mp4)
         if doc.mime_type:
             mime_lower = doc.mime_type.lower()
             # Проверяем на audio/* типы
             if 'audio' in mime_lower:
-                logger.info(f"Аудиофайл определен по MIME типу: {doc.mime_type}")
+                logger.info(f"✅ Аудиофайл определен по MIME типу: {doc.mime_type}")
                 return True
             # M4A может быть определен как audio/mp4 или video/mp4 (но с аудио контентом)
-            if 'mp4' in mime_lower and doc.file_name and doc.file_name.lower().endswith('.m4a'):
-                logger.info(f"M4A файл определен по комбинации MIME и расширения: {doc.mime_type}, {doc.file_name}")
+            # Также проверяем по расширению файла, если MIME содержит mp4
+            if 'mp4' in mime_lower:
+                if doc.file_name:
+                    file_ext = doc.file_name.lower()
+                    if file_ext.endswith('.m4a') or file_ext.endswith('.m4p') or file_ext.endswith('.m4b'):
+                        logger.info(f"✅ M4A файл определен по комбинации MIME и расширения: {doc.mime_type}, {doc.file_name}")
+                        return True
+                # Если нет имени файла, но MIME содержит mp4, считаем возможным аудио
+                # (M4A часто определяется как video/mp4 в Telegram)
+                logger.info(f"⚠️ Документ с MIME {doc.mime_type} может быть аудио (M4A), обрабатываем как аудио")
                 return True
         
         # Если нет имени файла, но есть document с audio mime_type, считаем аудио
         if doc.mime_type and 'audio' in doc.mime_type.lower():
-            logger.info(f"Аудиофайл определен только по MIME типу: {doc.mime_type}")
+            logger.info(f"✅ Аудиофайл определен только по MIME типу: {doc.mime_type}")
             return True
         
         # Если нет имени файла и mime_type, но есть document, попробуем обработать
-        # (Telegram иногда не передает mime_type)
+        # (Telegram иногда не передает mime_type, особенно для аудио)
         if not doc.mime_type and not doc.file_name:
             # Пробуем обработать как аудио, если нет других индикаторов
+            logger.info(f"⚠️ Документ без MIME и имени файла, обрабатываем как возможный аудио")
             return True
     
     return False
@@ -2157,8 +2166,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем, находимся ли мы в режиме ожидания аудио для встречи (ВЫСШИЙ ПРИОРИТЕТ)
     # В этом режиме ВСЕ голосовые сообщения идут на расшифровку встречи, а не на создание событий
     if context.user_data.get('waiting_meeting_audio'):
+        logger.info(f"🔍 Режим расшифровки встреч активен. Проверяю сообщение: voice={bool(update.message.voice)}, document={bool(update.message.document)}, text={bool(update.message.text)}")
+        if update.message.document:
+            doc = update.message.document
+            logger.info(f"📄 Документ получен: file_name={doc.file_name}, mime_type={doc.mime_type}, file_size={doc.file_size}")
+        
         # Обработка аудио для встречи - ВСЕ голосовые и аудиофайлы
         if is_audio_file(update.message):
+            logger.info("✅ Сообщение определено как аудио, передаю в handle_meeting_audio")
             await handle_meeting_audio(update, context)
             return
         # Текстовые команды для выхода из режима (старые команды, для обратной совместимости)
