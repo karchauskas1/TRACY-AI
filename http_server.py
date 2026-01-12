@@ -317,17 +317,16 @@ async def get_feedback_handler(request: web_request.Request):
         db_to_use = Database()
         
         try:
-            # Получаем данные из БД - сначала пробуем без offset
-            feedback_list = db_to_use.get_all_feedback(limit=limit, offset=0)
+            # Получаем данные из БД
+            feedback_list = db_to_use.get_all_feedback(limit=1000, offset=0)  # Всегда получаем все записи
             total_count = db_to_use.get_feedback_count()
             
-            logger.info(f"📊 HTTP API: Получено {len(feedback_list)} записей, total={total_count}")
+            logger.info(f"📊 HTTP API: Получено {len(feedback_list)} записей из get_all_feedback, total={total_count}")
             
-            # Если пусто, но есть записи, пробуем с большим limit
-            if len(feedback_list) == 0 and total_count > 0:
-                logger.warning(f"⚠️ HTTP API: feedback_list пустой, но total={total_count}. Пробую с limit=1000.")
-                feedback_list = db_to_use.get_all_feedback(limit=1000, offset=0)
-                logger.info(f"📊 HTTP API: После запроса с limit=1000 получено {len(feedback_list)} записей")
+            # Применяем limit и offset вручную после получения данных
+            if offset > 0 or limit < len(feedback_list):
+                feedback_list = feedback_list[offset:offset+limit]
+                logger.info(f"📊 HTTP API: После применения limit={limit}, offset={offset} осталось {len(feedback_list)} записей")
                 
         except Exception as e:
             logger.error(f"❌ HTTP API: Ошибка при получении обратной связи: {e}", exc_info=True)
