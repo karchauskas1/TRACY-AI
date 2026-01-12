@@ -1,279 +1,83 @@
-# Развертывание TRACY AI BOT на сервере
+# Инструкция по обновлению кода на сервере
 
-## Информация о сервере
+## Проблема
+API endpoints `/api/todo-lists` и `/api/chat/*` возвращают 404, потому что код на сервере устарел.
 
-- **IP адрес**: 5.35.126.42
-- **Пользователь**: root
-- **Пароль**: 7WoEpj3HWex7Fg1Q26
+## Решение
+Необходимо обновить код на сервере и перезапустить бота.
 
-## Быстрое развертывание
+## Шаги обновления
 
-### Шаг 1: Развертывание файлов
-
-Запустите скрипт развертывания с локальной машины:
-
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
-
-Этот скрипт:
-- Установит необходимые пакеты (Python, Node.js, nginx, PostgreSQL)
-- Скопирует файлы бота и веб-приложения на сервер
-- Настроит Python и Node.js окружения
-- Создаст systemd сервисы
-- Настроит nginx
-
-### Шаг 2: Настройка на сервере
-
-Подключитесь к серверу:
-
+1. Подключиться к серверу:
 ```bash
 ssh root@5.35.126.42
-# Пароль: 7WoEpj3HWex7Fg1Q26
 ```
 
-Запустите скрипт настройки:
-
+2. Перейти в директорию проекта:
 ```bash
-chmod +x /opt/tracy-ai-bot/setup_server.sh
-/opt/tracy-ai-bot/setup_server.sh
+cd /root/TRACY
 ```
 
-### Шаг 3: Настройка переменных окружения
-
-Отредактируйте файл `.env`:
-
+3. Обновить код из репозитория:
 ```bash
-nano /opt/tracy-ai-bot/.env
+git pull origin main
 ```
 
-Убедитесь, что установлены следующие переменные:
-
-```env
-# Telegram Bot
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
-
-# OpenRouter API
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=gpt-4o-mini
-
-# Google Calendar OAuth
-GOOGLE_CLIENT_ID=your_google_client_id_here
-GOOGLE_CLIENT_SECRET=your_google_client_secret_here
-GOOGLE_REDIRECT_URI=http://5.35.126.42/oauth-callback
-
-# ВАЖНО: Обновите GOOGLE_REDIRECT_URI в настройках Google OAuth Console:
-# https://console.cloud.google.com/apis/credentials
-# Добавьте http://5.35.126.42/oauth-callback в список разрешенных redirect URIs
-
-# Database
-DATABASE_URL=postgresql://tracy_user:tracy_password_123@localhost:5432/tracy
-
-# Server
-HOST=0.0.0.0
-PORT=8080
-
-# Default timezone
-DEFAULT_TIMEZONE=Europe/Moscow
-
-# Web Application
-WEB_APP_URL=http://5.35.126.42
-```
-
-**ВАЖНО**: 
-1. Обновите `GOOGLE_REDIRECT_URI` в настройках Google OAuth Console (https://console.cloud.google.com/apis/credentials) на `http://5.35.126.42/oauth-callback`
-2. Убедитесь, что все токены и ключи API правильно установлены в `.env`
-
-### Шаг 4: Перезапуск сервисов
-
-После изменения `.env` перезапустите сервисы:
-
+4. Убедиться, что новые файлы присутствуют:
 ```bash
-systemctl restart tracy-bot tracy-api
+grep -n "add_get.*todo-lists\|add_get.*chat" http_server.py
 ```
 
-## Управление сервисами
+Должны быть видны строки:
+- `app.router.add_get('/api/todo-lists', get_todo_lists_handler)`
+- `app.router.add_get('/api/chat/messages', get_chat_messages_handler)`
+- `app.router.add_get('/api/chat/greeting', generate_chat_greeting_handler)`
+- `app.router.add_post('/api/chat/send', send_chat_message_handler)`
 
-### Проверка статуса
-
+5. Проверить, что таблицы в БД созданы:
 ```bash
-systemctl status tracy-bot
-systemctl status tracy-api
-systemctl status nginx
+python3 -c "from database import Database; db = Database(); print('Database initialized')"
 ```
 
-### Просмотр логов
-
+6. Перезапустить бота:
 ```bash
-# Логи бота
-journalctl -u tracy-bot -f
-tail -f /var/log/tracy/bot.log
+# Остановить текущий процесс бота
+pkill -f "python.*bot.py"
+# Или если используется systemd:
+systemctl stop tracy-bot  # если есть service
 
-# Логи API
-journalctl -u tracy-api -f
-tail -f /var/log/tracy/api.log
-
-# Логи nginx
-tail -f /var/log/nginx/error.log
-tail -f /var/log/nginx/access.log
-```
-
-### Перезапуск сервисов
-
-```bash
-systemctl restart tracy-bot
-systemctl restart tracy-api
-systemctl restart nginx
-```
-
-### Остановка сервисов
-
-```bash
-systemctl stop tracy-bot
-systemctl stop tracy-api
-```
-
-### Запуск сервисов
-
-```bash
+# Запустить бота заново
+nohup python3 bot.py > /root/TRACY/logs/bot.log 2>&1 &
+# Или через systemd:
 systemctl start tracy-bot
-systemctl start tracy-api
 ```
 
-## Структура на сервере
-
-```
-/opt/tracy-ai-bot/          # Основное приложение бота
-├── bot.py                  # Главный файл бота
-├── api_server.py           # API сервер
-├── .env                    # Переменные окружения
-├── venv/                   # Python виртуальное окружение
-└── ...
-
-/opt/tracy-web-app/         # Веб-приложение
-├── out/                    # Собранное приложение (после npm run build)
-├── package.json
-└── ...
-
-/var/log/tracy/             # Логи
-├── bot.log
-└── api.log
+7. Проверить, что HTTP сервер запущен:
+```bash
+ps aux | grep -E "python.*bot.py|aiohttp" | grep -v grep
 ```
 
-## Настройка базы данных
+8. Проверить логи:
+```bash
+tail -50 /root/TRACY/logs/bot.log
+```
 
-База данных PostgreSQL создается автоматически скриптом `setup_server.sh`.
+9. Проверить доступность API:
+```bash
+curl "http://localhost:8080/api/todo-lists?user_id=308477378"
+curl "http://localhost:8080/api/chat/greeting?user_id=308477378"
+```
 
-Параметры по умолчанию:
-- **База данных**: `tracy`
-- **Пользователь**: `tracy_user`
-- **Пароль**: `tracy_password_123`
+## Автоматический скрипт обновления
 
-Для изменения пароля:
+Если нужно автоматизировать процесс, можно использовать следующий скрипт:
 
 ```bash
-sudo -u postgres psql
-ALTER USER tracy_user WITH PASSWORD 'новый_пароль';
-\q
+#!/bin/bash
+cd /root/TRACY
+git pull origin main
+pkill -f "python.*bot.py"
+sleep 2
+nohup python3 bot.py > /root/TRACY/logs/bot.log 2>&1 &
+echo "Bot restarted"
 ```
-
-Затем обновите `DATABASE_URL` в `.env`.
-
-## Настройка веб-приложения
-
-Веб-приложение собирается автоматически при запуске `setup_server.sh`.
-
-Для пересборки:
-
-```bash
-cd /opt/tracy-web-app
-npm run build
-systemctl restart nginx
-```
-
-## Обновление приложения
-
-1. Обновите файлы на сервере (используйте `deploy.sh` или скопируйте вручную)
-2. Перезапустите сервисы:
-
-```bash
-systemctl restart tracy-bot tracy-api
-```
-
-Если изменились зависимости Python:
-
-```bash
-cd /opt/tracy-ai-bot
-source venv/bin/activate
-pip install -r requirements.txt
-systemctl restart tracy-bot tracy-api
-```
-
-Если изменились зависимости Node.js:
-
-```bash
-cd /opt/tracy-web-app
-npm install
-npm run build
-systemctl restart nginx
-```
-
-## Настройка домена (опционально)
-
-Если у вас есть домен, настройте его в nginx:
-
-1. Обновите `/etc/nginx/sites-available/tracy`:
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com www.your-domain.com;
-    # ... остальная конфигурация
-}
-```
-
-2. Перезапустите nginx:
-
-```bash
-systemctl restart nginx
-```
-
-3. Обновите `WEB_APP_URL` и `GOOGLE_REDIRECT_URI` в `.env`
-
-## Устранение неполадок
-
-### Бот не запускается
-
-1. Проверьте логи: `journalctl -u tracy-bot -n 50`
-2. Проверьте `.env` файл: `cat /opt/tracy-ai-bot/.env`
-3. Проверьте права доступа: `ls -la /opt/tracy-ai-bot`
-
-### API не отвечает
-
-1. Проверьте, что API сервер запущен: `systemctl status tracy-api`
-2. Проверьте порт: `netstat -tlnp | grep 8080`
-3. Проверьте логи: `journalctl -u tracy-api -n 50`
-
-### Веб-приложение не загружается
-
-1. Проверьте nginx: `systemctl status nginx`
-2. Проверьте, что приложение собрано: `ls -la /opt/tracy-web-app/out`
-3. Проверьте логи nginx: `tail -f /var/log/nginx/error.log`
-
-### Проблемы с базой данных
-
-1. Проверьте, что PostgreSQL запущен: `systemctl status postgresql`
-2. Проверьте подключение: `psql -U tracy_user -d tracy -h localhost`
-3. Проверьте `DATABASE_URL` в `.env`
-
-## Безопасность
-
-⚠️ **ВАЖНО**: После развертывания:
-
-1. Измените пароль базы данных на более безопасный
-2. Настройте firewall (если необходимо)
-3. Рассмотрите использование HTTPS (Let's Encrypt)
-4. Не храните пароли в открытом виде в скриптах
-
