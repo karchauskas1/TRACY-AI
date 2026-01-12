@@ -134,6 +134,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("📋 Список всех событий", callback_data="list_events_all")])
     keyboard.append([InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")])
     keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
+    keyboard.append([InlineKeyboardButton("💬 Обратная связь", callback_data="feedback_show")])
     
     inline_markup = InlineKeyboardMarkup(keyboard)
     
@@ -1187,6 +1188,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = []
         keyboard.append([InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")])
         keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
+        keyboard.append([InlineKeyboardButton("💬 Обратная связь", callback_data="feedback_show")])
         inline_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -1219,6 +1221,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = []
         keyboard.append([InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")])
         keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
+        keyboard.append([InlineKeyboardButton("💬 Обратная связь", callback_data="feedback_show")])
         inline_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
