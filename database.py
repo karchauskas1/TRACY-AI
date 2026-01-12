@@ -879,29 +879,29 @@ class Database:
             for row in rows:
                 try:
                     # Для SQLite (sqlite3.Row) и PostgreSQL (RealDictRow) dict() работает.
-                    # Но если вдруг пришел кортеж (tuple) в PostgreSQL, dict() упадет.
                     if isinstance(row, dict) or not isinstance(row, (list, tuple)):
                         event_dict = dict(row)
                     else:
-                        # Если это кортеж из PostgreSQL (случай когда RealDictCursor не сработал)
-                        # Нам нужно сопоставить колонки вручную. Но лучше просто пропустить или залогировать.
                         logger.warning(f"⚠️ Получен кортеж вместо словаря из БД: {row}")
                         continue 
                     
                     # Парсим даты из строк в datetime
                     if event_dict.get('start_time'):
-                    try:
-                        if isinstance(event_dict['start_time'], str):
-                            event_dict['start_time'] = datetime.fromisoformat(event_dict['start_time'].replace('Z', '+00:00'))
-                    except:
-                        pass
-                if event_dict.get('end_time'):
-                    try:
-                        if isinstance(event_dict['end_time'], str):
-                            event_dict['end_time'] = datetime.fromisoformat(event_dict['end_time'].replace('Z', '+00:00'))
-                    except:
-                        pass
-                events.append(event_dict)
+                        try:
+                            if isinstance(event_dict['start_time'], str):
+                                event_dict['start_time'] = datetime.fromisoformat(event_dict['start_time'].replace('Z', '+00:00'))
+                        except:
+                            pass
+                    if event_dict.get('end_time'):
+                        try:
+                            if isinstance(event_dict['end_time'], str):
+                                event_dict['end_time'] = datetime.fromisoformat(event_dict['end_time'].replace('Z', '+00:00'))
+                        except:
+                            pass
+                    events.append(event_dict)
+                except Exception as row_err:
+                    logger.error(f"Ошибка при обработке строки события: {row_err}")
+                    continue
             
             return events
         except Exception as e:
