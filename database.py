@@ -1704,7 +1704,7 @@ class Database:
                 """, (limit, offset))
                 rows = dict_cursor.fetchall()
                 dict_cursor.close()
-                # RealDictCursor уже возвращает словари, но для совместимости преобразуем
+                # RealDictCursor уже возвращает словари
                 result = []
                 for row in rows:
                     result.append({
@@ -1713,14 +1713,27 @@ class Database:
                         'feedback_type': row.get('feedback_type'),
                         'comment': row.get('comment'),
                         'screenshot_url': row.get('screenshot_url'),
-                        'sheet_name': row.get('sheet_name'),
-                        'sheet_row_number': row.get('sheet_row_number'),
+                        'sheet_name': row.get('sheet_name'),  # Может быть None если колонка не существует
+                        'sheet_row_number': row.get('sheet_row_number'),  # Может быть None если колонка не существует
                         'created_at': row.get('created_at')
                     })
                 return result
             else:
-                cursor.execute("""
-                    SELECT id, user_id, feedback_type, comment, screenshot_url, sheet_name, sheet_row_number, created_at
+                # Для SQLite проверяем наличие колонок sheet_name и sheet_row_number
+                cursor.execute("PRAGMA table_info(feedback)")
+                columns_info = cursor.fetchall()
+                column_names = [col[1] for col in columns_info]
+                
+                # Формируем список колонок для SELECT
+                select_columns = ['id', 'user_id', 'feedback_type', 'comment', 'screenshot_url', 'created_at']
+                if 'sheet_name' in column_names:
+                    select_columns.append('sheet_name')
+                if 'sheet_row_number' in column_names:
+                    select_columns.append('sheet_row_number')
+                
+                columns_str = ', '.join(select_columns)
+                cursor.execute(f"""
+                    SELECT {columns_str}
                     FROM feedback
                     ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
