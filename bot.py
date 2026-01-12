@@ -2569,25 +2569,42 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         context.user_data['pending_photo_file'] = photo_file
                         return
                     
-                    # Загружаем фото в память
-                    from io import BytesIO
-                    photo_io = BytesIO()
-                    await photo_file.download_to_memory(photo_io)
-                    photo_io.seek(0)
+                    # Используем Apps Script, если URL указан (не требует загрузки в Drive)
+                    use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
                     
-                    # Загружаем в Drive
-                    filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                    screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
-                    
-                    if not screenshot_url:
+                    if use_apps_script:
+                        # При использовании Apps Script скриншот можно отправить напрямую
+                        # Пока сохраняем файл для отправки через Apps Script
                         await update.message.reply_text(
-                            "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
+                            "ℹ️ Скриншот будет отправлен через Apps Script. Продолжаю без загрузки в Drive."
                         )
+                        screenshot_url = None  # Apps Script может обработать файл отдельно
+                    else:
+                        # Загружаем в Drive только если используем прямой API
+                        from io import BytesIO
+                        photo_io = BytesIO()
+                        await photo_file.download_to_memory(photo_io)
+                        photo_io.seek(0)
+                        
+                        filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                        screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
+                        
+                        if not screenshot_url:
+                            await update.message.reply_text(
+                                "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
+                            )
                 except Exception as e:
                     logger.error(f"Ошибка загрузки скриншота: {e}", exc_info=True)
-                    await update.message.reply_text(
-                        f"⚠️ Ошибка загрузки скриншота: {str(e)[:200]}. Продолжаю без скриншота."
-                    )
+                    # Если используется Apps Script, ошибка не критична
+                    use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
+                    if use_apps_script:
+                        await update.message.reply_text(
+                            "⚠️ Ошибка обработки скриншота. Продолжаю без скриншота."
+                        )
+                    else:
+                        await update.message.reply_text(
+                            f"⚠️ Ошибка загрузки скриншота: {str(e)[:200]}. Продолжаю без скриншота."
+                        )
             
             # Отправляем обратную связь
             feedback_text = context.user_data.get('feedback_text')
