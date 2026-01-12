@@ -322,6 +322,20 @@ class Database:
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_todo_lists_user_id ON todo_lists(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_todo_items_list_id ON todo_items(list_id)")
                 
+                # Таблица для истории чата
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS chat_messages (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        role TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id ON chat_messages(user_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at)")
+                
             else:
                 # SQLite схемы (оригинальные)
                 cursor.execute("""
@@ -2134,6 +2148,94 @@ class Database:
             return deleted
         except Exception as e:
             logger.error(f"Ошибка удаления задачи: {e}", exc_info=True)
+            conn.rollback()
+            return False
+        finally:
+            self.return_connection(conn)
+    
+    # === Методы для работы с историей чата ===
+    
+    def save_chat_message(self, user_id: int, role: str, content: str) -> Optional[int]:
+        """Сохранить сообщение в истории чата."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("""
+                    INSERT INTO chat_messages (user_id, role, content)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                """, (user_id, role, content))
+                message_id = cursor.fetchone()[0]
+            else:
+                cursor.execute("""
+                    INSERT INTO chat_messages (user_id, role, content)
+                    VALUES (?, ?, ?)
+                """, (user_id, role, content))
+                message_id = cursor.lastrowid
+            
+            conn.commit()
+            return message_id
+        except Exception as e:
+            logger.error(f"Ошибка сохранения сообщения чата: {e}", exc_info=True)
+            conn.rollback()
+            return None
+        finally:
+            self.return_connection(conn)
+    
+    def get_chat_messages(self, user_id: int, limit: int = 50) -> List[Dict]:
+        """Получить историю сообщений чата пользователя."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                from psycopg2.extras import RealDictCursor
+                cursor.close()
+                dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
+                dict_cursor.execute("""
+                    SELECT id, user_id, role, content, created_at
+                    FROM chat_messages
+                    WHERE user_id = %s
+                    ORDER BY created_at ASC
+                    LIMIT %s
+                """, (user_id, limit))
+                rows = dict_cursor.fetchall()
+                dict_cursor.close()
+                return [dict(row) for row in rows]
+            else:
+                cursor.execute("""
+                    SELECT id, user_id, role, content, created_at
+                    FROM chat_messages
+                    WHERE user_id = ?
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                """, (user_id, limit))
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка получения сообщений чата: {e}", exc_info=True)
+            return []
+        finally:
+            self.return_connection(conn)
+    
+    def clear_chat_history(self, user_id: int) -> bool:
+        """Очистить историю чата пользователя."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute("DELETE FROM chat_messages WHERE user_id = %s", (user_id,))
+            else:
+                cursor.execute("DELETE FROM chat_messages WHERE user_id = ?", (user_id,))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка очистки истории чата: {e}", exc_info=True)
             conn.rollback()
             return False
         finally:

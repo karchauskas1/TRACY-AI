@@ -693,6 +693,226 @@ async def delete_todo_item_handler(request: web_request.Request):
         return json_response({'error': str(e)}, status=500)
 
 
+# === Chat API Handlers ===
+
+async def get_chat_messages_handler(request: web_request.Request):
+    """GET /api/chat/messages?user_id=XXX - Получить историю сообщений чата."""
+    try:
+        user_id_str = request.query.get('user_id')
+        if not user_id_str:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+        
+        limit = int(request.query.get('limit', 50))
+        
+        db = db_instance or Database()
+        messages = db.get_chat_messages(user_id, limit=limit)
+        
+        # Преобразуем даты в ISO строки
+        for msg in messages:
+            created_at = msg.get('created_at')
+            if isinstance(created_at, datetime):
+                msg['created_at'] = created_at.isoformat()
+            elif isinstance(created_at, str):
+                pass  # Уже строка
+        
+        return json_response({
+            'success': True,
+            'messages': messages
+        })
+    except Exception as e:
+        logger.error(f"Ошибка получения сообщений чата: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def generate_chat_greeting_handler(request: web_request.Request):
+    """GET /api/chat/greeting?user_id=XXX - Генерировать приветственное сообщение с анализом событий."""
+    try:
+        user_id_str = request.query.get('user_id')
+        if not user_id_str:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+        
+        db = db_instance or Database()
+        
+        # Получаем настройки пользователя
+        user = db.get_or_create_user(user_id)
+        timezone = user.get('timezone', 'Europe/Moscow') if isinstance(user, dict) else 'Europe/Moscow'
+        tz = pytz.timezone(timezone)
+        now = datetime.now(tz)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today_start + timedelta(days=1)
+        
+        # Получаем события на сегодня
+        today_events = db.get_events(user_id, limit=100, start_from=today_start, start_to=today_end)
+        
+        # Если событий на сегодня нет, получаем ближайшие события
+        if not today_events:
+            future_events = db.get_events(user_id, limit=10, start_from=now, start_to=now + timedelta(days=365))
+            if future_events:
+                # Берем первое событие
+                first_event = future_events[0]
+                start_time = first_event.get('start_time')
+                if isinstance(start_time, datetime):
+                    if start_time.tzinfo is None:
+                        start_time = tz.localize(start_time)
+                    event_time_str = start_time.strftime('%d.%m.%Y в %H:%M')
+                else:
+                    event_time_str = "в ближайшее время"
+                
+                title = first_event.get('title', 'Событие')
+                
+                greeting = f"Привет! 👋\n\nУ вас {event_time_str} запланировано «{title}». Хотите это обсудить?"
+            else:
+                greeting = "Привет! 👋\n\nЯ TRACY, твой AI-ассистент для планирования. Чем могу помочь?"
+        else:
+            # Формируем список событий на сегодня
+            events_text = []
+            for event in sorted(today_events, key=lambda e: e.get('start_time', datetime.min)):
+                start_time = event.get('start_time')
+                title = event.get('title', 'Событие')
+                
+                if isinstance(start_time, datetime):
+                    if start_time.tzinfo is None:
+                        start_time = tz.localize(start_time)
+                    time_str = start_time.strftime('%H:%M')
+                    events_text.append(f"• {time_str} — {title}")
+                else:
+                    events_text.append(f"• {title}")
+            
+            events_list = "\n".join(events_text)
+            greeting = f"Привет! 👋\n\nНа сегодня у вас запланировано:\n\n{events_list}\n\nХотите обсудить планы на день или нужна помощь с планированием?"
+        
+        # Сохраняем приветственное сообщение в историю
+        db.save_chat_message(user_id, 'assistant', greeting)
+        
+        return json_response({
+            'success': True,
+            'greeting': greeting
+        })
+    except Exception as e:
+        logger.error(f"Ошибка генерации приветствия: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def send_chat_message_handler(request: web_request.Request):
+    """POST /api/chat/send - Отправить сообщение и получить ответ от AI."""
+    try:
+        data = await request.json()
+        user_id = data.get('user_id')
+        message = data.get('message')
+        
+        if not user_id or not message:
+            return json_response({'error': 'user_id and message required'}, status=400)
+        
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+        
+        if not message.strip():
+            return json_response({'error': 'Message cannot be empty'}, status=400)
+        
+        db = db_instance or Database()
+        
+        # Сохраняем сообщение пользователя
+        db.save_chat_message(user_id, 'user', message.strip())
+        
+        # Получаем историю чата (последние 20 сообщений для контекста)
+        chat_history = db.get_chat_messages(user_id, limit=20)
+        
+        # Получаем настройки пользователя
+        user = db.get_or_create_user(user_id)
+        
+        # Получаем события для контекста
+        tz = pytz.timezone(user.get('timezone', 'Europe/Moscow') if isinstance(user, dict) else 'Europe/Moscow')
+        now = datetime.now(tz)
+        events = db.get_events(user_id, limit=10, start_from=now, start_to=now + timedelta(days=30))
+        
+        # Формируем контекст событий
+        events_context = ""
+        if events:
+            events_list = []
+            for event in sorted(events[:5], key=lambda e: e.get('start_time', datetime.min)):
+                start_time = event.get('start_time')
+                title = event.get('title', 'Событие')
+                
+                if isinstance(start_time, datetime):
+                    if start_time.tzinfo is None:
+                        start_time = tz.localize(start_time)
+                    time_str = start_time.strftime('%d.%m.%Y %H:%M')
+                    events_list.append(f"- {time_str}: {title}")
+                else:
+                    events_list.append(f"- {title}")
+            
+            if events_list:
+                events_context = f"\n\nБлижайшие события пользователя:\n" + "\n".join(events_list)
+        
+        # Формируем сообщения для AI
+        messages = []
+        
+        # System prompt
+        system_prompt = """Ты TRACY — дружелюбный AI-ассистент для планирования и управления календарем. 
+Ты помогаешь пользователю:
+- Планировать день и анализировать задачи
+- Давать советы по тайм-менеджменту
+- Обсуждать предстоящие события
+- Помогать с организацией времени
+
+Будь дружелюбным, полезным и кратки. Используй эмодзи где уместно."""
+        
+        messages.append({"role": "system", "content": system_prompt + events_context})
+        
+        # История чата
+        for msg in chat_history:
+            role = msg.get('role')
+            content = msg.get('content', '')
+            if role in ['user', 'assistant'] and content:
+                messages.append({"role": role, "content": content})
+        
+        # Генерируем ответ через OpenRouter
+        try:
+            from openai import OpenAI
+            import config
+            
+            ai_client = OpenAI(
+                api_key=config.OPENROUTER_API_KEY,
+                base_url=config.OPENROUTER_BASE_URL
+            )
+            
+            response = ai_client.chat.completions.create(
+                model=config.OPENROUTER_MODEL,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=500
+            )
+            
+            assistant_message = response.choices[0].message.content.strip()
+            
+            # Сохраняем ответ ассистента
+            db.save_chat_message(user_id, 'assistant', assistant_message)
+            
+            return json_response({
+                'success': True,
+                'message': assistant_message
+            })
+        except Exception as e:
+            logger.error(f"Ошибка генерации ответа AI: {e}", exc_info=True)
+            return json_response({'error': f'Failed to generate response: {str(e)}'}, status=500)
+        
+    except Exception as e:
+        logger.error(f"Ошибка отправки сообщения: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
 def create_app():
     """Создает и настраивает aiohttp приложение."""
     app = web.Application()
@@ -736,6 +956,11 @@ def create_app():
     app.router.add_post('/api/todo-lists/{list_id}/items', create_todo_item_handler)
     app.router.add_put('/api/todo-items/{item_id}', update_todo_item_handler)
     app.router.add_delete('/api/todo-items/{item_id}', delete_todo_item_handler)
+    
+    # Chat API
+    app.router.add_get('/api/chat/messages', get_chat_messages_handler)
+    app.router.add_get('/api/chat/greeting', generate_chat_greeting_handler)
+    app.router.add_post('/api/chat/send', send_chat_message_handler)
     
     return app
 
