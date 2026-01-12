@@ -4,6 +4,8 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict
 from io import BytesIO
+import json
+import httpx
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -313,9 +315,9 @@ class FeedbackService:
             logger.error(f"Ошибка загрузки скриншота в Drive: {e}", exc_info=True)
             return None
     
-    def submit_feedback(self, feedback_type: str, comment: str, screenshot_url: Optional[str] = None) -> Dict:
+    def submit_feedback_via_apps_script(self, feedback_type: str, comment: str, screenshot_url: Optional[str] = None) -> Optional[Dict]:
         """
-        Отправить обратную связь в Google Sheets.
+        Отправить обратную связь через Apps Script webhook (альтернативный способ).
         
         Args:
             feedback_type: "баг" или "предложение"
@@ -323,8 +325,68 @@ class FeedbackService:
             screenshot_url: Ссылка на скриншот в Drive (если есть)
         
         Returns:
+            Dict с информацией о записи или None в случае ошибки
+        """
+        apps_script_url = config.FEEDBACK_APPS_SCRIPT_URL
+        if not apps_script_url:
+            logger.warning("FEEDBACK_APPS_SCRIPT_URL не установлен, пропускаем отправку через Apps Script")
+            return None
+        
+        try:
+            # Подготавливаем данные для отправки
+            data = {
+                "type": feedback_type,
+                "user_id": str(self.user_id),
+                "comment": comment,
+            }
+            if screenshot_url:
+                data["screenshot_url"] = screenshot_url
+            
+            # Отправляем POST запрос
+            response = httpx.post(
+                apps_script_url,
+                json=data,
+                timeout=10.0,
+                follow_redirects=True
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    logger.info(f"Обратная связь отправлена через Apps Script: {result}")
+                    return result
+                else:
+                    logger.error(f"Apps Script вернул ошибку: {result.get('error')}")
+                    return None
+            else:
+                logger.error(f"Ошибка HTTP при отправке через Apps Script: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Ошибка отправки через Apps Script: {e}", exc_info=True)
+            return None
+    
+    def submit_feedback(self, feedback_type: str, comment: str, screenshot_url: Optional[str] = None, use_apps_script: bool = False) -> Dict:
+        """
+        Отправить обратную связь в Google Sheets.
+        
+        Args:
+            feedback_type: "баг" или "предложение"
+            comment: Текст комментария
+            screenshot_url: Ссылка на скриншот в Drive (если есть)
+            use_apps_script: Если True, использует Apps Script webhook вместо прямого API
+        
+        Returns:
             Dict с информацией о записи (номер, дата)
         """
+        # Если указано использовать Apps Script, пробуем сначала его
+        if use_apps_script:
+            apps_script_result = self.submit_feedback_via_apps_script(feedback_type, comment, screenshot_url)
+            if apps_script_result:
+                return apps_script_result
+            # Если Apps Script не сработал, fallback на обычный способ
+            logger.info("Apps Script не сработал, используем обычный способ записи")
+        
         if not FEEDBACK_SPREADSHEET_ID:
             raise ValueError("FEEDBACK_SPREADSHEET_ID не установлен в переменных окружения")
         

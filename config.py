@@ -59,3 +59,9 @@ if env_feedback_mapping:
             except ValueError:
                 pass  # Игнорируем неверные форматы
 
+# Apps Script Webhook для обратной связи (альтернативный способ записи)
+FEEDBACK_APPS_SCRIPT_URL = os.getenv(
+    "FEEDBACK_APPS_SCRIPT_URL",
+    "https://script.google.com/macros/s/AKfycbzQ17_OdWUEaXtLJINWj9zJVZjsJsRQDYwD6uAwHMKYYv9ssmgb8C9D-IEWbho95399rg/exec"
+)
+

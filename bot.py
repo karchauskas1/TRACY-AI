@@ -731,10 +731,13 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             
             # Отправляем обратную связь
+            # Используем Apps Script, если URL указан
+            use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
             result = feedback_service.submit_feedback(
                 feedback_type=feedback_type,
                 comment=feedback_text,
-                screenshot_url=None
+                screenshot_url=None,
+                use_apps_script=use_apps_script
             )
             
             # Очищаем данные
@@ -2605,10 +2608,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
                 
                 # Отправляем обратную связь
+                # Используем Apps Script, если URL указан
+                use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
                 result = feedback_service.submit_feedback(
                     feedback_type=feedback_type,
                     comment=feedback_text,
-                    screenshot_url=screenshot_url
+                    screenshot_url=screenshot_url,
+                    use_apps_script=use_apps_script
                 )
                 
                 # Очищаем данные
