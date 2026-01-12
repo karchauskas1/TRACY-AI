@@ -314,14 +314,26 @@ async def get_feedback_handler(request: web_request.Request):
         
         # ВСЕГДА создаем новый экземпляр БД для надежности (избегаем проблем с потоками)
         from database import Database
+        import sqlite3
         db_to_use = Database()
         
         try:
+            # ПРЯМОЙ SQL ЗАПРОС для диагностики
+            if not db_to_use.use_postgresql:
+                conn = db_to_use.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM feedback")
+                direct_count = cursor.fetchone()[0]
+                cursor.execute("SELECT id, user_id, feedback_type, comment, screenshot_url, created_at FROM feedback ORDER BY created_at DESC LIMIT 10")
+                direct_rows = cursor.fetchall()
+                db_to_use.return_connection(conn)
+                logger.info(f"📊 HTTP API: Прямой SQL запрос вернул {direct_count} записей, получено {len(direct_rows)} строк")
+            
             # Получаем данные из БД
             feedback_list = db_to_use.get_all_feedback(limit=1000, offset=0)  # Всегда получаем все записи
             total_count = db_to_use.get_feedback_count()
             
-            logger.info(f"📊 HTTP API: Получено {len(feedback_list)} записей из get_all_feedback, total={total_count}")
+            logger.info(f"📊 HTTP API: get_all_feedback вернул {len(feedback_list)} записей, total_count={total_count}")
             
             # Применяем limit и offset вручную после получения данных
             if offset > 0 or limit < len(feedback_list):
