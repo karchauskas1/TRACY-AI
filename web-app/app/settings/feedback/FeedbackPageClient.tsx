@@ -283,10 +283,10 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
                         </div>
 
                         {/* Screenshot */}
-                        {item.screenshot_url && (
+                        {item.screenshotUrl && (
                           <div>
                             <a
-                              href={item.screenshot_url}
+                              href={item.screenshotUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
