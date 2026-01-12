@@ -3625,6 +3625,8 @@ def main():
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^notifications_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^reminder_set_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^reschedule_event_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^feedback_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^list_events_"))
     
     # Обработчик голосовых сообщений (отдельно для лучшей отладки)
     application.add_handler(MessageHandler(
