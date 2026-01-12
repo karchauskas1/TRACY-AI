@@ -264,8 +264,13 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
           ) : error ? (
             <Card className="border-border">
               <CardContent className="pt-6">
-                <div className="text-center text-destructive">
-                  <p className="font-medium">{error}</p>
+                <div className="text-center space-y-2">
+                  <p className="font-medium text-destructive">{error}</p>
+                  {error.includes("через Telegram") && (
+                    <p className="text-sm text-muted-foreground">
+                      Откройте бота в Telegram и используйте меню для доступа к обратной связи.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
