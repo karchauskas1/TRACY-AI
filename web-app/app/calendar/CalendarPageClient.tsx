@@ -137,106 +137,86 @@ export function CalendarPageClient() {
         console.log(`[Calendar] Нет сохраненных событий в localStorage`)
       }
       
-      // ПРИОРИТЕТ 1: Если открыто через Telegram Web App, используем tg.sendData
-      // Это работает для GitHub Pages (HTTPS) и избегает проблемы Mixed Content
-      if (tg) {
-        const requestData = JSON.stringify({ action: "get_events", user_id: userId })
-        tg.sendData(requestData)
-        console.log(`[Calendar] Отправлен запрос событий через tg.sendData для пользователя ${userId}`)
-        
-        // Устанавливаем таймер для завершения loading
-        if (!storedEvents || forceRefresh) {
-          setTimeout(() => {
-            setLoading(false)
-            console.log(`[Calendar] Loading завершен. Событий в состоянии: ${events.length}`)
-          }, 3000)
-        } else {
-          setLoading(false)
-        }
-        return
-      }
+      // ПРИОРИТЕТ 1: Прямой вызов HTTP API (основной способ)
+      // Используем серверный API для получения событий
+      let apiBaseUrl = "http://5.35.126.42:8080"
       
-      // ПРИОРИТЕТ 2: Прямой вызов HTTP API (только для localhost или если tg недоступен)
-      // Для GitHub Pages (HTTPS) это не работает из-за Mixed Content Policy
-      let apiBaseUrl = process.env.NEXT_PUBLIC_API_URL
-      if (!apiBaseUrl && typeof window !== 'undefined') {
+      if (typeof window !== 'undefined') {
         if (window.location.hostname === 'localhost') {
           apiBaseUrl = 'http://localhost:8080'
         } else {
-          // Для GitHub Pages не используем прямой HTTP API из-за Mixed Content
-          console.warn(`[Calendar] ⚠️ GitHub Pages (HTTPS) не может загружать HTTP API из-за Mixed Content Policy`)
-          console.warn(`[Calendar] ⚠️ Используйте Telegram Web App для получения событий`)
+          // Для GitHub Pages используем серверный API
+          apiBaseUrl = "http://5.35.126.42:8080"
+        }
+      }
+      
+      // Загружаем события через HTTP API
+      const apiUrl = `${apiBaseUrl}/api/events?user_id=${userId}`
+      
+      try {
+        console.log(`[Calendar] Запрос к API: ${apiUrl}`)
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          mode: 'cors',
+        })
+        
+        console.log(`[Calendar] Ответ API: status=${response.status}, ok=${response.ok}`)
+        
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`[Calendar] Данные API:`, data)
+          if (data.success && Array.isArray(data.events)) {
+            console.log(`[Calendar] ✅ Получено ${data.events.length} событий через HTTP API`)
+            setEvents(data.events)
+            
+            // Сохраняем в localStorage
+            localStorage.setItem("tracy_events", JSON.stringify(data.events))
+            localStorage.setItem("tracy_events_timestamp", data.timestamp)
+            
+            // Обновляем counts по датам
+            const counts: Record<string, number> = {}
+            data.events.forEach((event: Event) => {
+              try {
+                const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                counts[dateKey] = (counts[dateKey] || 0) + 1
+              } catch (e) {
+                console.error("Error parsing event date:", e, event)
+              }
+            })
+            setEventsByDate(counts)
+            
+            setLoading(false)
+            return
+          } else {
+            console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
+          }
+        } else {
+          const errorText = await response.text()
+          console.error(`[Calendar] ❌ API вернул ошибку: ${response.status} ${response.statusText}`, errorText)
+          
+          // Если API недоступен, используем сохраненные события из localStorage
+          if (storedEvents) {
+            console.log(`[Calendar] ⚠️ API недоступен, используем сохраненные события из localStorage`)
+            setLoading(false)
+            return
+          }
+        }
+      } catch (error) {
+        console.error(`[Calendar] ❌ Ошибка при запросе к HTTP API:`, error)
+        
+        // Если ошибка сети, используем сохраненные события
+        if (storedEvents) {
+          console.log(`[Calendar] ⚠️ Ошибка сети, используем сохраненные события из localStorage`)
           setLoading(false)
           return
         }
       }
       
-      if (apiBaseUrl) {
-        const apiUrl = `${apiBaseUrl}/api/events?user_id=${userId}`
-        
-        try {
-          console.log(`[Calendar] Запрос к API: ${apiUrl}`)
-          const response = await fetch(apiUrl, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            mode: 'cors',
-          })
-          
-          console.log(`[Calendar] Ответ API: status=${response.status}, ok=${response.ok}`)
-          
-          if (response.ok) {
-            const data = await response.json()
-            console.log(`[Calendar] Данные API:`, data)
-            if (data.success && Array.isArray(data.events)) {
-              console.log(`[Calendar] ✅ Получено ${data.events.length} событий через HTTP API`)
-              setEvents(data.events)
-              
-              // Сохраняем в localStorage
-              localStorage.setItem("tracy_events", JSON.stringify(data.events))
-              localStorage.setItem("tracy_events_timestamp", data.timestamp)
-              
-              // Обновляем counts по датам
-              const counts: Record<string, number> = {}
-              data.events.forEach((event: Event) => {
-                try {
-                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-                  counts[dateKey] = (counts[dateKey] || 0) + 1
-                } catch (e) {
-                  console.error("Error parsing event date:", e, event)
-                }
-              })
-              setEventsByDate(counts)
-              
-              setLoading(false)
-              return
-            } else {
-              console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
-            }
-          } else {
-            const errorText = await response.text()
-            console.error(`[Calendar] ❌ API вернул ошибку: ${response.status} ${response.statusText}`, errorText)
-          }
-        } catch (error) {
-          console.error(`[Calendar] ❌ Ошибка при запросе к HTTP API:`, error)
-        }
-      }
-      
-      // Устанавливаем таймер для завершения loading
-      if (!storedEvents || forceRefresh) {
-        setTimeout(() => {
-          setLoading(false)
-          console.log(`[Calendar] Loading завершен. Событий в состоянии: ${events.length}`)
-        }, 3000)
-      } else {
-        setLoading(false)
-      }
-      
-      // Всегда завершаем loading после попытки загрузки
-      setTimeout(() => {
-        setLoading(false)
-      }, 2000)
+      // Если не удалось загрузить и нет сохраненных событий
+      setLoading(false)
       
     } catch (error) {
       console.error("Failed to load events:", error)

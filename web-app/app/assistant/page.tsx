@@ -118,7 +118,7 @@ export default function AssistantPage() {
           )}
 
           {/* Main Features */}
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Calendar */}
             <Link href="/calendar">
               <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer">

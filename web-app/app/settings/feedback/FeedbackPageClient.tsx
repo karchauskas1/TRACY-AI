@@ -98,15 +98,21 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
       setError(null)
 
       // Получаем API URL
-      const apiBaseUrl = typeof window !== "undefined" && (window as any).Telegram?.WebApp
-        ? "http://5.35.126.42:8080"
-        : "http://localhost:8080"
+      let apiBaseUrl = "http://5.35.126.42:8080"
+      
+      // Если открыто через Telegram Web App, используем серверный API
+      if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+        apiBaseUrl = "http://5.35.126.42:8080"
+      } else if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+        apiBaseUrl = "http://localhost:8080"
+      }
 
       const response = await fetch(`${apiBaseUrl}/api/feedback?user_id=${user.id}&limit=100`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
+        mode: "cors",
       })
 
       if (!response.ok) {
