@@ -44,8 +44,8 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
             first_name: tgUser.first_name,
             last_name: tgUser.last_name,
           })
-          // Проверяем, является ли пользователь супер-пользователем (ID: 308477387)
-          setIsSuperUser(userId === "308477387")
+          // Проверяем, является ли пользователь супер-пользователем (ID: 308477378)
+          setIsSuperUser(userId === "308477378")
         }
       } else {
         const savedUser = localStorage.getItem("telegram_user")
@@ -59,7 +59,7 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
               name: fullName || parsed.first_name || "Пользователь",
             })
             // Проверяем, является ли пользователь супер-пользователем
-            setIsSuperUser(userId === "308477387")
+            setIsSuperUser(userId === "308477378")
           } catch (e) {
             console.error("Failed to parse user:", e)
           }
