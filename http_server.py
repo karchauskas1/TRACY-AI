@@ -337,10 +337,15 @@ async def get_feedback_handler(request: web_request.Request):
                 # Преобразуем в список словарей
                 feedback_list = []
                 for row in direct_rows:
-                    # row - это кортеж, преобразуем в словарь
-                    row_dict = {}
-                    for i, col_name in enumerate(columns):
-                        row_dict[col_name] = row[i]
+                    # row - это sqlite3.Row, можно использовать как словарь напрямую
+                    if hasattr(row, 'keys'):
+                        # Это sqlite3.Row, можно использовать как словарь
+                        row_dict = dict(row)
+                    else:
+                        # Это кортеж, преобразуем в словарь
+                        row_dict = {}
+                        for i, col_name in enumerate(columns):
+                            row_dict[col_name] = row[i]
                     row_dict['sheet_name'] = None
                     row_dict['sheet_row_number'] = None
                     feedback_list.append(row_dict)
@@ -351,6 +356,8 @@ async def get_feedback_handler(request: web_request.Request):
                 
                 db_to_use.return_connection(conn)
                 logger.info(f"📊 HTTP API: Прямой SQL запрос вернул {len(feedback_list)} записей, total={total_count}")
+                if len(feedback_list) > 0:
+                    logger.info(f"📊 HTTP API: Первая запись: {feedback_list[0]}")
             else:
                 # Для PostgreSQL используем get_all_feedback
                 feedback_list = db_to_use.get_all_feedback(limit=limit, offset=offset)
