@@ -296,6 +296,8 @@ async def update_settings_handler(request: web_request.Request):
 
 async def get_feedback_handler(request: web_request.Request):
     """Обработчик GET запроса для получения обратной связи (только для супер-пользователя)."""
+    import sys
+    print("[FEEDBACK API] get_feedback_handler вызван", file=sys.stderr, flush=True)
     try:
         user_id_str = request.query.get('user_id')
         if not user_id_str:
@@ -312,10 +314,13 @@ async def get_feedback_handler(request: web_request.Request):
         limit = int(request.query.get('limit', 100))
         offset = int(request.query.get('offset', 0))
         
+        print(f"[FEEDBACK API] user_id={user_id}, limit={limit}, offset={offset}", file=sys.stderr, flush=True)
+        
         # ВСЕГДА создаем новый экземпляр БД для надежности (избегаем проблем с потоками)
         from database import Database
         import sqlite3
         db_to_use = Database()
+        print(f"[FEEDBACK API] БД создана, PostgreSQL={db_to_use.use_postgresql}", file=sys.stderr, flush=True)
         
         try:
             # ПРЯМОЙ SQL ЗАПРОС для получения данных (обход get_all_feedback)
@@ -336,6 +341,8 @@ async def get_feedback_handler(request: web_request.Request):
                 
                 # Преобразуем в список словарей
                 feedback_list = []
+                import sys
+                print(f"[FEEDBACK API] Получено {len(direct_rows)} строк, колонки: {columns}", file=sys.stderr, flush=True)
                 logger.info(f"📊 HTTP API: Получено {len(direct_rows)} строк из SQL запроса, колонки: {columns}")
                 for idx, row in enumerate(direct_rows):
                     try:
@@ -352,8 +359,10 @@ async def get_feedback_handler(request: web_request.Request):
                         row_dict['sheet_name'] = None
                         row_dict['sheet_row_number'] = None
                         feedback_list.append(row_dict)
+                        print(f"[FEEDBACK API] Обработана строка {idx+1}: {row_dict}", file=sys.stderr, flush=True)
                         logger.info(f"📊 HTTP API: Обработана строка {idx+1}: {row_dict}")
                     except Exception as e:
+                        print(f"[FEEDBACK API] Ошибка обработки строки {idx+1}: {e}", file=sys.stderr, flush=True)
                         logger.error(f"❌ HTTP API: Ошибка обработки строки {idx+1}: {e}", exc_info=True)
                         import traceback
                         logger.error(traceback.format_exc())
@@ -363,10 +372,14 @@ async def get_feedback_handler(request: web_request.Request):
                 total_count = cursor.fetchone()[0]
                 
                 db_to_use.return_connection(conn)
+                import sys
+                print(f"[FEEDBACK API] Итого: {len(feedback_list)} записей, total={total_count}", file=sys.stderr, flush=True)
                 logger.info(f"📊 HTTP API: Прямой SQL запрос вернул {len(feedback_list)} записей, total={total_count}")
                 if len(feedback_list) > 0:
+                    print(f"[FEEDBACK API] Первая запись: {feedback_list[0]}", file=sys.stderr, flush=True)
                     logger.info(f"📊 HTTP API: Первая запись: {feedback_list[0]}")
                 else:
+                    print(f"[FEEDBACK API] ⚠️ feedback_list пустой после обработки {len(direct_rows)} строк!", file=sys.stderr, flush=True)
                     logger.warning(f"⚠️ HTTP API: feedback_list пустой после обработки {len(direct_rows)} строк!")
             else:
                 # Для PostgreSQL используем get_all_feedback
