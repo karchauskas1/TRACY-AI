@@ -107,6 +107,8 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
         apiBaseUrl = "http://localhost:8080"
       }
 
+      console.log(`[Feedback] Запрос к API: ${apiBaseUrl}/api/feedback?user_id=${user.id}&limit=100`)
+      
       const response = await fetch(`${apiBaseUrl}/api/feedback?user_id=${user.id}&limit=100`, {
         method: "GET",
         headers: {
@@ -115,23 +117,50 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
         mode: "cors",
       })
 
+      console.log(`[Feedback] Ответ API: status=${response.status}, ok=${response.ok}`)
+
       if (!response.ok) {
+        let errorMessage = "Ошибка загрузки обратной связи"
+        
         if (response.status === 403) {
-          setError("Доступ запрещен. Только супер-пользователь может просматривать обратную связь.")
+          errorMessage = "Доступ запрещен. Только супер-пользователь может просматривать обратную связь."
+        } else if (response.status === 400) {
+          errorMessage = "Неверный запрос. Проверьте параметры."
+        } else if (response.status === 500) {
+          errorMessage = "Ошибка сервера. Попробуйте позже."
         } else {
-          const errorData = await response.json().catch(() => ({ error: "Неизвестная ошибка" }))
-          setError(errorData.error || "Ошибка загрузки обратной связи")
+          try {
+            const errorData = await response.json()
+            errorMessage = errorData.error || `Ошибка ${response.status}: ${response.statusText}`
+          } catch {
+            errorMessage = `Ошибка ${response.status}: ${response.statusText}`
+          }
         }
+        
+        console.error(`[Feedback] Ошибка API: ${errorMessage}`)
+        setError(errorMessage)
         setLoading(false)
         return
       }
 
       const data = await response.json()
+      console.log(`[Feedback] Получено данных:`, data)
       setFeedback(data.feedback || [])
+      setLoading(false)
     } catch (e: any) {
-      console.error("Ошибка загрузки обратной связи:", e)
-      setError(e.message || "Ошибка подключения к серверу")
-    } finally {
+      console.error(`[Feedback] Исключение при загрузке:`, e)
+      
+      // Проверяем тип ошибки
+      let errorMessage = "Ошибка загрузки обратной связи"
+      
+      if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
+        errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету или попробуйте позже."
+      } else if (e.message) {
+        errorMessage = e.message
+      }
+      
+      console.error(`[Feedback] Установлена ошибка: ${errorMessage}`)
+      setError(errorMessage)
       setLoading(false)
     }
   }

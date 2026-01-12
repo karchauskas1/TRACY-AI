@@ -333,12 +333,14 @@ async def get_feedback_handler(request: web_request.Request):
                 created_at_str = None
             
             web_feedback.append({
-                'id': item.get('id'),
-                'user_id': item.get('user_id'),
-                'feedback_type': item.get('feedback_type'),
+                'id': str(item.get('id', '')),
+                'userId': str(item.get('user_id', '')),
+                'type': item.get('feedback_type'),
                 'comment': item.get('comment'),
-                'screenshot_url': item.get('screenshot_url'),
-                'created_at': created_at_str
+                'screenshotUrl': item.get('screenshot_url'),
+                'sheetName': item.get('sheet_name'),
+                'sheetRowNumber': item.get('sheet_row_number'),
+                'createdAt': created_at_str
             })
         
         return json_response({

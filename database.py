@@ -1693,17 +1693,21 @@ class Database:
         
         try:
             if self.use_postgresql:
-                cursor.execute("""
-                    SELECT id, user_id, feedback_type, comment, screenshot_url, created_at
+                from psycopg2.extras import RealDictCursor
+                cursor.close()
+                dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
+                dict_cursor.execute("""
+                    SELECT id, user_id, feedback_type, comment, screenshot_url, sheet_name, sheet_row_number, created_at
                     FROM feedback
                     ORDER BY created_at DESC
                     LIMIT %s OFFSET %s
                 """, (limit, offset))
-                rows = cursor.fetchall()
+                rows = dict_cursor.fetchall()
+                dict_cursor.close()
                 return [dict(row) for row in rows]
             else:
                 cursor.execute("""
-                    SELECT id, user_id, feedback_type, comment, screenshot_url, created_at
+                    SELECT id, user_id, feedback_type, comment, screenshot_url, sheet_name, sheet_row_number, created_at
                     FROM feedback
                     ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
