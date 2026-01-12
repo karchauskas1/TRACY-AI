@@ -256,8 +256,9 @@ class FeedbackService:
             # Заголовки уже есть
             return
         
-        # Добавляем заголовки
-        headers = [['№', 'Дата', 'Тип', 'User ID', 'Комментарий', 'Ссылка на скриншот']]
+        # Добавляем заголовки (строка 1)
+        # Порядок: A: №, B: Дата, C: Содержание комментария, D: Скриншот, E: Тип комментария, F: Статус
+        headers = [['№', 'Дата', 'Содержание комментария', 'Скриншот', 'Тип комментария', 'Статус']]
         body = {'values': headers}
         
         service.spreadsheets().values().update(
@@ -278,7 +279,10 @@ class FeedbackService:
         ).execute()
         
         values = result.get('values', [])
-        # Пропускаем заголовок, считаем количество строк
+        # Если лист пустой или только заголовки (1 строка), начинаем с 2-й строки
+        if len(values) <= 1:
+            return 2
+        # Иначе возвращаем следующую строку после последней
         return len(values) + 1
     
     def upload_screenshot_to_drive(self, photo_file: BytesIO, filename: str) -> Optional[str]:
