@@ -92,7 +92,7 @@ export default function EventsListPage() {
         const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 
           (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
             ? 'http://localhost:8080' 
-            : 'http://5.35.126.42')
+            : 'https://api.pasekaproduction.ru')
         const apiUrl = `${apiBaseUrl}/api/events?user_id=${user.id}`
         
         const response = await fetch(apiUrl, {

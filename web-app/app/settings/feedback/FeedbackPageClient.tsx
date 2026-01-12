@@ -103,14 +103,14 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
       const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
 
       // ПРИОРИТЕТ 1: Прямой HTTP API запрос (работает для localhost и если нет Mixed Content блокировки)
-      let apiBaseUrl = "http://5.35.126.42:8080"
+      let apiBaseUrl = "https://api.pasekaproduction.ru"
       
       if (typeof window !== "undefined") {
         if (window.location.hostname === "localhost") {
           apiBaseUrl = "http://localhost:8080"
         } else {
           // Для GitHub Pages используем серверный API
-          apiBaseUrl = "http://5.35.126.42:8080"
+          apiBaseUrl = "https://api.pasekaproduction.ru"
         }
       }
 

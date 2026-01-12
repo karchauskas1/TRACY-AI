@@ -58,7 +58,7 @@ export default function MeetingsHistoryPage() {
         const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 
           (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
             ? 'http://localhost:8080' 
-            : 'http://5.35.126.42')
+            : 'https://api.pasekaproduction.ru')
         const apiUrl = `${apiBaseUrl}/api/meetings?user_id=${userId}`
         
         const response = await fetch(apiUrl, {
@@ -159,7 +159,7 @@ export default function MeetingsHistoryPage() {
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 
       (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
         ? 'http://localhost:8080' 
-        : 'http://5.35.126.42')
+        : 'https://api.pasekaproduction.ru')
     const userId = typeof window !== 'undefined' ? 
       ((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || 
        localStorage.getItem('telegram_user')?.match(/"id":"(\d+)"/)?.[1]) : ''
@@ -300,7 +300,7 @@ export default function MeetingsHistoryPage() {
                           const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 
                             (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
                               ? 'http://localhost:8080' 
-                              : 'http://5.35.126.42')
+                              : 'https://api.pasekaproduction.ru')
                           const apiUrl = `${apiBaseUrl}/api/meetings/${meeting.id}?user_id=${typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || localStorage.getItem('telegram_user')?.match(/"id":"(\d+)"/)?.[1] : ''}`
                           
                           fetch(apiUrl)

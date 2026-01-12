@@ -77,7 +77,7 @@ export default function ChatPage() {
 
       const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
         ? "http://localhost:8080"
-        : "http://5.35.126.42:8080"
+        : "https://api.pasekaproduction.ru"
 
       // Загружаем историю сообщений
       const messagesResponse = await fetch(`${apiBaseUrl}/api/chat/messages?user_id=${user.id}&limit=50`, {
@@ -135,7 +135,7 @@ export default function ChatPage() {
       setGreetingLoaded(true)
       const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
         ? "http://localhost:8080"
-        : "http://5.35.126.42:8080"
+        : "https://api.pasekaproduction.ru"
 
       const response = await fetch(`${apiBaseUrl}/api/chat/greeting?user_id=${user.id}`, {
         method: "GET",
@@ -207,7 +207,7 @@ export default function ChatPage() {
     try {
       const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
         ? "http://localhost:8080"
-        : "http://5.35.126.42:8080"
+        : "https://api.pasekaproduction.ru"
 
       const response = await fetch(`${apiBaseUrl}/api/chat/send`, {
         method: "POST",

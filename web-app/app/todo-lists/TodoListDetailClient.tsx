@@ -88,7 +88,7 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
 
       const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
         ? "http://localhost:8080"
-        : "http://5.35.126.42:8080"
+        : "https://api.pasekaproduction.ru"
 
       const response = await fetch(`${apiBaseUrl}/api/todo-lists/${listId}?user_id=${user.id}`, {
         method: "GET",
@@ -125,7 +125,7 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
 
       const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
         ? "http://localhost:8080"
-        : "http://5.35.126.42:8080"
+        : "https://api.pasekaproduction.ru"
 
       const response = await fetch(`${apiBaseUrl}/api/todo-lists/${listId}/items`, {
         method: "POST",
@@ -159,7 +159,7 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
 
       const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
         ? "http://localhost:8080"
-        : "http://5.35.126.42:8080"
+        : "https://api.pasekaproduction.ru"
 
       const response = await fetch(`${apiBaseUrl}/api/todo-items/${itemId}`, {
         method: "PUT",
@@ -192,7 +192,7 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
 
       const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
         ? "http://localhost:8080"
-        : "http://5.35.126.42:8080"
+        : "https://api.pasekaproduction.ru"
 
       const response = await fetch(`${apiBaseUrl}/api/todo-items/${itemId}`, {
         method: "DELETE",

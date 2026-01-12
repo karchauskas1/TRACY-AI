@@ -139,14 +139,14 @@ export function CalendarPageClient() {
       
       // ПРИОРИТЕТ 1: Прямой вызов HTTP API (основной способ)
       // Используем серверный API для получения событий
-      let apiBaseUrl = "http://5.35.126.42:8080"
+      let apiBaseUrl = "https://api.pasekaproduction.ru"
       
       if (typeof window !== 'undefined') {
         if (window.location.hostname === 'localhost') {
           apiBaseUrl = 'http://localhost:8080'
         } else {
           // Для GitHub Pages используем серверный API
-          apiBaseUrl = "http://5.35.126.42:8080"
+          apiBaseUrl = "https://api.pasekaproduction.ru"
         }
       }
       
