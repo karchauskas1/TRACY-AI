@@ -277,13 +277,12 @@ export function CalendarPageClient() {
   
   useEffect(() => {
     // Автоматическое обновление событий при открытом веб-приложении
-    const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
-    if (tg && user?.id) {
-      // Обновление каждые 10 секунд (более частое для лучшей синхронизации)
+    if (user?.id) {
+      // Обновление каждые 30 секунд для синхронизации с ботом
       const intervalId = setInterval(() => {
         console.log(`[Calendar] Автоматическое обновление событий для пользователя ${user.id}`)
         loadEvents(true)
-      }, 10000) // Обновление каждые 10 секунд для лучшей синхронизации
+      }, 30000) // Обновление каждые 30 секунд
       
       // Обновление при возвращении на вкладку (focus)
       const handleFocus = () => {
@@ -300,14 +299,6 @@ export function CalendarPageClient() {
         }
       }
       document.addEventListener("visibilitychange", handleVisibilityChange)
-      
-      // Обновление при открытии веб-приложения (viewportChanged)
-      if (tg.onEvent) {
-        tg.onEvent("viewportChanged", () => {
-          console.log(`[Calendar] Обновление событий при viewport changed`)
-          loadEvents(true)
-        })
-      }
       
       return () => {
         clearInterval(intervalId)
