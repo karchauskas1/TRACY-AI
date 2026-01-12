@@ -2551,23 +2551,101 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     feedback_service = FeedbackService(user_id)
                     
-                    # Проверяем авторизацию
-                    if not feedback_service.get_credentials():
-                        # Нужна авторизация
-                        auth_url = feedback_service.get_authorization_url()
-                        keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        
+                    # Используем Apps Script, если URL указан (не требует загрузки в Drive)
+                    use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
+                    
+                    if use_apps_script:
+                        # При использовании Apps Script скриншот можно отправить напрямую
+                        # Пока сохраняем файл для отправки через Apps Script
                         await update.message.reply_text(
-                            "🔐 Требуется авторизация Google\n\n"
-                            "Для загрузки скриншота нужно авторизоваться в Google.\n\n"
-                            "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
-                            reply_markup=reply_markup
+                            "ℹ️ Скриншот будет отправлен через Apps Script. Продолжаю без загрузки в Drive."
                         )
-                        context.user_data['waiting_google_auth'] = True
-                        context.user_data['auth_type'] = 'feedback'
-                        context.user_data['pending_photo_file'] = photo_file
-                        return
+                        screenshot_url = None  # Apps Script может обработать файл отдельно
+                        context.user_data['feedback_screenshot'] = None
+                    else:
+                        # Загружаем в Drive только если используем прямой API
+                        # Проверяем авторизацию
+                        if not feedback_service.get_credentials():
+                            # Нужна авторизация
+                            auth_url = feedback_service.get_authorization_url()
+                            keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            await update.message.reply_text(
+                                "🔐 Требуется авторизация Google\n\n"
+                                "Для загрузки скриншота нужно авторизоваться в Google.\n\n"
+                                "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
+                                reply_markup=reply_markup
+                            )
+                            context.user_data['waiting_google_auth'] = True
+                            context.user_data['auth_type'] = 'feedback'
+                            context.user_data['pending_photo_file'] = photo_file
+                            return
+                        
+                        # Загружаем фото в память
+                        from io import BytesIO
+                        photo_io = BytesIO()
+                        await photo_file.download_to_memory(photo_io)
+                        photo_io.seek(0)
+                        
+                        # Загружаем в Drive
+                        filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                        screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
+                        
+                        if screenshot_url:
+                            context.user_data['feedback_screenshot'] = screenshot_url
+                            await update.message.reply_text(
+                                "✅ Скриншот загружен! Продолжаю отправку обратной связи..."
+                            )
+                        else:
+                            await update.message.reply_text(
+                                "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
+                            )
+                            screenshot_url = None
+                    
+                    # Переходим к отправке обратной связи
+                    feedback_type = context.user_data.get('feedback_type')
+                    feedback_text = context.user_data.get('feedback_text')
+                    
+                    if feedback_type and feedback_text:
+                        try:
+                            feedback_service = FeedbackService(user_id)
+                            use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
+                            
+                            result = feedback_service.submit_feedback(
+                                feedback_type=feedback_type,
+                                comment=feedback_text,
+                                screenshot_url=screenshot_url,
+                                use_apps_script=use_apps_script
+                            )
+                            
+                            # Очищаем данные
+                            context.user_data.pop('feedback_type', None)
+                            context.user_data.pop('feedback_step', None)
+                            context.user_data.pop('feedback_text', None)
+                            context.user_data.pop('feedback_screenshot', None)
+                            context.user_data.pop('pending_photo_file', None)
+                            
+                            keyboard = [[InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            await update.message.reply_text(
+                                f"✅ Отправлено\n\n"
+                                f"Тип: {feedback_type}\n"
+                                f"Дата: {result['date']}\n"
+                                f"Номер записи: #{result['number']}\n"
+                                f"Лист: {result['sheet']}",
+                                reply_markup=reply_markup
+                            )
+                        except Exception as e:
+                            logger.error(f"Ошибка отправки обратной связи: {e}", exc_info=True)
+                            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="feedback_show")]]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            await update.message.reply_text(
+                                f"❌ Ошибка отправки обратной связи:\n{str(e)[:300]}",
+                                reply_markup=reply_markup
+                            )
+                    return
                     
                     # Используем Apps Script, если URL указан (не требует загрузки в Drive)
                     use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
