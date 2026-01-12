@@ -339,21 +339,18 @@ async def get_feedback_handler(request: web_request.Request):
                 logger.info(f"📊 HTTP API: Получено {len(direct_rows)} строк из SQL запроса")
                 for idx, row in enumerate(direct_rows):
                     try:
-                        # row - это sqlite3.Row, можно использовать как словарь напрямую
-                        if hasattr(row, 'keys'):
-                            # Это sqlite3.Row, можно использовать как словарь
-                            row_dict = dict(row)
-                        else:
-                            # Это кортеж, преобразуем в словарь
-                            row_dict = {}
-                            for i, col_name in enumerate(columns):
-                                row_dict[col_name] = row[i]
+                        # row - это sqlite3.Row, доступ к полям через имя колонки
+                        row_dict = {}
+                        for col_name in columns:
+                            row_dict[col_name] = row[col_name]  # Доступ через имя колонки для sqlite3.Row
                         row_dict['sheet_name'] = None
                         row_dict['sheet_row_number'] = None
                         feedback_list.append(row_dict)
                         logger.debug(f"📊 HTTP API: Обработана строка {idx+1}: {row_dict}")
                     except Exception as e:
                         logger.error(f"❌ HTTP API: Ошибка обработки строки {idx+1}: {e}", exc_info=True)
+                        import traceback
+                        logger.error(traceback.format_exc())
                 
                 # Получаем total count
                 cursor.execute("SELECT COUNT(*) FROM feedback")
