@@ -201,6 +201,8 @@ class FeedbackService:
     
     def _get_sheet_name(self) -> str:
         """Получить название листа для текущего пользователя."""
+        # При использовании Apps Script маппинг выполняется на стороне Apps Script
+        # Здесь возвращаем значение только для прямого API (fallback)
         mapping = get_feedback_sheet_mapping()
         return mapping.get(self.user_id, DEFAULT_SHEET_NAME)
     
