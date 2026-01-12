@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Calendar, Settings, Mic, FileAudio, History, Sparkles } from "lucide-react"
+import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
@@ -11,6 +11,7 @@ import Link from "next/link"
 export default function AssistantPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const [isSuperUser, setIsSuperUser] = useState(false)
 
   useEffect(() => {
     // Загружаем данные пользователя из Telegram Web App или localStorage
@@ -25,14 +26,17 @@ export default function AssistantPage() {
         const tgUser = tg.initDataUnsafe?.user
         if (tgUser) {
           const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")
+          const userId = tgUser.id.toString()
           setUser({
-            id: tgUser.id.toString(),
+            id: userId,
             name: fullName || tgUser.first_name || "Пользователь",
             avatarUrl: tgUser.photo_url,
             first_name: tgUser.first_name,
             last_name: tgUser.last_name,
             username: tgUser.username,
           })
+          // Проверяем, является ли пользователь супер-пользователем (ID: 308477378)
+          setIsSuperUser(userId === "308477378")
         }
       } else {
         const savedUser = localStorage.getItem("telegram_user")
@@ -40,10 +44,13 @@ export default function AssistantPage() {
           try {
             const parsed = JSON.parse(savedUser)
             const fullName = [parsed.first_name, parsed.last_name].filter(Boolean).join(" ")
+            const userId = parsed.id?.toString()
             setUser({
               ...parsed,
               name: fullName || parsed.first_name || "Пользователь",
             })
+            // Проверяем, является ли пользователь супер-пользователем
+            setIsSuperUser(userId === "308477378")
           } catch (e) {
             console.error("Failed to parse user:", e)
           }
@@ -130,30 +137,6 @@ export default function AssistantPage() {
                 </CardContent>
               </Card>
             </Link>
-            
-            {/* Open Calendar Button */}
-            <a
-              href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block"
-            >
-              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer bg-primary/5 border-primary/20">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Calendar className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-1">Открыть календарь в Telegram</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Используй бота для управления событиями и напоминаниями
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </a>
 
             {/* История расшифровок */}
             <Link href="/meetings/history">
@@ -173,6 +156,27 @@ export default function AssistantPage() {
                 </CardContent>
               </Card>
             </Link>
+
+            {/* Обратная связь (только для супер-пользователя) */}
+            {isSuperUser && (
+              <Link href="/settings/feedback">
+                <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <MessageSquare className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold mb-1">Обратная связь</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Просмотр всех сообщений об ошибках и предложениях
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            )}
           </div>
         </div>
       </div>
