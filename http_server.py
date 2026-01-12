@@ -316,39 +316,50 @@ async def get_feedback_handler(request: web_request.Request):
             logger.error("❌ HTTP API: db_instance не инициализирован!")
             return json_response({'error': 'Database not initialized'}, status=500)
 
-        logger.info(f"📊 HTTP API: db_instance = {db_instance}, type = {type(db_instance)}")
         try:
-            logger.info(f"📊 HTTP API: Запрос обратной связи для user_id={user_id}, limit={limit}, offset={offset}")
+            # Получаем данные из БД
             feedback_list = db_instance.get_all_feedback(limit=limit, offset=offset)
-            logger.info(f"📊 HTTP API: Получено {len(feedback_list)} записей из get_all_feedback")
-            if len(feedback_list) > 0:
-                logger.info(f"📊 HTTP API: Первая запись: {feedback_list[0]}")
             total_count = db_instance.get_feedback_count()
-            logger.info(f"📊 HTTP API: Всего записей в БД: {total_count}")
+            
+            # КРИТИЧЕСКАЯ ПРОВЕРКА: если feedback_list пустой, но total_count > 0, пробуем без offset
+            if len(feedback_list) == 0 and total_count > 0:
+                logger.warning(f"⚠️ HTTP API: feedback_list пустой при limit={limit}, offset={offset}, total={total_count}. Пробую без offset.")
+                feedback_list = db_instance.get_all_feedback(limit=limit, offset=0)
+                logger.info(f"📊 HTTP API: После повторного запроса получено {len(feedback_list)} записей")
         except Exception as e:
             logger.error(f"❌ HTTP API: Ошибка при получении обратной связи: {e}", exc_info=True)
+            import traceback
+            logger.error(traceback.format_exc())
             return json_response({'error': f'Failed to get feedback: {str(e)}'}, status=500)
         
         web_feedback = []
-        for item in feedback_list:
-            created_at = item.get('created_at')
-            if isinstance(created_at, datetime):
-                created_at_str = created_at.isoformat()
-            elif isinstance(created_at, str):
-                created_at_str = created_at
-            else:
-                created_at_str = None
-            
-            web_feedback.append({
-                'id': str(item.get('id', '')),
-                'userId': str(item.get('user_id', '')),
-                'type': item.get('feedback_type'),
-                'comment': item.get('comment'),
-                'screenshotUrl': item.get('screenshot_url'),
-                'sheetName': item.get('sheet_name'),
-                'sheetRowNumber': item.get('sheet_row_number'),
-                'createdAt': created_at_str
-            })
+        logger.info(f"📊 HTTP API: Начинаю обработку {len(feedback_list)} записей")
+        for idx, item in enumerate(feedback_list):
+            logger.debug(f"📊 HTTP API: Обработка записи {idx+1}: {item}")
+            try:
+                created_at = item.get('created_at')
+                if isinstance(created_at, datetime):
+                    created_at_str = created_at.isoformat()
+                elif isinstance(created_at, str):
+                    created_at_str = created_at
+                else:
+                    created_at_str = None
+                
+                web_feedback.append({
+                    'id': str(item.get('id', '')),
+                    'userId': str(item.get('user_id', '')),
+                    'type': item.get('feedback_type'),
+                    'comment': item.get('comment'),
+                    'screenshotUrl': item.get('screenshot_url'),
+                    'sheetName': item.get('sheet_name'),
+                    'sheetRowNumber': item.get('sheet_row_number'),
+                    'createdAt': created_at_str
+                })
+            except Exception as e:
+                logger.error(f"❌ HTTP API: Ошибка обработки записи {idx+1}: {e}", exc_info=True)
+        
+        logger.info(f"📊 HTTP API: Сформировано {len(web_feedback)} записей для ответа")
+        logger.info(f"📊 HTTP API: Возвращаю ответ с {len(web_feedback)} записями, total={total_count}")
         
         return json_response({
             'feedback': web_feedback,
