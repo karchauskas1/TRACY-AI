@@ -6,12 +6,14 @@ import { ArrowLeft, X, MessageSquare, Bug, Lightbulb, Image as ImageIcon, Loader
 import { Card, CardContent } from "../../../components/ui/card"
 
 interface FeedbackItem {
-  id: number
-  user_id: number
-  feedback_type: string
+  id: string
+  userId: string
+  type: string
   comment: string
-  screenshot_url?: string
-  created_at: string
+  screenshotUrl?: string
+  sheetName?: string
+  sheetRowNumber?: number
+  createdAt: string
 }
 
 interface FeedbackPageClientProps {
@@ -250,8 +252,8 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
           ) : (
             <div className="space-y-4">
               {feedback.map((item) => {
-                const TypeIcon = getFeedbackTypeIcon(item.feedback_type)
-                const typeLabel = getFeedbackTypeLabel(item.feedback_type)
+                const TypeIcon = getFeedbackTypeIcon(item.type)
+                const typeLabel = getFeedbackTypeLabel(item.type)
                 
                 return (
                   <Card key={item.id} className="border-border">
@@ -266,13 +268,13 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
                             <span className="text-sm font-medium">{typeLabel}</span>
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            {formatDate(item.created_at)}
+                            {formatDate(item.createdAt)}
                           </span>
                         </div>
 
                         {/* User ID */}
                         <div className="text-sm text-muted-foreground">
-                          User ID: {item.user_id}
+                          User ID: {item.userId}
                         </div>
 
                         {/* Comment */}
