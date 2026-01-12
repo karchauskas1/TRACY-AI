@@ -1704,7 +1704,20 @@ class Database:
                 """, (limit, offset))
                 rows = dict_cursor.fetchall()
                 dict_cursor.close()
-                return [dict(row) for row in rows]
+                # RealDictCursor уже возвращает словари, но для совместимости преобразуем
+                result = []
+                for row in rows:
+                    result.append({
+                        'id': row.get('id'),
+                        'user_id': row.get('user_id'),
+                        'feedback_type': row.get('feedback_type'),
+                        'comment': row.get('comment'),
+                        'screenshot_url': row.get('screenshot_url'),
+                        'sheet_name': row.get('sheet_name'),
+                        'sheet_row_number': row.get('sheet_row_number'),
+                        'created_at': row.get('created_at')
+                    })
+                return result
             else:
                 cursor.execute("""
                     SELECT id, user_id, feedback_type, comment, screenshot_url, sheet_name, sheet_row_number, created_at
