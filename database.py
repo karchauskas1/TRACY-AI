@@ -682,6 +682,9 @@ class Database:
             
             for key, value in kwargs.items():
                 if key in ['title', 'description', 'location', 'status', 'priority', 'external_id', 'provider']:
+                    # Пропускаем None значения для обязательных полей (title не может быть None)
+                    if key == 'title' and (value is None or (isinstance(value, str) and not value.strip())):
+                        continue  # Не обновляем title если он None или пустой
                     updates.append(f"{key} = {param_placeholder}")
                     params.append(value)
                 elif key in ['start_time', 'end_time']:

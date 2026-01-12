@@ -20,7 +20,7 @@ class ReminderScheduler:
         self.bot = bot
         self.db = db
         self.running = False
-        self.check_interval = 30  # Проверка каждые 30 секунд для более точной доставки
+        self.check_interval = 60  # Проверка каждую минуту для точной доставки утреннего дайджеста
         self._task = None  # Храним ссылку на задачу
         self._morning_digest_last_check = {}  # {user_id: last_check_date} для отслеживания отправленных дайджестов
         # Инициализируем AI клиент для генерации мотивационных цитат
@@ -67,9 +67,8 @@ class ReminderScheduler:
                 if iteration % 20 == 0:  # Логируем каждые 20 итераций (каждые ~10 минут)
                     logger.info(f"✓ Планировщик работает, итерация #{iteration}")
                 await self._check_and_send_reminders()
-                # Проверяем утренний дайджест каждые 5 минут (iteration % 10)
-                if iteration % 10 == 0:
-                    await self._check_and_send_morning_digests()
+                # Проверяем утренний дайджест каждую минуту для точной отправки
+                await self._check_and_send_morning_digests()
             except asyncio.CancelledError:
                 logger.info("Цикл проверки напоминаний отменен")
                 break
@@ -449,13 +448,12 @@ class ReminderScheduler:
                         user_tz = pytz.timezone('Europe/Moscow')
                         user_current_time = current_time_utc.astimezone(user_tz)
                     
-                    # Проверяем, нужно ли отправить дайджест сейчас (в пределах 5 минут от заданного времени)
+                    # Проверяем, нужно ли отправить дайджест ровно в заданное время
                     current_hour = user_current_time.hour
                     current_minute = user_current_time.minute
                     
-                    # Проверяем, что мы в нужное время (с окном ±5 минут)
-                    time_diff_minutes = (current_hour * 60 + current_minute) - (digest_hour * 60 + digest_minute)
-                    if abs(time_diff_minutes) > 5:
+                    # Проверяем точное совпадение времени (ровно в заданное время)
+                    if current_hour != digest_hour or current_minute != digest_minute:
                         continue
                     
                     # Проверяем, не отправляли ли мы уже дайджест сегодня

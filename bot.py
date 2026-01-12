@@ -2623,8 +2623,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             
             # Извлекаем intent и контекст (передаем информацию о последнем событии)
+            # Получаем режим интерпретации из user_data (по умолчанию 'soft')
+            ai_mode = context.user_data.get('ai_mode', 'soft')
             extracted_data = await nlp_extractor.extract_intent_and_context(
-                text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message)
+                text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message),
+                interpretation_mode=ai_mode
             )
             
             # Принимаем решение и выполняем действие

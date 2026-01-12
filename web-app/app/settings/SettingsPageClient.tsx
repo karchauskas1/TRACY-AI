@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronRight, User, Globe, Bell, Brain, Calendar, X, MoreVertical, ArrowLeft } from "lucide-react"
+import { ChevronRight, User, Globe, Bell, Brain, Calendar, X, MoreVertical, ArrowLeft, Sun, Moon } from "lucide-react"
 import { Card, CardContent } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
 import { useLocale } from "../../lib/locale-context"
+import { useTheme } from "../../lib/theme-context"
 
 interface SettingsPageClientProps {
   user: {
@@ -22,6 +23,7 @@ interface SettingsPageClientProps {
 export function SettingsPageClient({ user: initialUser }: SettingsPageClientProps) {
   const router = useRouter()
   const { t } = useLocale()
+  const { theme, setTheme, resolvedTheme } = useTheme()
   const [user, setUser] = useState(initialUser)
 
   useEffect(() => {
@@ -98,6 +100,23 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
       href: "/settings/calendars",
     },
   ]
+
+  const handleThemeToggle = () => {
+    if (theme === "dark") {
+      setTheme("light")
+    } else if (theme === "light") {
+      setTheme("system")
+    } else {
+      setTheme("dark")
+    }
+  }
+
+  const getThemeLabel = () => {
+    if (theme === "system") {
+      return "Системная"
+    }
+    return theme === "dark" ? "Тёмная" : "Светлая"
+  }
 
   const displayName = user?.name || [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Пользователь"
   const avatarInitials = displayName
@@ -177,6 +196,21 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
                   </div>
                 )
               })}
+              <div className="border-t border-border" />
+              <button
+                onClick={handleThemeToggle}
+                className="w-full flex items-center justify-between p-4 hover:bg-accent/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  {resolvedTheme === "dark" ? (
+                    <Moon className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <Sun className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  <span className="font-medium">Тема: {getThemeLabel()}</span>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </button>
             </CardContent>
           </Card>
         </div>

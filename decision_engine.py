@@ -395,9 +395,33 @@ class DecisionEngine:
                                 # "утра" и "дня" остаются как есть (0-12 утра, 12-18 дня)
                 
                 if hour is not None and 0 <= hour < 24 and 0 <= minute < 60:
-                    # Определяем дату
+                    # Определяем дату - парсим из текста
                     date = now.date()
-                    if 'завтра' in text_lower:
+                    
+                    # Парсим дату из русского текста: "15-го января", "15 января", "15-е января"
+                    month_names = {
+                        'января': 1, 'февраля': 2, 'марта': 3, 'апреля': 4, 'мая': 5, 'июня': 6,
+                        'июля': 7, 'августа': 8, 'сентября': 9, 'октября': 10, 'ноября': 11, 'декабря': 12
+                    }
+                    
+                    # Паттерны для даты: "15-го января", "15 января", "15-е января", "15-е число января"
+                    date_match = re_module.search(r'(\d{1,2})(?:-го|-е)?\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)', text_lower)
+                    if date_match:
+                        day = int(date_match.group(1))
+                        month_name = date_match.group(2)
+                        month = month_names.get(month_name)
+                        if month and 1 <= day <= 31:
+                            try:
+                                # Пробуем создать дату с текущим годом
+                                date = datetime(now.year, month, day).date()
+                                # Если дата уже прошла в этом году, используем следующий год
+                                if date < now.date():
+                                    date = datetime(now.year + 1, month, day).date()
+                                logger.info(f"✅ Извлечена дата из текста: {day} {month_name} → {date}")
+                            except ValueError:
+                                logger.warning(f"Неверная дата: {day} {month_name}")
+                                date = now.date()
+                    elif 'завтра' in text_lower:
                         date = date + timedelta(days=1)
                     elif 'послезавтра' in text_lower:
                         date = date + timedelta(days=2)
@@ -406,8 +430,8 @@ class DecisionEngine:
                     start_time = datetime.combine(date, datetime.min.time().replace(hour=hour, minute=minute))
                     start_time = tz.localize(start_time)
                     
-                    # Если время уже прошло сегодня и не указано "завтра", считаем что это завтра
-                    if start_time < now and 'завтра' not in text_lower and 'послезавтра' not in text_lower:
+                    # Если время уже прошло сегодня и не указано "завтра" или дата, считаем что это завтра
+                    if start_time < now and 'завтра' not in text_lower and 'послезавтра' not in text_lower and not date_match:
                         start_time = start_time + timedelta(days=1)
                     
                     has_explicit_time = True
@@ -500,7 +524,8 @@ class DecisionEngine:
                 location=extracted_data.get('location'),
                 description=extracted_data.get('description'),
                 timezone=timezone,
-                is_reminder=False
+                is_reminder=False,
+                user_id=user_id
             )
             message += "\n\n⚠️ Требуется подтверждение (время не указано явно)"
             
@@ -730,7 +755,8 @@ class DecisionEngine:
             description=extracted_data.get('description'),
             timezone=timezone,
             is_reminder=False,
-            reminder_minutes=reminder_minutes if reminder_minutes else None
+            reminder_minutes=reminder_minutes if reminder_minutes else None,
+            user_id=user_id
         )
         
         # Добавляем информацию о синхронизации с календарями, если были подключены
@@ -766,7 +792,8 @@ class DecisionEngine:
                 location=extracted_data.get('location'),
                 description=extracted_data.get('description'),
                 timezone=timezone,
-                is_reminder=True
+                is_reminder=True,
+                user_id=user_id
             )
             result['message'] = message
         
@@ -1166,7 +1193,8 @@ class DecisionEngine:
         
         # Обновляем в БД
         updates = {}
-        if 'title' in extracted_data:
+        # Обновляем title только если он не None и не пустой
+        if 'title' in extracted_data and extracted_data['title']:
             updates['title'] = extracted_data['title']
         if 'description' in extracted_data:
             updates['description'] = extracted_data['description']
@@ -1176,6 +1204,14 @@ class DecisionEngine:
             updates['end_time'] = extracted_data['end_time']
         if 'location' in extracted_data:
             updates['location'] = extracted_data['location']
+        
+        # Если нет обновлений, возвращаем ошибку
+        if not updates:
+            return {
+                'action': 'error',
+                'message': '❌ Не удалось определить, что нужно обновить. Попробуй еще раз.',
+                'needs_confirmation': False
+            }
         
         self.db.update_event(event_id, **updates)
         
@@ -1233,7 +1269,11 @@ class DecisionEngine:
                 logger.error(f"Ошибка обновления события в календаре: {e}")
         
         # Форматируем сообщение в новом стиле
-        updated_title = updates.get('title', event.get('title', 'Событие'))
+        updated_title = updates.get('title') or event.get('title') or 'Событие'
+        # Убеждаемся, что updated_title не None
+        if not updated_title:
+            updated_title = 'Событие'
+        
         updated_start_time = updates.get('start_time')
         if updated_start_time and isinstance(updated_start_time, str):
             from datetime import datetime
@@ -1254,6 +1294,14 @@ class DecisionEngine:
                 from datetime import datetime
                 updated_end_time = datetime.fromisoformat(event['end_time'])
         
+        # Безопасная проверка на наличие 🔔 в title
+        event_title_str = str(event.get('title', ''))
+        is_reminder = False
+        if updated_title and '🔔' in str(updated_title):
+            is_reminder = True
+        elif event_title_str and '🔔' in event_title_str:
+            is_reminder = True
+        
         message = self._format_event_confirmation(
             title=updated_title,
             start_time=updated_start_time,
@@ -1261,7 +1309,8 @@ class DecisionEngine:
             location=updates.get('location') or event.get('location'),
             description=updates.get('description') or event.get('description'),
             timezone=timezone,
-            is_reminder='🔔' in updated_title or '🔔' in str(event.get('title', ''))
+            is_reminder=is_reminder,
+            user_id=user_id
         )
         # Заменяем "Добавлен" на "Обновлен" если нужно (но нового формата это уже не требуется)
         # Убираем старый формат, так как теперь используем новый
@@ -1291,8 +1340,8 @@ class DecisionEngine:
         if not confirmed:
             return {
                 'action': 'delete_all_confirmation',
-                'message': f"⚠️ **Вы точно хотите удалить все события?**\n\n"
-                          f"Будет удалено **{events_count}** событий из календаря.\n\n"
+                'message': f"⚠️ Вы точно хотите удалить все события?\n\n"
+                          f"Будет удалено {events_count} событий из календаря.\n\n"
                           f"Это действие нельзя отменить. Подтверди удаление, написав \"да\" или \"подтверждаю\".",
                 'needs_confirmation': True,
                 'confirmation_type': 'delete_all'
@@ -1366,7 +1415,7 @@ class DecisionEngine:
         
         return {
             'action': 'deleted_all',
-            'message': f"✅ **Все события удалены**\n\nУдалено событий: **{deleted_count}**\nИз внешних календарей: **{deleted_from_calendars}**",
+            'message': f"✅ Все события удалены\n\nУдалено событий: {deleted_count}\nИз внешних календарей: {deleted_from_calendars}",
             'needs_confirmation': False
         }
     
@@ -1891,7 +1940,7 @@ class DecisionEngine:
             }
         
         # Формируем красивое подробное сообщение со всеми деталями
-        message = f"📅 **Все события на {period_name}** ({len(all_events)}):\n\n"
+        message = f"📅 Все события на {period_name} ({len(all_events)}):\n\n"
         
         current_date = None
         event_number = 0
@@ -1928,9 +1977,9 @@ class DecisionEngine:
                     # Если это сегодня или завтра, показываем это
                     today = now.date()
                     if event_date == today:
-                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 **Сегодня** ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 Сегодня ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     elif event_date == (now + timedelta(days=1)).date():
-                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 **Завтра** ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 Завтра ({weekday}, {day} {month})\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     else:
                         date_header = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📆 {weekday}, {day} {month}\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     
@@ -1951,7 +2000,7 @@ class DecisionEngine:
                 location = event.get('location')
                 description = event.get('description')
                 
-                message += f"**{event_number}. {title}**\n"
+                message += f"{event_number}. {title}\n"
                 message += f"   ⏰ Время: {time_display}\n"
                 
                 if location:
@@ -2317,7 +2366,7 @@ class DecisionEngine:
                                   end_time: Optional[datetime] = None, location: Optional[str] = None, 
                                   description: Optional[str] = None,
                                   timezone: str = "Europe/Moscow", is_reminder: bool = False,
-                                  reminder_minutes: Optional[List[int]] = None) -> str:
+                                  reminder_minutes: Optional[List[int]] = None, user_id: Optional[int] = None) -> str:
         """
         Форматировать подтверждение события в заданном формате.
         
@@ -2402,8 +2451,25 @@ class DecisionEngine:
             else:
                 message += f" · Напоминания: {', '.join(reminder_texts)} до события\n"
         else:
-            # По умолчанию за 15 минут
-            message += " · Напоминание: За 15 минут до события\n"
+            # Если напоминания не указаны явно, но они будут применены через default_reminder_minutes
+            # Получаем значение по умолчанию для более точного сообщения
+            if user_id:
+                try:
+                    user_settings = self.db.get_user_settings(user_id)
+                    default_minutes = user_settings.get('default_reminder_minutes', 15) if user_settings else 15
+                    if default_minutes >= 1440:
+                        days = default_minutes // 1440
+                        reminder_text = f"за {days} {self._format_time_unit(days, 'day')}"
+                    elif default_minutes >= 60:
+                        hours = default_minutes // 60
+                        reminder_text = f"за {hours} {self._format_time_unit(hours, 'hour')}"
+                    else:
+                        reminder_text = f"за {default_minutes} {self._format_time_unit(default_minutes, 'minute')}"
+                    message += f" · Напоминание: {reminder_text} до события\n"
+                except:
+                    message += " · Напоминание: За 15 минут до события\n"
+            else:
+                message += " · Напоминание: За 15 минут до события\n"
         
         # Заметки (description)
         if description:

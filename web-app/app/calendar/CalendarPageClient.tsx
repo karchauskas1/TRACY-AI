@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { format, isSameDay } from "date-fns"
 import { ru } from "date-fns/locale"
-import { Settings, X, MessageCircle, Send } from "lucide-react"
+import { Settings, X, MessageCircle, Send, Calendar as CalendarIcon } from "lucide-react"
 import Link from "next/link"
 import { CalendarGrid } from "../../components/calendar/CalendarGrid"
 import { Button } from "../../components/ui/button"
@@ -62,47 +62,117 @@ export function CalendarPageClient() {
       // Проверяем, открыто ли через Telegram Web App
       const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
       
-      if (tg && user?.id) {
-        // Если открыто через Telegram Web App, запрашиваем события через бота
+      // Получаем user_id из разных источников
+      let userId: string | null = null
+      if (user?.id) {
+        userId = user.id.toString()
+      } else if (tg?.initDataUnsafe?.user?.id) {
+        userId = tg.initDataUnsafe.user.id.toString()
+        // Сохраняем user для будущего использования
+        if (!user) {
+          setUser({
+            id: userId,
+            first_name: tg.initDataUnsafe.user.first_name,
+            last_name: tg.initDataUnsafe.user.last_name,
+            username: tg.initDataUnsafe.user.username,
+            photo_url: tg.initDataUnsafe.user.photo_url,
+          })
+        }
+      } else {
+        // Пробуем получить из localStorage
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            const parsedUser = JSON.parse(savedUser)
+            userId = parsedUser.id?.toString() || null
+          } catch (e) {
+            console.error("[Calendar] Error parsing saved user:", e)
+          }
+        }
+      }
+      
+      console.log(`[Calendar] User ID: ${userId}, tg: ${!!tg}, user: ${!!user}`)
+      
+      if (!userId) {
+        console.warn("[Calendar] ⚠️ User ID не найден! Не могу загрузить события.")
+        setLoading(false)
+        return
+      }
+      
+      if (tg) {
+        // Если открыто через Telegram Web App
         tg.ready()
         tg.expand()
-        
-        // Сначала загружаем из localStorage для быстрого отображения
-        const storedEvents = localStorage.getItem("tracy_events")
-        if (storedEvents) {
-          try {
-            const parsedEvents = JSON.parse(storedEvents)
-            if (Array.isArray(parsedEvents)) {
-              console.log(`[Calendar] Загружено ${parsedEvents.length} событий из localStorage`)
-              setEvents(parsedEvents)
-              
-              const counts: Record<string, number> = {}
-              parsedEvents.forEach((event: Event) => {
-                try {
-                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-                  counts[dateKey] = (counts[dateKey] || 0) + 1
-                } catch (e) {
-                  console.error("Error parsing event date:", e, event)
-                }
-              })
-              setEventsByDate(counts)
-              
-              // Если есть сохраненные события, не показываем loading сразу (только при forceRefresh)
-              if (!forceRefresh && parsedEvents.length > 0) {
-                setLoading(false)
+      }
+      
+      // Сначала загружаем из localStorage для быстрого отображения
+      const storedEvents = localStorage.getItem("tracy_events")
+      if (storedEvents) {
+        try {
+          const parsedEvents = JSON.parse(storedEvents)
+          if (Array.isArray(parsedEvents)) {
+            console.log(`[Calendar] Загружено ${parsedEvents.length} событий из localStorage`)
+            setEvents(parsedEvents)
+            
+            const counts: Record<string, number> = {}
+            parsedEvents.forEach((event: Event) => {
+              try {
+                const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+                counts[dateKey] = (counts[dateKey] || 0) + 1
+              } catch (e) {
+                console.error("Error parsing event date:", e, event)
               }
+            })
+            setEventsByDate(counts)
+            
+            // Если есть сохраненные события, не показываем loading сразу (только при forceRefresh)
+            if (!forceRefresh && parsedEvents.length > 0) {
+              setLoading(false)
             }
-          } catch (e) {
-            console.error("[Calendar] Error parsing stored events:", e)
           }
-        } else {
-          console.log(`[Calendar] Нет сохраненных событий в localStorage`)
+        } catch (e) {
+          console.error("[Calendar] Error parsing stored events:", e)
         }
+      } else {
+        console.log(`[Calendar] Нет сохраненных событий в localStorage`)
+      }
+      
+      // ПРИОРИТЕТ 1: Если открыто через Telegram Web App, используем tg.sendData
+      // Это работает для GitHub Pages (HTTPS) и избегает проблемы Mixed Content
+      if (tg) {
+        const requestData = JSON.stringify({ action: "get_events", user_id: userId })
+        tg.sendData(requestData)
+        console.log(`[Calendar] Отправлен запрос событий через tg.sendData для пользователя ${userId}`)
         
-        // НОВОЕ РЕШЕНИЕ: Используем прямой вызов HTTP API бота для получения событий
-        // Для production используем Render.com API, для локальной разработки - localhost:8080
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
-        const apiUrl = `${apiBaseUrl}/api/events?user_id=${user.id}`
+        // Устанавливаем таймер для завершения loading
+        if (!storedEvents || forceRefresh) {
+          setTimeout(() => {
+            setLoading(false)
+            console.log(`[Calendar] Loading завершен. Событий в состоянии: ${events.length}`)
+          }, 3000)
+        } else {
+          setLoading(false)
+        }
+        return
+      }
+      
+      // ПРИОРИТЕТ 2: Прямой вызов HTTP API (только для localhost или если tg недоступен)
+      // Для GitHub Pages (HTTPS) это не работает из-за Mixed Content Policy
+      let apiBaseUrl = process.env.NEXT_PUBLIC_API_URL
+      if (!apiBaseUrl && typeof window !== 'undefined') {
+        if (window.location.hostname === 'localhost') {
+          apiBaseUrl = 'http://localhost:8080'
+        } else {
+          // Для GitHub Pages не используем прямой HTTP API из-за Mixed Content
+          console.warn(`[Calendar] ⚠️ GitHub Pages (HTTPS) не может загружать HTTP API из-за Mixed Content Policy`)
+          console.warn(`[Calendar] ⚠️ Используйте Telegram Web App для получения событий`)
+          setLoading(false)
+          return
+        }
+      }
+      
+      if (apiBaseUrl) {
+        const apiUrl = `${apiBaseUrl}/api/events?user_id=${userId}`
         
         try {
           console.log(`[Calendar] Запрос к API: ${apiUrl}`)
@@ -120,7 +190,7 @@ export function CalendarPageClient() {
             const data = await response.json()
             console.log(`[Calendar] Данные API:`, data)
             if (data.success && Array.isArray(data.events)) {
-              console.log(`[Calendar] Получено ${data.events.length} событий через HTTP API`)
+              console.log(`[Calendar] ✅ Получено ${data.events.length} событий через HTTP API`)
               setEvents(data.events)
               
               // Сохраняем в localStorage
@@ -142,61 +212,24 @@ export function CalendarPageClient() {
               setLoading(false)
               return
             } else {
-              console.warn(`[Calendar] API вернул неверный формат данных:`, data)
+              console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
             }
           } else {
             const errorText = await response.text()
-            console.error(`[Calendar] API вернул ошибку: ${response.status} ${response.statusText}`, errorText)
+            console.error(`[Calendar] ❌ API вернул ошибку: ${response.status} ${response.statusText}`, errorText)
           }
         } catch (error) {
-          console.error(`[Calendar] Ошибка при запросе к HTTP API:`, error)
-          console.warn(`[Calendar] HTTP API недоступен (${error}), используем fallback механизм через tg.sendData`)
+          console.error(`[Calendar] ❌ Ошибка при запросе к HTTP API:`, error)
         }
-        
-        // Fallback: Используем старый механизм через tg.sendData
-        const requestData = JSON.stringify({ action: "get_events", user_id: user.id })
-        tg.sendData(requestData)
-        console.log(`[Calendar] Отправлен запрос событий через tg.sendData для пользователя ${user.id}`)
-        
-        // Устанавливаем таймер для завершения loading
-        if (!storedEvents || forceRefresh) {
-          setTimeout(() => {
-            setLoading(false)
-            console.log(`[Calendar] Loading завершен. Событий в состоянии: ${events.length}`)
-          }, 3000)
-        } else {
+      }
+      
+      // Устанавливаем таймер для завершения loading
+      if (!storedEvents || forceRefresh) {
+        setTimeout(() => {
           setLoading(false)
-        }
-        
+          console.log(`[Calendar] Loading завершен. Событий в состоянии: ${events.length}`)
+        }, 3000)
       } else {
-        // Если не через Telegram Web App, используем только localStorage
-        const storedEvents = localStorage.getItem("tracy_events")
-        if (storedEvents) {
-          try {
-            const parsedEvents = JSON.parse(storedEvents)
-            if (Array.isArray(parsedEvents)) {
-              setEvents(parsedEvents)
-              
-              const counts: Record<string, number> = {}
-              parsedEvents.forEach((event: Event) => {
-                try {
-                  const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-                  counts[dateKey] = (counts[dateKey] || 0) + 1
-                } catch (e) {
-                  console.error("Error parsing event date:", e, event)
-                }
-              })
-              setEventsByDate(counts)
-            }
-          } catch (e) {
-            console.error("Error parsing stored events:", e)
-            setEvents([])
-            setEventsByDate({})
-          }
-        } else {
-          setEvents([])
-          setEventsByDate({})
-        }
         setLoading(false)
       }
       
@@ -344,12 +377,19 @@ export function CalendarPageClient() {
             </Link>
           </div>
           
-          {/* Right: Settings */}
-          <Link href="/settings">
-            <button className="text-foreground hover:text-muted-foreground transition-colors">
-              <Settings className="h-5 w-5" />
-            </button>
-          </Link>
+          {/* Right: Settings and Events List */}
+          <div className="flex items-center gap-3">
+            <Link href="/calendar/list">
+              <button className="text-foreground hover:text-muted-foreground transition-colors" title="Все события">
+                <CalendarIcon className="h-5 w-5" />
+              </button>
+            </Link>
+            <Link href="/settings">
+              <button className="text-foreground hover:text-muted-foreground transition-colors">
+                <Settings className="h-5 w-5" />
+              </button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -415,18 +455,6 @@ export function CalendarPageClient() {
         </div>
       </div>
 
-      {/* Floating Button - Bottom Right (как на скриншоте) */}
-      <a
-        href={telegramLink}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-30"
-      >
-        <button className="flex items-center gap-2 px-4 py-3 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors">
-          <Send className="h-4 w-4" />
-          <span className="font-medium">TRACY</span>
-        </button>
-      </a>
     </div>
   )
 }

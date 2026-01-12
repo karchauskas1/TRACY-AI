@@ -2,6 +2,7 @@
 import io
 import logging
 import base64
+import os
 from typing import Optional
 from PIL import Image
 import speech_recognition as sr
@@ -11,6 +12,26 @@ import config
 
 logger = logging.getLogger(__name__)
 
+# Настройка pydub для использования ffmpeg/ffprobe
+# Проверяем доступность ffprobe и настраиваем pydub
+try:
+    import subprocess
+    # Проверяем, доступен ли ffprobe
+    result = subprocess.run(['which', 'ffprobe'], capture_output=True, timeout=2)
+    if result.returncode == 0:
+        ffprobe_path = result.stdout.decode().strip()
+        os.environ['FFPROBE_BINARY'] = ffprobe_path
+        logger.info(f"✅ Настроен FFPROBE_BINARY: {ffprobe_path}")
+    else:
+        # Пробуем стандартные пути
+        for path in ['/usr/bin/ffprobe', '/usr/local/bin/ffprobe', '/opt/homebrew/bin/ffprobe']:
+            if os.path.exists(path):
+                os.environ['FFPROBE_BINARY'] = path
+                logger.info(f"✅ Настроен FFPROBE_BINARY: {path}")
+                break
+except Exception as e:
+    logger.warning(f"⚠️ Не удалось настроить FFPROBE_BINARY: {e}")
+
 # Tesseract импортируется опционально
 try:
     import pytesseract
@@ -18,17 +39,24 @@ try:
 except ImportError:
     TESSERACT_AVAILABLE = False
 
-# OpenAI клиент для Vision API
+# OpenAI клиент для Vision API и Whisper
 try:
     from openai import OpenAI
     vision_client = OpenAI(
         api_key=config.OPENROUTER_API_KEY,
         base_url=config.OPENROUTER_BASE_URL
     )
+    whisper_client = OpenAI(
+        api_key=config.OPENROUTER_API_KEY,
+        base_url=config.OPENROUTER_BASE_URL
+    )
     VISION_AVAILABLE = True
+    WHISPER_AVAILABLE = True
 except Exception:
     vision_client = None
+    whisper_client = None
     VISION_AVAILABLE = False
+    WHISPER_AVAILABLE = False
 
 
 class MediaProcessor:
@@ -49,17 +77,37 @@ class MediaProcessor:
             Распознанный текст или None при ошибке
         """
         try:
+            # Настраиваем pydub перед импортом
+            import subprocess
+            if 'FFPROBE_BINARY' not in os.environ:
+                # Пробуем найти ffprobe
+                for path in ['/usr/bin/ffprobe', '/usr/local/bin/ffprobe']:
+                    if os.path.exists(path):
+                        os.environ['FFPROBE_BINARY'] = path
+                        break
+            
+            from pydub import AudioSegment
+            from pydub.utils import which
+            
             # Скачать файл
             voice_io = io.BytesIO()
             await voice_file.download_to_memory(voice_io)
             voice_io.seek(0)
             
-            # Используем Google Speech Recognition
+            # Проверяем размер файла
+            file_size = len(voice_io.getvalue())
+            if file_size == 0:
+                logger.error("Загруженный голосовой файл пуст")
+                return None
+            logger.info(f"Голосовой файл загружен, размер: {file_size} bytes")
+            
+            # ПРИМЕЧАНИЕ: OpenRouter не поддерживает Whisper через audio.transcriptions endpoint
+            # Используем только Google Speech Recognition для распознавания голоса
+            # Whisper через OpenRouter отключен из-за ошибки 405 Method Not Allowed
+            
+            # Fallback: используем Google Speech Recognition
             try:
-                from pydub import AudioSegment
-                
-                # Пробуем определить формат и конвертируем в WAV
-                # M4A ставим первым, так как это популярный формат iPhone диктофона
+                logger.info("Используем Google Speech Recognition для распознавания голоса...")
                 voice_io.seek(0)
                 audio_data = None
                 supported_formats = ['m4a', 'mp3', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
@@ -70,7 +118,7 @@ class MediaProcessor:
                         voice_io.seek(0)
                         logger.debug(f"Пробую определить формат голосового как {fmt}...")
                         audio_data = AudioSegment.from_file(voice_io, format=fmt)
-                        logger.info(f"✅ Определен формат аудио для распознавания: {fmt}")
+                        logger.info(f"✅ Определен формат аудио для Google Speech: {fmt}")
                         break
                     except Exception as e:
                         logger.debug(f"Формат {fmt} не подошел: {str(e)[:50]}")
@@ -81,15 +129,13 @@ class MediaProcessor:
                     try:
                         voice_io.seek(0)
                         audio_data = AudioSegment.from_file(voice_io)
-                        logger.info("Формат определен автоматически для распознавания")
+                        logger.info("Формат определен автоматически для Google Speech")
                     except Exception as e:
                         logger.error(f"Не удалось определить формат аудио: {e}")
                         return None
                 
                 # Конвертируем в WAV для Google Speech Recognition
-                # AudioFile требует файл на диске, не BytesIO
                 import tempfile
-                import os
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
                     audio_data.export(temp_file.name, format="wav")
                     temp_file_path = temp_file.name

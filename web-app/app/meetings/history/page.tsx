@@ -26,70 +26,83 @@ export default function MeetingsHistoryPage() {
   const [chatFilter, setChatFilter] = useState<"all" | string>("all")
 
   useEffect(() => {
-    // Загружаем встречи из localStorage (для статического сайта)
-    const storedMeetings = localStorage.getItem("tracy_meetings")
-    if (storedMeetings) {
-      try {
-        const parsed = JSON.parse(storedMeetings)
-        setMeetings(parsed)
-        setFilteredMeetings(parsed)
-      } catch (e) {
-        console.error("Failed to parse meetings:", e)
-        // Моковые данные для демонстрации
-        const mockMeetings: Meeting[] = [
-          {
-            id: "1",
-            title: "1273.",
-            createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-            type: "voice",
-            chat: "Personal"
-          },
-          {
-            id: "2",
-            title: "[основная тема]: Эксперт даёт развёрнутую обратную связь по проекту, указывая на ключевые недочёты в обосновании...",
-            createdAt: new Date(Date.now() - 4 * 30 * 24 * 60 * 60 * 1000).toISOString(),
-            type: "voice",
-            chat: "Personal"
-          },
-          {
-            id: "3",
-            title: "[основная тема]: Обсуждение обратной связи по заявке на грант, включая вопросы оформления документов, финансирования...",
-            createdAt: new Date(Date.now() - 4 * 30 * 24 * 60 * 60 * 1000).toISOString(),
-            type: "voice",
-            chat: "Personal"
+    const loadMeetings = async () => {
+      // Получаем user_id
+      let userId: string | null = null
+      if (typeof window !== "undefined") {
+        const tg = (window as any).Telegram?.WebApp
+        if (tg) {
+          tg.ready()
+          userId = tg.initDataUnsafe?.user?.id?.toString() || null
+        } else {
+          const savedUser = localStorage.getItem("telegram_user")
+          if (savedUser) {
+            try {
+              const parsed = JSON.parse(savedUser)
+              userId = parsed.id?.toString() || null
+            } catch (e) {
+              console.error("Error parsing saved user:", e)
+            }
           }
-        ]
-        setMeetings(mockMeetings)
-        setFilteredMeetings(mockMeetings)
-      }
-    } else {
-      // Моковые данные для демонстрации
-      const mockMeetings: Meeting[] = [
-        {
-          id: "1",
-          title: "1273.",
-          createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-          type: "voice",
-          chat: "Personal"
-        },
-        {
-          id: "2",
-          title: "[основная тема]: Эксперт даёт развёрнутую обратную связь по проекту, указывая на ключевые недочёты в обосновании...",
-          createdAt: new Date(Date.now() - 4 * 30 * 24 * 60 * 60 * 1000).toISOString(),
-          type: "voice",
-          chat: "Personal"
-        },
-        {
-          id: "3",
-          title: "[основная тема]: Обсуждение обратной связи по заявке на грант, включая вопросы оформления документов, финансирования...",
-          createdAt: new Date(Date.now() - 4 * 30 * 24 * 60 * 60 * 1000).toISOString(),
-          type: "voice",
-          chat: "Personal"
         }
-      ]
-      setMeetings(mockMeetings)
-      setFilteredMeetings(mockMeetings)
+      }
+
+      if (!userId) {
+        setMeetings([])
+        setFilteredMeetings([])
+        return
+      }
+
+      // Загружаем из API
+      try {
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 
+          (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+            ? 'http://localhost:8080' 
+            : 'http://5.35.126.42')
+        const apiUrl = `${apiBaseUrl}/api/meetings?user_id=${userId}`
+        
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors',
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && Array.isArray(data.meetings)) {
+            const formattedMeetings: Meeting[] = data.meetings.map((m: any) => ({
+              id: m.id,
+              title: m.title || m.summary?.substring(0, 100) || 'Встреча',
+              createdAt: m.createdAt,
+              summary: m.summary,
+              transcript: m.transcript,
+              type: "voice" as const,
+              chat: "Personal"
+            }))
+            setMeetings(formattedMeetings)
+            setFilteredMeetings(formattedMeetings)
+            localStorage.setItem("tracy_meetings", JSON.stringify(formattedMeetings))
+            return
+          }
+        }
+      } catch (error) {
+        console.error("Error loading meetings:", error)
+      }
+
+      // Fallback: загружаем из localStorage
+      const storedMeetings = localStorage.getItem("tracy_meetings")
+      if (storedMeetings) {
+        try {
+          const parsed = JSON.parse(storedMeetings)
+          setMeetings(parsed)
+          setFilteredMeetings(parsed)
+        } catch (e) {
+          console.error("Failed to parse meetings:", e)
+        }
+      }
     }
+
+    loadMeetings()
   }, [])
 
   useEffect(() => {
@@ -142,8 +155,30 @@ export default function MeetingsHistoryPage() {
   }
 
   const handleEdit = (id: string) => {
-    // Пока просто открываем детали встречи (можно добавить отдельную страницу редактирования)
-    alert(`Редактирование встречи ${id} будет реализовано позже.`)
+    // Открываем детали встречи через API
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 
+      (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:8080' 
+        : 'http://5.35.126.42')
+    const userId = typeof window !== 'undefined' ? 
+      ((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || 
+       localStorage.getItem('telegram_user')?.match(/"id":"(\d+)"/)?.[1]) : ''
+    const apiUrl = `${apiBaseUrl}/api/meetings/${id}?user_id=${userId}`
+    
+    fetch(apiUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.meeting) {
+          const details = `Резюме: ${data.meeting.summary || 'Нет'}\n\nРасширенное резюме: ${data.meeting.summaryExtended || 'Нет'}\n\nПолный текст: ${data.meeting.transcript || 'Нет'}`
+          alert(details.substring(0, 2000) + (details.length > 2000 ? '...' : ''))
+        } else {
+          alert('Не удалось загрузить детали встречи')
+        }
+      })
+      .catch(e => {
+        console.error(e)
+        alert('Ошибка загрузки деталей встречи')
+      })
   }
 
   const uniqueChats = Array.from(new Set(meetings.map(m => m.chat).filter(Boolean)))
@@ -260,11 +295,28 @@ export default function MeetingsHistoryPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleEdit(meeting.id)}
+                        onClick={() => {
+                          // Открываем детали встречи в модальном окне или через API
+                          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 
+                            (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+                              ? 'http://localhost:8080' 
+                              : 'http://5.35.126.42')
+                          const apiUrl = `${apiBaseUrl}/api/meetings/${meeting.id}?user_id=${typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || localStorage.getItem('telegram_user')?.match(/"id":"(\d+)"/)?.[1] : ''}`
+                          
+                          fetch(apiUrl)
+                            .then(res => res.json())
+                            .then(data => {
+                              if (data.success && data.meeting) {
+                                const details = `Резюме: ${data.meeting.summary || 'Нет'}\n\nРасширенное резюме: ${data.meeting.summaryExtended || 'Нет'}\n\nПолный текст: ${data.meeting.transcript || 'Нет'}`
+                                alert(details.substring(0, 1000) + (details.length > 1000 ? '...' : ''))
+                              }
+                            })
+                            .catch(e => console.error(e))
+                        }}
                         className="flex-1 border-primary/20 text-primary hover:bg-primary/10"
                       >
                         <Edit className="h-3 w-3 mr-1" />
-                        Редактировать
+                        Открыть
                       </Button>
                       <Button
                         variant="outline"

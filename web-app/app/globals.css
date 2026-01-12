@@ -4,7 +4,35 @@
 
 @layer base {
   :root {
-    /* Dark theme (как на скриншоте Toki) */
+    /* Light theme */
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 270 70% 60%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 270 70% 60%;
+    --radius: 0.75rem;
+    
+    /* Custom colors для календаря */
+    --calendar-selected: 25 95% 53%;
+    --calendar-event-dot: 270 70% 60%;
+  }
+
+  .dark {
+    /* Dark theme */
     --background: 240 10% 15%;
     --foreground: 0 0% 98%;
     --card: 240 10% 18%;
@@ -24,11 +52,10 @@
     --border: 240 10% 25%;
     --input: 240 10% 25%;
     --ring: 270 70% 60%;
-    --radius: 0.75rem;
     
     /* Custom colors для календаря */
-    --calendar-selected: 25 95% 53%; /* Оранжевый для выбранного дня */
-    --calendar-event-dot: 270 70% 60%; /* Фиолетовый для точек событий */
+    --calendar-selected: 25 95% 53%;
+    --calendar-event-dot: 270 70% 60%;
   }
 }
 

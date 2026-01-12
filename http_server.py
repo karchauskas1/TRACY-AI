@@ -142,6 +142,136 @@ async def get_events_handler(request: web_request.Request):
         return json_response({'error': str(e)}, status=500)
 
 
+async def get_meetings_handler(request: web_request.Request):
+    """Обработчик GET запроса для получения списка встреч."""
+    try:
+        user_id_str = request.query.get('user_id')
+        if not user_id_str:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+        
+        if not db_instance:
+            return json_response({'error': 'Database not initialized'}, status=500)
+        
+        try:
+            meetings = db_instance.get_meetings(user_id, limit=100)
+            web_meetings = []
+            for meeting in meetings:
+                web_meetings.append({
+                    'id': str(meeting.get('id', '')),
+                    'title': meeting.get('title') or meeting.get('summary', '')[:100] or 'Встреча',
+                    'summary': meeting.get('summary'),
+                    'transcript': meeting.get('transcript'),
+                    'summaryExtended': meeting.get('summary_extended'),
+                    'createdAt': meeting.get('created_at').isoformat() if isinstance(meeting.get('created_at'), datetime) else meeting.get('created_at'),
+                })
+            
+            return json_response({
+                'success': True,
+                'meetings': web_meetings,
+                'count': len(web_meetings)
+            })
+        except Exception as e:
+            logger.error(f"Ошибка получения встреч: {e}", exc_info=True)
+            return json_response({'error': str(e)}, status=500)
+    except Exception as e:
+        logger.error(f"Ошибка HTTP API get_meetings: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def get_meeting_handler(request: web_request.Request):
+    """Обработчик GET запроса для получения конкретной встречи."""
+    try:
+        meeting_id_str = request.match_info.get('meeting_id')
+        user_id_str = request.query.get('user_id')
+        
+        if not meeting_id_str or not user_id_str:
+            return json_response({'error': 'meeting_id and user_id required'}, status=400)
+        
+        try:
+            meeting_id = int(meeting_id_str)
+            user_id = int(user_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid meeting_id or user_id'}, status=400)
+        
+        if not db_instance:
+            return json_response({'error': 'Database not initialized'}, status=500)
+        
+        try:
+            meeting = db_instance.get_meeting(meeting_id, user_id)
+            if not meeting:
+                return json_response({'error': 'Meeting not found'}, status=404)
+            
+            return json_response({
+                'success': True,
+                'meeting': {
+                    'id': str(meeting.get('id', '')),
+                    'title': meeting.get('title') or meeting.get('summary', '')[:100] or 'Встреча',
+                    'summary': meeting.get('summary'),
+                    'transcript': meeting.get('transcript'),
+                    'summaryExtended': meeting.get('summary_extended'),
+                    'createdAt': meeting.get('created_at').isoformat() if isinstance(meeting.get('created_at'), datetime) else meeting.get('created_at'),
+                }
+            })
+        except Exception as e:
+            logger.error(f"Ошибка получения встречи: {e}", exc_info=True)
+            return json_response({'error': str(e)}, status=500)
+    except Exception as e:
+        logger.error(f"Ошибка HTTP API get_meeting: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def create_event_from_meeting_handler(request: web_request.Request):
+    """Обработчик POST запроса для создания события из встречи."""
+    try:
+        meeting_id_str = request.match_info.get('meeting_id')
+        if not meeting_id_str:
+            return json_response({'error': 'meeting_id required'}, status=400)
+        
+        try:
+            data = await request.json()
+            user_id = int(data.get('user_id', 0))
+            event_data = data.get('event_data', {})
+        except:
+            return json_response({'error': 'Invalid request body'}, status=400)
+        
+        if not user_id:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        if not db_instance:
+            return json_response({'error': 'Database not initialized'}, status=500)
+        
+        # Получаем встречу
+        try:
+            meeting_id = int(meeting_id_str)
+            meeting = db_instance.get_meeting(meeting_id, user_id)
+            if not meeting:
+                return json_response({'error': 'Meeting not found'}, status=404)
+        except ValueError:
+            return json_response({'error': 'Invalid meeting_id'}, status=400)
+        except Exception as e:
+            logger.error(f"Ошибка получения встречи: {e}", exc_info=True)
+            return json_response({'error': str(e)}, status=500)
+        
+        # Создание события из встречи должно происходить через бота
+        # так как требуется decision_engine и reminder_scheduler
+        # Возвращаем инструкцию для использования бота
+        return json_response({
+            'success': True,
+            'message': 'Event creation from meeting requires bot context',
+            'action': 'open_bot',
+            'bot_command': f'/start create_event_from_meeting_{meeting_id}',
+            'note': 'Use Telegram bot command to create events from meetings. The bot has full context and can properly process event data.'
+        })
+    except Exception as e:
+        logger.error(f"Ошибка HTTP API create_event_from_meeting: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
 async def health_handler(request: web_request.Request):
     """Обработчик для health check."""
     return json_response({'status': 'ok', 'timestamp': datetime.now().isoformat()})
@@ -186,6 +316,9 @@ def create_app():
     app.router.add_get('/', root_handler)
     app.router.add_get('/health', health_handler)
     app.router.add_get('/api/events', get_events_handler)
+    app.router.add_get('/api/meetings', get_meetings_handler)
+    app.router.add_get('/api/meetings/{meeting_id}', get_meeting_handler)
+    app.router.post('/api/meetings/{meeting_id}/create-event', create_event_from_meeting_handler)
     
     return app
 

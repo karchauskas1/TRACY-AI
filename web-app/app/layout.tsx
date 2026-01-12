@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "../components/ui/toaster"
 import { LocaleProvider } from "../lib/locale-context"
+import { ThemeProvider } from "../lib/theme-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,10 +23,12 @@ export default function RootLayout({
         <script src="https://telegram.org/js/telegram-web-app.js" async />
       </head>
       <body className={inter.className}>
-        <LocaleProvider>
-          {children}
-          <Toaster />
-        </LocaleProvider>
+        <ThemeProvider>
+          <LocaleProvider>
+            {children}
+            <Toaster />
+          </LocaleProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
