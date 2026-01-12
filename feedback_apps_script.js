@@ -90,15 +90,112 @@ function getSheetNameForUser(userId) {
 }
 
 /**
+ * Загрузить скриншот в Google Drive
+ * 
+ * @param {string} base64Image - Изображение в формате base64
+ * @param {string} filename - Имя файла
+ * @return {string} Ссылка на загруженный файл или null
+ */
+function uploadScreenshotToDrive(base64Image, filename) {
+  try {
+    // Декодируем base64
+    const imageBlob = Utilities.newBlob(
+      Utilities.base64Decode(base64Image),
+      'image/jpeg',
+      filename
+    );
+    
+    // Получаем или создаем папку для скриншотов
+    const folderName = 'TRACY Feedback Screenshots';
+    let folder;
+    
+    // Ищем существующую папку
+    const folders = DriveApp.getFoldersByName(folderName);
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      // Создаем новую папку
+      folder = DriveApp.createFolder(folderName);
+      // Делаем папку доступной для всех
+      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    }
+    
+    // Загружаем файл в папку
+    const file = folder.createFile(imageBlob);
+    
+    // Делаем файл доступным для всех
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    // Получаем ссылку на файл
+    const fileUrl = file.getUrl();
+    
+    Logger.log('Скриншот загружен в Drive: ' + fileUrl);
+    return fileUrl;
+  } catch (error) {
+    Logger.log('Ошибка загрузки скриншота в Drive: ' + error.toString());
+    return null;
+  }
+}
+
+/**
+ * Загрузить скриншот в Google Drive
+ * 
+ * @param {string} base64Image - Изображение в формате base64
+ * @param {string} filename - Имя файла
+ * @return {string} Ссылка на загруженный файл или null
+ */
+function uploadScreenshotToDrive(base64Image, filename) {
+  try {
+    // Декодируем base64
+    const imageBlob = Utilities.newBlob(
+      Utilities.base64Decode(base64Image),
+      'image/jpeg',
+      filename
+    );
+    
+    // Получаем или создаем папку для скриншотов
+    const folderName = 'TRACY Feedback Screenshots';
+    let folder;
+    
+    // Ищем существующую папку
+    const folders = DriveApp.getFoldersByName(folderName);
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      // Создаем новую папку
+      folder = DriveApp.createFolder(folderName);
+      // Делаем папку доступной для всех
+      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    }
+    
+    // Загружаем файл в папку
+    const file = folder.createFile(imageBlob);
+    
+    // Делаем файл доступным для всех
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    // Получаем ссылку на файл
+    const fileUrl = file.getUrl();
+    
+    Logger.log('Скриншот загружен в Drive: ' + fileUrl);
+    return fileUrl;
+  } catch (error) {
+    Logger.log('Ошибка загрузки скриншота в Drive: ' + error.toString());
+    return null;
+  }
+}
+
+/**
  * Добавить обратную связь в таблицу
  * 
  * @param {string} feedbackType - Тип обратной связи ("баг" или "предложение")
  * @param {string} userId - Telegram user ID
  * @param {string} comment - Текст комментария
  * @param {string} screenshotUrl - Ссылка на скриншот (опционально)
+ * @param {string} screenshotBase64 - Скриншот в base64 (опционально, если нет screenshotUrl)
  * @return {Object} Результат с номером записи и датой
  */
-function addFeedback(feedbackType, userId, comment, screenshotUrl) {
+function addFeedback(feedbackType, userId, comment, screenshotUrl, screenshotBase64) {
   try {
     const sheetName = getSheetNameForUser(userId);
     const sheet = getOrCreateSheet(sheetName);
@@ -112,13 +209,23 @@ function addFeedback(feedbackType, userId, comment, screenshotUrl) {
     const now = new Date();
     const dateStr = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
     
+    // Если есть base64 скриншот, но нет URL, загружаем в Drive
+    let finalScreenshotUrl = screenshotUrl || '';
+    if (!finalScreenshotUrl && screenshotBase64) {
+      const filename = 'feedback_' + userId + '_' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss') + '.jpg';
+      finalScreenshotUrl = uploadScreenshotToDrive(screenshotBase64, filename);
+      if (!finalScreenshotUrl) {
+        Logger.log('Предупреждение: не удалось загрузить скриншот в Drive');
+      }
+    }
+    
     // Подготавливаем данные в правильном порядке столбцов:
     // A: №, B: Дата, C: Содержание комментария, D: Скриншот, E: Тип комментария, F: Статус
     const rowData = [
       nextNumber,                    // A: №
       dateStr,                       // B: Дата
       comment,                        // C: Содержание комментария
-      screenshotUrl || '',            // D: Скриншот
+      finalScreenshotUrl || '',      // D: Скриншот
       feedbackType === 'баг' ? 'Баг' : 'Предложение', // E: Тип комментария (Баг/Предложение)
       ''                              // F: Статус (пусто по умолчанию)
     ];
@@ -128,9 +235,9 @@ function addFeedback(feedbackType, userId, comment, screenshotUrl) {
     range.setValues([rowData]);
     
     // Добавляем ссылку на скриншот, если есть (Column D)
-    if (screenshotUrl) {
+    if (finalScreenshotUrl) {
       const linkCell = sheet.getRange(nextRow, 4); // Column D
-      linkCell.setFormula('=HYPERLINK("' + screenshotUrl + '"; "Открыть скриншот")');
+      linkCell.setFormula('=HYPERLINK("' + finalScreenshotUrl + '"; "Открыть скриншот")');
     }
     
     // Форматируем строку
@@ -145,7 +252,8 @@ function addFeedback(feedbackType, userId, comment, screenshotUrl) {
       success: true,
       number: nextNumber,
       date: dateStr,
-      sheet: sheetName
+      sheet: sheetName,
+      screenshotUrl: finalScreenshotUrl || null
     };
   } catch (error) {
     Logger.log('Ошибка добавления обратной связи: ' + error.toString());
@@ -174,10 +282,39 @@ function doPost(e) {
     // Парсим JSON из запроса
     const data = JSON.parse(e.postData.contents);
     
+    // Обработка загрузки скриншота (отдельный endpoint)
+    if (data.action === 'upload_screenshot') {
+      const filename = data.filename || 'screenshot.jpg';
+      const screenshotBase64 = data.screenshot_base64 || data.screenshotBase64;
+      
+      if (!screenshotBase64) {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: 'Недостаточно данных: требуется screenshot_base64'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      const fileUrl = uploadScreenshotToDrive(screenshotBase64, filename);
+      
+      if (fileUrl) {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: true,
+          url: fileUrl
+        })).setMimeType(ContentService.MimeType.JSON);
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: 'Не удалось загрузить скриншот в Drive'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    
+    // Обработка обратной связи
     const feedbackType = data.type || data.feedback_type;
     const userId = data.user_id || data.userId;
     const comment = data.comment;
     const screenshotUrl = data.screenshot_url || data.screenshotUrl || '';
+    const screenshotBase64 = data.screenshot_base64 || data.screenshotBase64;
     
     // Валидация
     if (!feedbackType || !userId || !comment) {
@@ -188,7 +325,7 @@ function doPost(e) {
     }
     
     // Добавляем обратную связь
-    const result = addFeedback(feedbackType, userId, comment, screenshotUrl);
+    const result = addFeedback(feedbackType, userId, comment, screenshotUrl, screenshotBase64);
     
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);

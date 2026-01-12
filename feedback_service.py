@@ -386,7 +386,60 @@ class FeedbackService:
             logger.error(f"Ошибка загрузки скриншота в Drive: {e}", exc_info=True)
             return None
     
-    def submit_feedback_via_apps_script(self, feedback_type: str, comment: str, screenshot_url: Optional[str] = None) -> Optional[Dict]:
+    def upload_screenshot_via_apps_script(self, photo_file: BytesIO, filename: str) -> Optional[str]:
+        """
+        Загрузить скриншот в Google Drive через Apps Script (без OAuth).
+        
+        Args:
+            photo_file: Файл изображения в BytesIO
+            filename: Имя файла
+        
+        Returns:
+            URL загруженного файла или None в случае ошибки
+        """
+        apps_script_url = config.FEEDBACK_APPS_SCRIPT_URL
+        if not apps_script_url:
+            logger.warning("FEEDBACK_APPS_SCRIPT_URL не установлен, загрузка через Apps Script невозможна")
+            return None
+        
+        try:
+            import httpx
+            import base64
+            
+            # Конвертируем изображение в base64
+            photo_file.seek(0)
+            image_base64 = base64.b64encode(photo_file.read()).decode('utf-8')
+            
+            data = {
+                "action": "upload_screenshot",
+                "filename": filename,
+                "screenshot_base64": image_base64
+            }
+            
+            response = httpx.post(
+                apps_script_url,
+                json=data,
+                timeout=30.0,  # Увеличиваем таймаут для загрузки файлов
+                follow_redirects=True
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success") and result.get("url"):
+                    logger.info(f"Скриншот загружен в Drive через Apps Script: {result.get('url')}")
+                    return result.get("url")
+                else:
+                    logger.error(f"Apps Script вернул ошибку при загрузке скриншота: {result.get('error')}")
+                    return None
+            else:
+                logger.error(f"Ошибка HTTP при загрузке скриншота через Apps Script: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Ошибка загрузки скриншота через Apps Script: {e}", exc_info=True)
+            return None
+    
+    def submit_feedback_via_apps_script(self, feedback_type: str, comment: str, screenshot_url: Optional[str] = None, screenshot_base64: Optional[str] = None) -> Optional[Dict]:
         """
         Отправить обратную связь через Apps Script webhook (альтернативный способ).
         
@@ -394,6 +447,7 @@ class FeedbackService:
             feedback_type: "баг" или "предложение"
             comment: Текст комментария
             screenshot_url: Ссылка на скриншот в Drive (если есть)
+            screenshot_base64: Скриншот в base64 (если нужно загрузить через Apps Script)
         
         Returns:
             Dict с информацией о записи или None в случае ошибки
@@ -404,6 +458,8 @@ class FeedbackService:
             return None
         
         try:
+            import httpx
+            
             # Подготавливаем данные для отправки
             data = {
                 "type": feedback_type,
@@ -412,12 +468,14 @@ class FeedbackService:
             }
             if screenshot_url:
                 data["screenshot_url"] = screenshot_url
+            if screenshot_base64:
+                data["screenshot_base64"] = screenshot_base64
             
             # Отправляем POST запрос
             response = httpx.post(
                 apps_script_url,
                 json=data,
-                timeout=10.0,
+                timeout=30.0,  # Увеличиваем таймаут для загрузки файлов
                 follow_redirects=True
             )
             
