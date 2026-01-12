@@ -2823,13 +2823,15 @@ async def get_events_for_web_app(user_id: int) -> List[Dict]:
         start_to = now + timedelta(days=365)
         
         events = db.get_events(user_id, limit=200, start_from=start_from, start_to=start_to)
-        logger.info(f"📊 Получено {len(events)} событий из БД для пользователя {user_id} (период: {start_from.date()} - {start_to.date()})")
+        logger.info(f"📊 Получено {len(events)} событий из БД для пользователя {user_id} (период: {start_from} - {start_to})")
         if len(events) > 0:
-            logger.info(f"📊 Первое событие: {events[0].get('title')} на {events[0].get('start_time')}")
+            logger.info(f"📊 Первое событие: {events[0].get('title')} на {events[0].get('start_time')} (тип: {type(events[0].get('start_time'))})")
         else:
             # Если нет событий с фильтром, проверим вообще все события
             all_events = db.get_events(user_id, limit=10)
             logger.info(f"📊 Всего событий пользователя в БД (без фильтра): {len(all_events)}")
+            if len(all_events) > 0:
+                logger.info(f"📊 Пример события без фильтра: {all_events[0].get('title')} на {all_events[0].get('start_time')} (тип: {type(all_events[0].get('start_time'))})")
         
         # Преобразуем события в формат для веб-приложения
         web_events = []

@@ -864,6 +864,8 @@ class Database:
             cursor.execute(query, params)
             
             if self.use_postgresql:
+                # В PostgreSQL cursor.fetchall() возвращает кортежи по умолчанию.
+                # Мы заново получаем данные через RealDictCursor для удобства.
                 cursor.close()
                 dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
                 dict_cursor.execute(query, params)
@@ -875,9 +877,19 @@ class Database:
             # Парсим события из БД
             events = []
             for row in rows:
-                event_dict = dict(row)
-                # Парсим даты из строк в datetime
-                if event_dict.get('start_time'):
+                try:
+                    # Для SQLite (sqlite3.Row) и PostgreSQL (RealDictRow) dict() работает.
+                    # Но если вдруг пришел кортеж (tuple) в PostgreSQL, dict() упадет.
+                    if isinstance(row, dict) or not isinstance(row, (list, tuple)):
+                        event_dict = dict(row)
+                    else:
+                        # Если это кортеж из PostgreSQL (случай когда RealDictCursor не сработал)
+                        # Нам нужно сопоставить колонки вручную. Но лучше просто пропустить или залогировать.
+                        logger.warning(f"⚠️ Получен кортеж вместо словаря из БД: {row}")
+                        continue 
+                    
+                    # Парсим даты из строк в datetime
+                    if event_dict.get('start_time'):
                     try:
                         if isinstance(event_dict['start_time'], str):
                             event_dict['start_time'] = datetime.fromisoformat(event_dict['start_time'].replace('Z', '+00:00'))
