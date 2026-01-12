@@ -714,26 +714,28 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             feedback_service = FeedbackService(user_id)
             
-            # Проверяем авторизацию
-            if not feedback_service.get_credentials():
-                # Нужна авторизация
-                auth_url = feedback_service.get_authorization_url()
-                keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await query.edit_message_text(
-                    "🔐 Требуется авторизация Google\n\n"
-                    "Для отправки обратной связи нужно авторизоваться в Google.\n\n"
-                    "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
-                    reply_markup=reply_markup
-                )
-                context.user_data['waiting_google_auth'] = True
-                context.user_data['auth_type'] = 'feedback'
-                return
+            # Используем Apps Script, если URL указан (не требует авторизации)
+            use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
+            
+            # Проверяем авторизацию только если НЕ используем Apps Script
+            if not use_apps_script:
+                if not feedback_service.get_credentials():
+                    # Нужна авторизация
+                    auth_url = feedback_service.get_authorization_url()
+                    keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await query.edit_message_text(
+                        "🔐 Требуется авторизация Google\n\n"
+                        "Для отправки обратной связи нужно авторизоваться в Google.\n\n"
+                        "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
+                        reply_markup=reply_markup
+                    )
+                    context.user_data['waiting_google_auth'] = True
+                    context.user_data['auth_type'] = 'feedback'
+                    return
             
             # Отправляем обратную связь
-            # Используем Apps Script, если URL указан
-            use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
             result = feedback_service.submit_feedback(
                 feedback_type=feedback_type,
                 comment=feedback_text,
@@ -2593,26 +2595,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 feedback_service = FeedbackService(user_id)
                 
-                # Проверяем авторизацию
-                if not feedback_service.get_credentials():
-                    # Нужна авторизация
-                    auth_url = feedback_service.get_authorization_url()
-                    keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                    await update.message.reply_text(
-                        "🔐 Требуется авторизация Google\n\n"
-                        "Для отправки обратной связи нужно авторизоваться в Google.\n\n"
-                        "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
-                        reply_markup=reply_markup
-                    )
-                    context.user_data['waiting_google_auth'] = True
-                    context.user_data['auth_type'] = 'feedback'
-                    return
+                # Используем Apps Script, если URL указан (не требует авторизации)
+                use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
+                
+                # Проверяем авторизацию только если НЕ используем Apps Script
+                if not use_apps_script:
+                    if not feedback_service.get_credentials():
+                        # Нужна авторизация
+                        auth_url = feedback_service.get_authorization_url()
+                        keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        await update.message.reply_text(
+                            "🔐 Требуется авторизация Google\n\n"
+                            "Для отправки обратной связи нужно авторизоваться в Google.\n\n"
+                            "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
+                            reply_markup=reply_markup
+                        )
+                        context.user_data['waiting_google_auth'] = True
+                        context.user_data['auth_type'] = 'feedback'
+                        return
                 
                 # Отправляем обратную связь
-                # Используем Apps Script, если URL указан
-                use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
                 result = feedback_service.submit_feedback(
                     feedback_type=feedback_type,
                     comment=feedback_text,
