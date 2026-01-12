@@ -118,10 +118,10 @@ export default function AssistantPage() {
           )}
 
           {/* Main Features */}
-          <div className="space-y-6">
+          <div className="space-y-8">
             {/* Calendar */}
             <Link href="/calendar">
-              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer">
+              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
                 <CardContent className="p-6">
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -140,7 +140,7 @@ export default function AssistantPage() {
 
             {/* История расшифровок */}
             <Link href="/meetings/history">
-              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer">
+              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
                 <CardContent className="p-6">
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -160,7 +160,7 @@ export default function AssistantPage() {
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (
               <Link href="/settings/feedback">
-                <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer">
+                <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
                   <CardContent className="p-6">
                     <div className="flex items-center gap-4">
                       <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
