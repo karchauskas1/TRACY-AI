@@ -25,6 +25,7 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
   const { t } = useLocale()
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [user, setUser] = useState(initialUser)
+  const [isSuperUser, setIsSuperUser] = useState(false)
 
   useEffect(() => {
     // Загружаем данные пользователя из Telegram Web App или localStorage
@@ -49,10 +50,13 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
           try {
             const parsed = JSON.parse(savedUser)
             const fullName = [parsed.first_name, parsed.last_name].filter(Boolean).join(" ")
+            const userId = parsed.id?.toString()
             setUser({
               ...parsed,
               name: fullName || parsed.first_name || "Пользователь",
             })
+            // Проверяем, является ли пользователь супер-пользователем
+            setIsSuperUser(userId === "308477378")
           } catch (e) {
             console.error("Failed to parse user:", e)
           }
