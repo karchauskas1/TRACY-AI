@@ -63,5 +63,5 @@ if env_feedback_mapping:
 FEEDBACK_APPS_SCRIPT_URL = os.getenv(
     "FEEDBACK_APPS_SCRIPT_URL",
     "https://script.google.com/macros/s/AKfycbzQ17_OdWUEaXtLJINWj9zJVZjsJsRQDYwD6uAwHMKYYv9ssmgb8C9D-IEWbho95399rg/exec"
-)
+).strip() if os.getenv("FEEDBACK_APPS_SCRIPT_URL") else "https://script.google.com/macros/s/AKfycbzQ17_OdWUEaXtLJINWj9zJVZjsJsRQDYwD6uAwHMKYYv9ssmgb8C9D-IEWbho95399rg/exec"
 
