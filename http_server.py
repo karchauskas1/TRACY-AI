@@ -142,6 +142,7 @@ async def get_events_handler(request: web_request.Request):
         return json_response({'error': str(e)}, status=500)
 
 
+<<<<<<< HEAD
 async def get_meetings_handler(request: web_request.Request):
     """Обработчик GET запроса для получения списка встреч."""
     try:
@@ -238,6 +239,13 @@ async def create_event_from_meeting_handler(request: web_request.Request):
             event_data = data.get('event_data', {})
         except:
             return json_response({'error': 'Invalid request body'}, status=400)
+=======
+async def update_settings_handler(request: web_request.Request):
+    """Обработчик POST запроса для обновления настроек пользователя."""
+    try:
+        data = await request.json()
+        user_id = data.get('user_id')
+>>>>>>> 64db250f3be291011436cab0c82b5c00a6f1ef64
         
         if not user_id:
             return json_response({'error': 'user_id required'}, status=400)
@@ -245,6 +253,7 @@ async def create_event_from_meeting_handler(request: web_request.Request):
         if not db_instance:
             return json_response({'error': 'Database not initialized'}, status=500)
         
+<<<<<<< HEAD
         # Получаем встречу
         try:
             meeting_id = int(meeting_id_str)
@@ -269,6 +278,33 @@ async def create_event_from_meeting_handler(request: web_request.Request):
         })
     except Exception as e:
         logger.error(f"Ошибка HTTP API create_event_from_meeting: {e}", exc_info=True)
+=======
+        # Обновляем настройки в БД
+        settings_to_update = {}
+        if 'timezone' in data:
+            settings_to_update['timezone'] = data['timezone']
+        if 'locale' in data:
+            settings_to_update['locale'] = data['locale']
+        if 'notifications_enabled' in data:
+            settings_to_update['notifications_enabled'] = data['notifications_enabled']
+        if 'default_reminder_minutes' in data:
+            settings_to_update['default_reminder_minutes'] = data['default_reminder_minutes']
+        if 'morning_digest_time' in data:
+            settings_to_update['morning_digest_time'] = data['morning_digest_time']
+        if 'web_notifications_enabled' in data:
+            settings_to_update['web_notifications_enabled'] = data['web_notifications_enabled']
+        if 'interpretation_mode' in data:
+            settings_to_update['interpretation_mode'] = data['interpretation_mode']
+        
+        if settings_to_update:
+            db_instance.update_user_settings(int(user_id), settings_dict=settings_to_update)
+            logger.info(f"⚙️ HTTP API: Обновлены настройки для пользователя {user_id}: {settings_to_update}")
+        
+        return json_response({'success': True})
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка HTTP API update_settings: {e}", exc_info=True)
+>>>>>>> 64db250f3be291011436cab0c82b5c00a6f1ef64
         return json_response({'error': str(e)}, status=500)
 
 
@@ -316,9 +352,13 @@ def create_app():
     app.router.add_get('/', root_handler)
     app.router.add_get('/health', health_handler)
     app.router.add_get('/api/events', get_events_handler)
+<<<<<<< HEAD
     app.router.add_get('/api/meetings', get_meetings_handler)
     app.router.add_get('/api/meetings/{meeting_id}', get_meeting_handler)
     app.router.post('/api/meetings/{meeting_id}/create-event', create_event_from_meeting_handler)
+=======
+    app.router.add_post('/api/settings', update_settings_handler)
+>>>>>>> 64db250f3be291011436cab0c82b5c00a6f1ef64
     
     return app
 

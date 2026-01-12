@@ -56,7 +56,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_keyboard = get_reply_keyboard(context)
         
         await update.message.reply_text(
-            "🎤 **Режим работы с записями встреч**\n\n"
+            "🎤 Режим работы с записями встреч\n\n"
             "Вы вошли в режим расшифровки встреч. Чтобы продолжить и расшифровать встречу, отправьте голосовое сообщение или аудиофайл с записью встречи.\n\n"
             "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n"
             "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG",
@@ -76,12 +76,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Распознавать даты и время естественным языком\n"
         "• Напоминать о важных событиях\n"
         "• Синхронизировать с Google Calendar и iCloud (опционально)\n\n"
-        "🚀 **Ты можешь пользоваться мной прямо сейчас!**\n\n"
+        "🚀 Ты можешь пользоваться мной прямо сейчас!\n\n"
         "Все работает без подключения календарей — просто напиши или скажи:\n"
         "• \"Встреча завтра в 15:00\"\n"
         "• \"Напомни про доклад в пятницу\"\n"
         "• \"Уборка в среду утром\"\n\n"
-        "📅 **Подключение календарей (необязательно):**\n"
+        "📅 Подключение календарей (необязательно):\n"
         "Это функция для удобства — ты сможешь видеть события в своем привычном календаре (Google, iCloud). "
         "Но бот работает и без подключения! Все события сохраняются, напоминания приходят — можешь пользоваться сразу.\n\n"
     )
@@ -136,10 +136,10 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     inline_markup = InlineKeyboardMarkup(keyboard)
     
-    mode_text = "🎤 **Режим резюмирования встреч**" if is_meeting_mode else "📅 **Режим планировщика**"
+    mode_text = "🎤 Режим резюмирования встреч" if is_meeting_mode else "📅 Режим планировщика"
     
     await update.message.reply_text(
-        f"📋 **Главное меню TRACY**\n\n"
+        f"📋 Главное меню TRACY\n\n"
         f"Текущий режим: {mode_text}\n\n"
         "Выбери действие:",
         reply_markup=inline_markup,
@@ -163,7 +163,7 @@ async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
     
     message_text = (
-        "🌐 **Веб-приложение TRACY**\n\n"
+        "🌐 Веб-приложение TRACY\n\n"
         "Веб-интерфейс доступен по адресу:\n"
         f"`{web_url}`\n\n"
         "В веб-приложении ты можешь:\n"
@@ -322,28 +322,28 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def generate_icloud_instructions() -> str:
     """Генерирует подробную инструкцию для подключения iCloud Calendar через Apple ID сайт."""
-    return """📋 **Подключение iCloud Calendar**
+    return """📋 Подключение iCloud Calendar
 
-🔐 **ШАГ 1: Проверь двухфакторную аутентификацию**
-   1. Открой сайт **appleid.apple.com** в браузере
+🔐 ШАГ 1: Проверь двухфакторную аутентификацию
+   1. Открой сайт appleid.apple.com в браузере
    2. Войди в свой Apple ID
-   3. Перейди в раздел **"Безопасность"**
-   4. Проверь, что **"Двухфакторная аутентификация"** включена
+   3. Перейди в раздел "Безопасность"
+   4. Проверь, что "Двухфакторная аутентификация" включена
    5. Если выключена — включи её, следуя инструкциям на экране
 
-🔑 **ШАГ 2: Создай пароль приложения (App-Specific Password)**
-   1. На сайте **appleid.apple.com** останься в разделе **"Безопасность"**
-   2. Прокрути вниз до раздела **"Пароли приложений"** (App-Specific Passwords)
-   3. Нажми кнопку **"Создать пароль..."** (или "Generate Password...")
-   4. В появившемся окне введи название: **"TRACY Bot"**
-   5. Нажми **"Создать"** (или "Create")
-   6. ⚠️ **КРИТИЧЕСКИ ВАЖНО:** Скопируй пароль **СРАЗУ!**
+🔑 ШАГ 2: Создай пароль приложения (App-Specific Password)
+   1. На сайте appleid.apple.com останься в разделе "Безопасность"
+   2. Прокрути вниз до раздела "Пароли приложений" (App-Specific Passwords)
+   3. Нажми кнопку "Создать пароль..." (или "Generate Password...")
+   4. В появившемся окне введи название: "TRACY Bot"
+   5. Нажми "Создать" (или "Create")
+   6. ⚠️ КРИТИЧЕСКИ ВАЖНО: Скопируй пароль СРАЗУ!
       • Пароль показывается только один раз
-      • Формат: `xxxx-xxxx-xxxx-xxxx` (16 символов в 4 группах)
+      • Формат: xxxx-xxxx-xxxx-xxxx (16 символов в 4 группах)
       • Сохрани пароль в безопасном месте — он больше не будет показан
 
-💡 **ВАЖНО:**
-   • Используй **ТОЛЬКО** пароль приложения, **НЕ** обычный пароль Apple ID
+💡 ВАЖНО:
+   • Используй ТОЛЬКО пароль приложения, НЕ обычный пароль Apple ID
    • Если потерял пароль — создай новый (старый нельзя увидеть снова)
 
 ✅ Когда всё готово, нажми кнопку "Я готов к подключению" ниже."""
@@ -443,26 +443,26 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="settings_show")]]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     await query.edit_message_text(
-                        "❌ **Ошибка настройки Google Calendar**\n\n"
+                        "❌ Ошибка настройки Google Calendar\n\n"
                         "Google OAuth не настроен.\n\n"
-                        "📋 **Для настройки требуется:**\n\n"
-                        "**1. Создать проект в Google Cloud Console:**\n"
+                        "📋 Для настройки требуется:\n\n"
+                        "1. Создать проект в Google Cloud Console:\n"
                         "• Перейди на https://console.cloud.google.com/\n"
                         "• Создай новый проект или выбери существующий\n"
                         "• Включи Google Calendar API\n\n"
-                        "**2. Создать OAuth 2.0 credentials:**\n"
+                        "2. Создать OAuth 2.0 credentials:\n"
                         "• Перейди в \"APIs & Services\" → \"Credentials\"\n"
                         "• Нажми \"Create Credentials\" → \"OAuth client ID\"\n"
                         "• Выбери тип \"Web application\"\n"
                         "• Добавь Redirect URI: `http://localhost:8080/callback`\n"
                         "• Скопируй Client ID и Client Secret\n\n"
-                        "**3. Добавить в .env файл:**\n"
+                        "3. Добавить в .env файл:\n"
                         "```\n"
                         "GOOGLE_CLIENT_ID=твой_client_id\n"
                         "GOOGLE_CLIENT_SECRET=твой_client_secret\n"
                         "GOOGLE_REDIRECT_URI=http://localhost:8080/callback\n"
                         "```\n\n"
-                        "**4. Перезапустить бота**\n\n"
+                        "4. Перезапустить бота\n\n"
                         "📖 Подробная инструкция: https://developers.google.com/calendar/api/quickstart/python",
                         reply_markup=reply_markup,
                         parse_mode="Markdown"
@@ -485,26 +485,26 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     await query.edit_message_text(
-                        "📅 **Подключение Google Calendar**\n\n"
-                        "🔐 **Пошаговая инструкция:**\n\n"
-                        "**ШАГ 1:** Нажми на кнопку **\"Открыть ссылку авторизации\"** ниже\n\n"
-                        "**ШАГ 2:** Войди в свой Google аккаунт (если еще не вошел)\n\n"
-                        "**ШАГ 3:** Разреши доступ к Google Calendar\n"
+                        "📅 Подключение Google Calendar\n\n"
+                        "🔐 Пошаговая инструкция:\n\n"
+                        "ШАГ 1: Нажми на кнопку \"Открыть ссылку авторизации\" ниже\n\n"
+                        "ШАГ 2: Войди в свой Google аккаунт (если еще не вошел)\n\n"
+                        "ШАГ 3: Разреши доступ к Google Calendar\n"
                         "• Нажми \"Разрешить\" или \"Allow\"\n"
                         "• Выбери аккаунт Google, если предложено\n\n"
-                        "**ШАГ 4:** ⚠️ **КРИТИЧЕСКИ ВАЖНО!**\n"
+                        "ШАГ 4: ⚠️ КРИТИЧЕСКИ ВАЖНО!\n"
                         "• После разрешения доступа Google перенаправит тебя на другую страницу\n"
-                        "• **НЕ ЖДИ**, пока страница загрузится полностью!\n"
-                        "• **СРАЗУ СКОПИРУЙ URL** из адресной строки браузера\n"
-                        "• Скопируй URL **ДО того**, как браузер попытается загрузить страницу\n"
-                        "• URL должен содержать параметр `code=` или `error=`\n\n"
-                        "**ШАГ 5:** Отправь URL боту\n"
-                        "• Скопируй **ВЕСЬ URL** из адресной строки (Ctrl+C или долгое нажатие)\n"
+                        "• НЕ ЖДИ, пока страница загрузится полностью!\n"
+                        "• СРАЗУ СКОПИРУЙ URL из адресной строки браузера\n"
+                        "• Скопируй URL ДО того, как браузер попытается загрузить страницу\n"
+                        "• URL должен содержать параметр code= или error=\n\n"
+                        "ШАГ 5: Отправь URL боту\n"
+                        "• Скопируй ВЕСЬ URL из адресной строки (Ctrl+C или долгое нажатие)\n"
                         "• Отправь этот URL боту в ответ на это сообщение\n\n"
-                        "💡 **Совет:**\n"
+                        "💡 Совет:\n"
                         "• Можно скопировать URL прямо во время перехода (пока он меняется в адресной строке)\n"
                         "• Или используй \"Копировать ссылку\" из контекстного меню адресной строки\n"
-                        "• URL должен начинаться с `http://` или `https://`\n\n"
+                        "• URL должен начинаться с http:// или https://\n\n"
                         "Бот будет ожидать URL с кодом авторизации.",
                         reply_markup=reply_markup,
                         parse_mode="Markdown"
@@ -520,26 +520,26 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     error_msg = str(e).lower()
                     if "google_client_id" in error_msg or "google_client_secret" in error_msg or "пустыми" in error_msg or "не установлены" in error_msg:
                         user_message = (
-                            "❌ **Ошибка настройки Google Calendar**\n\n"
+                            "❌ Ошибка настройки Google Calendar\n\n"
                             "Google OAuth не настроен.\n\n"
-                            "📋 **Для настройки требуется:**\n\n"
-                            "**1. Создать проект в Google Cloud Console:**\n"
+                            "📋 Для настройки требуется:\n\n"
+                            "1. Создать проект в Google Cloud Console:\n"
                             "• Перейди на https://console.cloud.google.com/\n"
                             "• Создай новый проект или выбери существующий\n"
                             "• Включи Google Calendar API\n\n"
-                            "**2. Создать OAuth 2.0 credentials:**\n"
+                            "2. Создать OAuth 2.0 credentials:\n"
                             "• Перейди в \"APIs & Services\" → \"Credentials\"\n"
                             "• Нажми \"Create Credentials\" → \"OAuth client ID\"\n"
                             "• Выбери тип \"Web application\"\n"
                             "• Добавь Redirect URI: `http://localhost:8080/callback`\n"
                             "• Скопируй Client ID и Client Secret\n\n"
-                            "**3. Добавить в .env файл:**\n"
+                            "3. Добавить в .env файл:\n"
                             "```\n"
                             "GOOGLE_CLIENT_ID=твой_client_id\n"
                             "GOOGLE_CLIENT_SECRET=твой_client_secret\n"
                             "GOOGLE_REDIRECT_URI=http://localhost:8080/callback\n"
                             "```\n\n"
-                            "**4. Перезапустить бота**\n\n"
+                            "4. Перезапустить бота\n\n"
                             "📖 Подробная инструкция: https://developers.google.com/calendar/api/quickstart/python"
                         )
                     else:
@@ -582,10 +582,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        mode_text = "🎤 **Режим резюмирования встреч**" if is_meeting_mode else "📅 **Режим планировщика**"
+        mode_text = "🎤 Режим резюмирования встреч" if is_meeting_mode else "📅 Режим планировщика"
         
         await query.edit_message_text(
-            f"📋 **Главное меню TRACY**\n\n"
+            f"📋 Главное меню TRACY\n\n"
             f"Текущий режим: {mode_text}\n\n"
             "Выбери действие:",
             reply_markup=reply_markup,
@@ -623,7 +623,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
-            "⚙️ **Настройки**\n\n"
+            "⚙️ Настройки\n\n"
             "Здесь ты можешь управлять подключенными календарями и другими параметрами:",
             reply_markup=reply_markup,
             parse_mode="Markdown"
@@ -632,20 +632,20 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif data == "help_show":
         # Показываем помощь (короткая версия без нумерации шагов)
-        help_text = """📖 **Как пользоваться TRACY**
+        help_text = """📖 Как пользоваться TRACY
 
 Просто напиши мне или отправь голосовое сообщение с событием, и я добавлю его в календарь.
 
-**Примеры:**
+Примеры:
 • "Завтра в 15:00 стрижка"
 • "Напомни про доклад в пятницу"
 • "Уборка в среду утром"
 • "Какие у меня планы на неделю?"
 • "Удали все события на сегодня"
 
-**Режимы работы:**
-• **Режим планировщика** — создание и управление событиями
-• **Режим резюмирования встреч** — расшифровка аудио встреч
+Режимы работы:
+• Режим планировщика — создание и управление событиями
+• Режим резюмирования встреч — расшифровка аудио встреч
 
 💡 Бот работает без подключения календарей! Все события сохраняются, напоминания приходят."""
         
@@ -703,12 +703,12 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="icloud_cancel")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.reply_text(
-            "📧 **Шаг 1 из 2: Введи свой Apple ID**\n\n"
+            "📧 Шаг 1 из 2: Введи свой Apple ID\n\n"
             "Отправь email адрес, который привязан к твоему Apple ID.\n\n"
             "Пример:\n"
-            "`ivan@icloud.com`\n"
+            "ivan@icloud.com\n"
             "или\n"
-            "`ivan@gmail.com` (если используется как Apple ID)\n\n"
+            "ivan@gmail.com (если используется как Apple ID)\n\n"
             "Отправь email в ответ на это сообщение.",
             reply_markup=reply_markup,
             parse_mode="Markdown"
@@ -816,7 +816,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reminder_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
         
         await query.edit_message_text(
-            f"🔔 **Настройки уведомлений**\n\n"
+            f"🔔 Настройки уведомлений\n\n"
             f"Статус: {status_icon} Уведомления {status_text}\n\n"
             f"Напоминание по умолчанию: за {reminder_text} до события\n"
             f"☀️ Утренний дайджест: {morning_digest_time}\n\n"
@@ -864,7 +864,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reminder_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
         
         await query.edit_message_text(
-            f"🔔 **Настройки уведомлений**\n\n"
+            f"🔔 Настройки уведомлений\n\n"
             f"Статус: {status_icon} Уведомления {status_text}\n\n"
             f"Напоминание по умолчанию: за {reminder_text} до события\n\n"
             "Здесь ты можешь управлять уведомлениями о событиях и напоминаниями.",
@@ -901,7 +901,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             current_reminder_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
         
         await query.edit_message_text(
-            f"⏰ **Настройка напоминаний**\n\n"
+            f"⏰ Настройка напоминаний\n\n"
             f"Текущее напоминание по умолчанию: за {current_reminder_text} до события\n\n"
             "Выбери время, за которое бот будет напоминать о событиях:\n\n"
             "Это время будет использоваться для всех новых событий, если ты не укажешь другое.",
@@ -955,8 +955,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Отправляем сообщение с просьбой указать новое время
                 reply_keyboard = get_reply_keyboard(context)
                 await query.message.reply_text(
-                    f"⏰ **Перенос события**\n\n"
-                    f"📅 **{event_title}**\n\n"
+                    f"⏰ Перенос события\n\n"
+                    f"📅 {event_title}\n\n"
                     f"На какое время перенести? Укажи дату и время, например:\n"
                     f"• Завтра в 15:00\n"
                     f"• Через 2 часа\n"
@@ -1026,7 +1026,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reminder_text = f"{days} ден{'ь' if days == 1 else 'я' if days in [2, 3, 4] else 'ей'}"
             
             await query.edit_message_text(
-                f"🔔 **Настройки уведомлений**\n\n"
+                f"🔔 Настройки уведомлений\n\n"
                 f"Статус: {status_icon} Уведомления {status_text}\n\n"
                 f"✅ Напоминание по умолчанию: за {reminder_text} до события\n\n"
                 "Здесь ты можешь управлять уведомлениями о событиях и напоминаниями.",
@@ -1053,8 +1053,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         inline_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
-            "📋 **Главное меню TRACY**\n\n"
-            "✅ **Режим планировщика**\n\n"
+            "📋 Главное меню TRACY\n\n"
+            "✅ Режим планировщика\n\n"
             "Теперь ты в обычном режиме работы с календарем. Можешь:\n"
             "• Создавать события из текста, голоса или фото\n"
             "• Управлять напоминаниями\n"
@@ -1085,8 +1085,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         inline_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
-            "📋 **Главное меню TRACY**\n\n"
-            "✅ **Режим резюмирования встреч**\n\n"
+            "📋 Главное меню TRACY\n\n"
+            "✅ Режим резюмирования встреч\n\n"
             "Теперь ты в режиме расшифровки встреч. Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
             "📎 Поддерживаемые аудиоформаты: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие.\n\n"
             "Используй кнопки внизу экрана для переключения режима.",
@@ -1114,7 +1114,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.extend(get_meeting_mode_footer_buttons(context))
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
-                f"📋 **Резюме встречи**\n\n{summary}\n\n"
+                f"📋 Резюме встречи\n\n{summary}\n\n"
                 "💡 Режим расшифровки встреч активен. Отправь следующее аудио для расшифровки или выбери действие выше.",
                 reply_markup=reply_markup,
                 parse_mode="Markdown"
@@ -1132,7 +1132,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
-            "📝 **Встречи и резюме**\n\n"
+            "📝 Встречи и резюме\n\n"
             "Выбери действие:",
             reply_markup=reply_markup,
             parse_mode="Markdown"
@@ -1148,7 +1148,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
-            "🎤 **Создание резюме встречи**\n\n"
+            "🎤 Создание резюме встречи\n\n"
             "Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
             "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.",
             reply_markup=reply_markup
@@ -1195,12 +1195,12 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for i, part in enumerate(parts):
                     if i == 0:
                         await query.message.reply_text(
-                            f"📄 **Полная расшифровка встречи** (часть {i+1}/{len(parts)})\n\n{part}",
+                            f"📄 Полная расшифровка встречи (часть {i+1}/{len(parts)})\n\n{part}",
                             parse_mode="Markdown"
                         )
                     else:
                         await query.message.reply_text(
-                            f"**Продолжение** (часть {i+1}/{len(parts)})\n\n{part}",
+                            f"Продолжение (часть {i+1}/{len(parts)})\n\n{part}",
                             parse_mode="Markdown"
                         )
                 
@@ -1212,7 +1212,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer()
             else:
                 await query.edit_message_text(
-                    f"📄 **Полная расшифровка встречи**\n\n{transcript}",
+                    f"📄 Полная расшифровка встречи\n\n{transcript}",
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
@@ -1274,7 +1274,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data['last_meeting_data'] = meeting_data
                 
                 await query.message.reply_text(
-                    f"📋 **Расширенное резюме**\n\n{extended_summary}",
+                    f"📋 Расширенное резюме\n\n{extended_summary}",
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
@@ -1369,7 +1369,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text(
                     f"✅ Создано событий из встречи: {created_count}\n\n"
                     f"События добавлены в твой календарь.\n\n"
-                    f"🎤 **Режим расшифровки встреч всё ещё активен.** Отправь следующее голосовое сообщение или аудиофайл для расшифровки.",
+                    f"🎤 Режим расшифровки встреч всё ещё активен. Отправь следующее голосовое сообщение или аудиофайл для расшифровки.",
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
@@ -2011,7 +2011,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Устанавливаем постоянную клавиатуру для режима планировщика
             reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
-                "✅ **Режим планировщика**\n\n"
+                "✅ Режим планировщика\n\n"
                 "Теперь ты в обычном режиме работы с календарем.",
                 reply_markup=reply_keyboard,
                 parse_mode="Markdown"
@@ -2023,7 +2023,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Устанавливаем постоянную клавиатуру для режима расшифровки
             reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
-                "🎤 **Режим расшифровки встреч**\n\n"
+                "🎤 Режим расшифровки встреч\n\n"
                 "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
                 "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.",
                 reply_markup=reply_keyboard,
@@ -2167,7 +2167,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Устанавливаем постоянную клавиатуру для режима планировщика
             reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
-                "✅ **Режим планировщика**\n\n"
+                "✅ Режим планировщика\n\n"
                 "Теперь ты в обычном режиме работы с календарем.",
                 reply_markup=reply_keyboard,
                 parse_mode="Markdown"
@@ -2183,7 +2183,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Проверяем, что это не аудиофайл
             if update.message.document and not is_audio_file(update.message):
                 await update.message.reply_text(
-                    "❌ **Режим расшифровки встреч активен**\n\n"
+                    "❌ Режим расшифровки встреч активен\n\n"
                     "Этот файл не является аудиофайлом. Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
                     "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
                     "Используй кнопки ниже для переключения режима или возврата в меню.",
@@ -2192,7 +2192,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await update.message.reply_text(
-                    "🎤 **Режим расшифровки встреч активен**\n\n"
+                    "🎤 Режим расшифровки встреч активен\n\n"
                     "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
                     "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
                     "Используй кнопки ниже для переключения режима или возврата в меню.",
@@ -2271,11 +2271,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="icloud_cancel")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                f"🔑 **Шаг 2 из 2: Введи пароль приложения**\n\n"
-                f"Apple ID: `{email}`\n\n"
+                f"🔑 Шаг 2 из 2: Введи пароль приложения\n\n"
+                f"Apple ID: {email}\n\n"
                 "Отправь пароль приложения (App-Specific Password), который ты создал на appleid.apple.com\n\n"
-                "Формат: `xxxx-xxxx-xxxx-xxxx` (16 символов в 4 группах через дефис)\n\n"
-                "⚠️ **Важно:** Используй пароль приложения, НЕ обычный пароль Apple ID!",
+                "Формат: xxxx-xxxx-xxxx-xxxx (16 символов в 4 группах через дефис)\n\n"
+                "⚠️ Важно: Используй пароль приложения, НЕ обычный пароль Apple ID!",
                 reply_markup=reply_markup,
                 parse_mode="Markdown"
             )
@@ -2336,8 +2336,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     await status_msg.edit_text(
-                        "✅ **iCloud Calendar успешно подключен!**\n\n"
-                        f"События будут синхронизироваться с календарем `{email}`\n\n"
+                        "✅ iCloud Calendar успешно подключен!\n\n"
+                        f"События будут синхронизироваться с календарем {email}\n\n"
                         "Попробуй создать событие, например:\n"
                         "«Встреча завтра в 15:00»",
                         reply_markup=reply_markup,
@@ -2348,11 +2348,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await send_calendar_status_to_web_app(user_id, context)
                 else:
                     await status_msg.edit_text(
-                        "❌ **Ошибка подключения к iCloud Calendar**\n\n"
+                        "❌ Ошибка подключения к iCloud Calendar\n\n"
                         "Проверь:\n"
                         "✓ Правильность Apple ID (полный email)\n"
                         "✓ Что использован пароль приложения (не основной пароль!)\n"
-                        "✓ Формат пароля: `xxxx-xxxx-xxxx-xxxx`\n"
+                        "✓ Формат пароля: xxxx-xxxx-xxxx-xxxx\n"
                         "✓ Что включена двухфакторная аутентификация\n\n"
                         "Попробуй еще раз через /settings",
                         parse_mode="Markdown"
@@ -2366,7 +2366,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if 'authentication' in error_msg or 'unauthorized' in error_msg or '401' in error_msg:
                     detailed_error = (
-                        "❌ **Ошибка аутентификации**\n\n"
+                        "❌ Ошибка аутентификации\n\n"
                         "Возможные причины:\n"
                         "• Неверный Apple ID или пароль\n"
                         "• Использован обычный пароль вместо пароля приложения\n"
@@ -2393,13 +2393,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 error_params = auth_response.split('?')[-1] if '?' in auth_response else auth_response
                 if 'error=access_denied' in error_params.lower() or 'error=access_blocked' in error_params.lower():
                     await update.message.reply_text(
-                        "❌ **Доступ запрещен**\n\n"
+                        "❌ Доступ запрещен\n\n"
                         "Google заблокировал доступ к календарю.\n\n"
-                        "**Возможные причины:**\n"
+                        "Возможные причины:\n"
                         "• Google требует дополнительной проверки безопасности\n"
                         "• OAuth приложение не настроено правильно\n"
                         "• Redirect URI не добавлен в список разрешенных\n\n"
-                        "**Что делать:**\n"
+                        "Что делать:\n"
                         "1. Попробуй использовать другой браузер\n"
                         "2. Войди в Google аккаунт в обычном режиме (не инкогнито)\n"
                         "3. Убедись, что в Google Cloud Console правильно настроен redirect URI\n"
@@ -2423,7 +2423,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 await update.message.reply_text(
-                    "✅ **Google Calendar успешно подключен!**\n\n"
+                    "✅ Google Calendar успешно подключен!\n\n"
                     "События будут синхронизироваться с твоим Google Calendar.\n\n"
                     "Попробуй создать событие, например:\n"
                     "«Встреча завтра в 15:00»",
@@ -2435,12 +2435,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await send_calendar_status_to_web_app(user_id, context)
             else:
                 await update.message.reply_text(
-                    "❌ **Ошибка подключения Google Calendar**\n\n"
+                    "❌ Ошибка подключения Google Calendar\n\n"
                     "Не удалось обработать URL авторизации.\n\n"
-                    "**Проверь:**\n"
+                    "Проверь:\n"
                     "• Что скопировал полный URL из адресной строки\n"
-                    "• Что URL содержит параметр `code=`\n"
-                    "• Что URL начинается с `http://` или `https://`\n\n"
+                    "• Что URL содержит параметр code=\n"
+                    "• Что URL начинается с http:// или https://\n\n"
                     "Попробуй еще раз через /settings"
                 )
         except Exception as e:
@@ -2449,9 +2449,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if 'invalid_grant' in error_msg or 'expired' in error_msg:
                 detailed_error = (
-                    "❌ **Код авторизации истек или недействителен**\n\n"
+                    "❌ Код авторизации истек или недействителен\n\n"
                     "Код авторизации действителен только несколько минут.\n\n"
-                    "**Что делать:**\n"
+                    "Что делать:\n"
                     "1. Перейди снова по ссылке авторизации из настроек\n"
                     "2. Сразу скопируй URL из адресной строки\n"
                     "3. Отправь его боту\n\n"
@@ -2459,14 +2459,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             elif 'redirect_uri_mismatch' in error_msg:
                 detailed_error = (
-                    "❌ **Ошибка настройки Redirect URI**\n\n"
+                    "❌ Ошибка настройки Redirect URI\n\n"
                     "Redirect URI в настройках Google OAuth не совпадает с указанным.\n\n"
-                    "**Это проблема настройки бота.**\n"
+                    "Это проблема настройки бота.\n"
                     "Обратитесь к администратору для исправления настроек OAuth."
                 )
             else:
                 detailed_error = (
-                    f"❌ **Ошибка подключения**\n\n"
+                    f"❌ Ошибка подключения\n\n"
                     f"Произошла ошибка: {str(e)}\n\n"
                     "Попробуй еще раз через /settings"
                 )
@@ -2823,7 +2823,15 @@ async def get_events_for_web_app(user_id: int) -> List[Dict]:
         start_to = now + timedelta(days=365)
         
         events = db.get_events(user_id, limit=200, start_from=start_from, start_to=start_to)
-        logger.info(f"📊 Получено {len(events)} событий из БД для пользователя {user_id} (период: {start_from.date()} - {start_to.date()})")
+        logger.info(f"📊 Получено {len(events)} событий из БД для пользователя {user_id} (период: {start_from} - {start_to})")
+        if len(events) > 0:
+            logger.info(f"📊 Первое событие: {events[0].get('title')} на {events[0].get('start_time')} (тип: {type(events[0].get('start_time'))})")
+        else:
+            # Если нет событий с фильтром, проверим вообще все события
+            all_events = db.get_events(user_id, limit=10)
+            logger.info(f"📊 Всего событий пользователя в БД (без фильтра): {len(all_events)}")
+            if len(all_events) > 0:
+                logger.info(f"📊 Пример события без фильтра: {all_events[0].get('title')} на {all_events[0].get('start_time')} (тип: {type(all_events[0].get('start_time'))})")
         
         # Преобразуем события в формат для веб-приложения
         web_events = []

@@ -113,7 +113,8 @@ class Database:
                         default_reminder_minutes INTEGER DEFAULT 15,
                         morning_digest_time TEXT DEFAULT '09:00',
                         web_notifications_enabled BOOLEAN DEFAULT TRUE,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        interpretation_mode TEXT DEFAULT 'soft',
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
                 
@@ -138,6 +139,17 @@ class Database:
                 except:
                     pass  # Колонка уже существует
                 
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS interpretation_mode TEXT DEFAULT 'soft'")
+                except:
+                    pass  # Колонка уже существует
+
+                # Обновляем тип колонки created_at
+                try:
+                    cursor.execute("ALTER TABLE users ALTER COLUMN created_at TYPE TIMESTAMPTZ")
+                except:
+                    pass
+                
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS calendar_connections (
                         id SERIAL PRIMARY KEY,
@@ -146,11 +158,16 @@ class Database:
                         calendar_id TEXT NOT NULL,
                         credentials TEXT,
                         is_active BOOLEAN DEFAULT TRUE,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id),
                         UNIQUE(user_id, provider, calendar_id)
                     )
                 """)
+                
+                try:
+                    cursor.execute("ALTER TABLE calendar_connections ALTER COLUMN created_at TYPE TIMESTAMPTZ")
+                except:
+                    pass
                 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS events (
@@ -160,16 +177,25 @@ class Database:
                         provider TEXT,
                         title TEXT NOT NULL,
                         description TEXT,
-                        start_time TIMESTAMP,
-                        end_time TIMESTAMP,
+                        start_time TIMESTAMPTZ,
+                        end_time TIMESTAMPTZ,
                         location TEXT,
                         status TEXT DEFAULT 'confirmed',
                         priority INTEGER DEFAULT 0,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     )
                 """)
+                
+                # Обновляем типы колонок для существующих таблиц в PostgreSQL
+                try:
+                    cursor.execute("ALTER TABLE events ALTER COLUMN start_time TYPE TIMESTAMPTZ")
+                    cursor.execute("ALTER TABLE events ALTER COLUMN end_time TYPE TIMESTAMPTZ")
+                    cursor.execute("ALTER TABLE events ALTER COLUMN created_at TYPE TIMESTAMPTZ")
+                    cursor.execute("ALTER TABLE events ALTER COLUMN updated_at TYPE TIMESTAMPTZ")
+                except:
+                    pass
                 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS notes (
@@ -177,10 +203,15 @@ class Database:
                         user_id BIGINT NOT NULL,
                         content TEXT NOT NULL,
                         context TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     )
                 """)
+                
+                try:
+                    cursor.execute("ALTER TABLE notes ALTER COLUMN created_at TYPE TIMESTAMPTZ")
+                except:
+                    pass
                 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS user_last_event (
@@ -197,17 +228,25 @@ class Database:
                         id SERIAL PRIMARY KEY,
                         user_id BIGINT NOT NULL,
                         event_id INTEGER NOT NULL,
-                        reminder_time TIMESTAMP NOT NULL,
-                        event_start_time TIMESTAMP NOT NULL,
+                        reminder_time TIMESTAMPTZ NOT NULL,
+                        event_start_time TIMESTAMPTZ NOT NULL,
                         reminder_type TEXT DEFAULT 'before',
                         minutes_before INTEGER,
                         sent BOOLEAN DEFAULT FALSE,
-                        sent_at TIMESTAMP,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        sent_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id),
                         FOREIGN KEY (event_id) REFERENCES events(id)
                     )
                 """)
+                
+                try:
+                    cursor.execute("ALTER TABLE reminders ALTER COLUMN reminder_time TYPE TIMESTAMPTZ")
+                    cursor.execute("ALTER TABLE reminders ALTER COLUMN event_start_time TYPE TIMESTAMPTZ")
+                    cursor.execute("ALTER TABLE reminders ALTER COLUMN sent_at TYPE TIMESTAMPTZ")
+                    cursor.execute("ALTER TABLE reminders ALTER COLUMN created_at TYPE TIMESTAMPTZ")
+                except:
+                    pass
                 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS meetings (
@@ -220,11 +259,17 @@ class Database:
                         summary_extended TEXT,
                         segments JSONB,
                         duration INTEGER DEFAULT 0,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     )
                 """)
+                
+                try:
+                    cursor.execute("ALTER TABLE meetings ALTER COLUMN created_at TYPE TIMESTAMPTZ")
+                    cursor.execute("ALTER TABLE meetings ALTER COLUMN updated_at TYPE TIMESTAMPTZ")
+                except:
+                    pass
                 
                 # Индексы
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id)")
@@ -248,6 +293,7 @@ class Database:
                         default_reminder_minutes INTEGER DEFAULT 15,
                         morning_digest_time TEXT DEFAULT '09:00',
                         web_notifications_enabled INTEGER DEFAULT 1,
+                        interpretation_mode TEXT DEFAULT 'soft',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
@@ -270,6 +316,11 @@ class Database:
                 
                 try:
                     cursor.execute("ALTER TABLE users ADD COLUMN web_notifications_enabled INTEGER DEFAULT 1")
+                except:
+                    pass  # Колонка уже существует
+                
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN interpretation_mode TEXT DEFAULT 'soft'")
                 except:
                     pass  # Колонка уже существует
                 
@@ -433,7 +484,8 @@ class Database:
                 'notifications_enabled': True,
                 'default_reminder_minutes': 15,
                 'morning_digest_time': '09:00',
-                'web_notifications_enabled': True
+                'web_notifications_enabled': True,
+                'interpretation_mode': 'soft'
             }
         
         # Преобразуем в словарь с правильными типами
@@ -443,7 +495,8 @@ class Database:
             'notifications_enabled': bool(user.get('notifications_enabled', True)),
             'default_reminder_minutes': int(user.get('default_reminder_minutes', 15)),
             'morning_digest_time': user.get('morning_digest_time', '09:00'),
-            'web_notifications_enabled': bool(user.get('web_notifications_enabled', True))
+            'web_notifications_enabled': bool(user.get('web_notifications_enabled', True)),
+            'interpretation_mode': user.get('interpretation_mode', 'soft')
         }
         
         # Для SQLite преобразуем boolean
@@ -515,6 +568,10 @@ class Database:
                     else:
                         updates.append("web_notifications_enabled = ?")
                         params.append(1 if bool(value) else 0)
+                
+                if 'interpretation_mode' in settings_dict:
+                    updates.append("interpretation_mode = %s" if self.use_postgresql else "interpretation_mode = ?")
+                    params.append(str(settings_dict['interpretation_mode']))
             else:
                 # Обратная совместимость со старым API
                 if timezone:
@@ -638,6 +695,7 @@ class Database:
         cursor = conn.cursor()
         
         try:
+            logger.info(f"💾 БД: Сохранение события для {user_id}: '{title}' на {start_time}")
             if self.use_postgresql:
                 cursor.execute("""
                     INSERT INTO events 
@@ -766,6 +824,26 @@ class Database:
             query = f"SELECT * FROM events WHERE user_id = {param_placeholder}"
             params = [user_id]
             
+            # Лог для отладки - сколько всего событий у пользователя
+            cursor.execute(query, params)
+            all_rows = cursor.fetchall()
+            all_events_count = len(all_rows)
+            logger.info(f"🔍 БД: Всего событий у пользователя {user_id} в базе: {all_events_count}")
+            if all_events_count > 0:
+                # В PostgreSQL cursor.fetchall() возвращает кортежи, если не RealDictCursor
+                try:
+                    if self.use_postgresql:
+                        # Для отладки просто выводим количество, так как all_rows - это список кортежей
+                        logger.info(f"🔍 БД: Найдено {all_events_count} записей в БД")
+                    else:
+                        logger.info(f"🔍 БД: Примеры событий: {[dict(r).get('title') for r in all_rows[:3]]}")
+                except Exception as log_err:
+                    logger.debug(f"Ошибка логирования примеров: {log_err}")
+            
+            # ВАЖНО: Если мы используем PostgreSQL, нам нужно переоткрыть курсор как RealDictCursor 
+            # для основного запроса, если мы хотим работать со словарями.
+            # Но для начала просто выполним основной запрос.
+            
             if start_from:
                 query += f" AND start_time >= {param_placeholder}"
                 if self.use_postgresql:
@@ -783,9 +861,14 @@ class Database:
             query += f" ORDER BY start_time ASC LIMIT {param_placeholder}"
             params.append(limit)
             
+            logger.debug(f"SQL Query: {query}")
+            logger.debug(f"SQL Params: {params}")
+            
             cursor.execute(query, params)
             
             if self.use_postgresql:
+                # В PostgreSQL cursor.fetchall() возвращает кортежи по умолчанию.
+                # Мы заново получаем данные через RealDictCursor для удобства.
                 cursor.close()
                 dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
                 dict_cursor.execute(query, params)
@@ -797,21 +880,31 @@ class Database:
             # Парсим события из БД
             events = []
             for row in rows:
-                event_dict = dict(row)
-                # Парсим даты из строк в datetime
-                if event_dict.get('start_time'):
-                    try:
-                        if isinstance(event_dict['start_time'], str):
-                            event_dict['start_time'] = datetime.fromisoformat(event_dict['start_time'].replace('Z', '+00:00'))
-                    except:
-                        pass
-                if event_dict.get('end_time'):
-                    try:
-                        if isinstance(event_dict['end_time'], str):
-                            event_dict['end_time'] = datetime.fromisoformat(event_dict['end_time'].replace('Z', '+00:00'))
-                    except:
-                        pass
-                events.append(event_dict)
+                try:
+                    # Для SQLite (sqlite3.Row) и PostgreSQL (RealDictRow) dict() работает.
+                    if isinstance(row, dict) or not isinstance(row, (list, tuple)):
+                        event_dict = dict(row)
+                    else:
+                        logger.warning(f"⚠️ Получен кортеж вместо словаря из БД: {row}")
+                        continue 
+                    
+                    # Парсим даты из строк в datetime
+                    if event_dict.get('start_time'):
+                        try:
+                            if isinstance(event_dict['start_time'], str):
+                                event_dict['start_time'] = datetime.fromisoformat(event_dict['start_time'].replace('Z', '+00:00'))
+                        except:
+                            pass
+                    if event_dict.get('end_time'):
+                        try:
+                            if isinstance(event_dict['end_time'], str):
+                                event_dict['end_time'] = datetime.fromisoformat(event_dict['end_time'].replace('Z', '+00:00'))
+                        except:
+                            pass
+                    events.append(event_dict)
+                except Exception as row_err:
+                    logger.error(f"Ошибка при обработке строки события: {row_err}")
+                    continue
             
             return events
         except Exception as e:

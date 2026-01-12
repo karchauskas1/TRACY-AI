@@ -1,38 +1,29 @@
 """
-Простой API сервер для Render.com
-Использует существующий код из http_server.py
+API сервер и Telegram бот для Render.com
+Запускает бота в основном потоке и HTTP сервер в фоновом.
 """
 import os
 import sys
 import logging
-import asyncio
-from aiohttp import web
 
 # Добавляем текущий каталог в Python path для поиска модулей
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from http_server import create_app, set_database
-from database import Database
+from bot import main as start_bot
 
-logging.basicConfig(level=logging.INFO)
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-# Инициализация БД
-db = Database()
-set_database(db)
-
-# Создаем приложение
-app = create_app()
-
 if __name__ == '__main__':
-    # Получаем PORT из переменных окружения, обрабатываем пустую строку
-    port_str = os.getenv('PORT', '8080')
+    logger.info("🚀 Запуск единого процесса (Бот + API) для Render.com")
     try:
-        port = int(port_str) if port_str else 8080
-    except ValueError:
-        port = 8080
-        logger.warning(f"⚠️ Неверное значение PORT: '{port_str}', используем 8080")
-    
-    logger.info(f"🚀 Запуск API сервера на порту {port}")
-    web.run_app(app, port=port, host='0.0.0.0')
-
+        # bot.main() сам запускает HTTP сервер в фоновом потоке 
+        # и оставляет основной поток для Telegram бота (run_polling)
+        start_bot()
+    except Exception as e:
+        logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}", exc_info=True)
+        sys.exit(1)
