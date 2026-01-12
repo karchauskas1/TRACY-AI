@@ -2646,68 +2646,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 reply_markup=reply_markup
                             )
                     return
-            
-            # Отправляем обратную связь
-            feedback_text = context.user_data.get('feedback_text')
-            
-            try:
-                feedback_service = FeedbackService(user_id)
-                
-                # Используем Apps Script, если URL указан (не требует авторизации)
-                use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
-                
-                # Проверяем авторизацию только если НЕ используем Apps Script
-                if not use_apps_script:
-                    if not feedback_service.get_credentials():
-                        # Нужна авторизация
-                        auth_url = feedback_service.get_authorization_url()
-                        keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        
+                except Exception as e:
+                    logger.error(f"Ошибка обработки скриншота: {e}", exc_info=True)
+                    # Если используется Apps Script, ошибка не критична
+                    use_apps_script = bool(config.FEEDBACK_APPS_SCRIPT_URL)
+                    if use_apps_script:
                         await update.message.reply_text(
-                            "🔐 Требуется авторизация Google\n\n"
-                            "Для отправки обратной связи нужно авторизоваться в Google.\n\n"
-                            "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
-                            reply_markup=reply_markup
+                            "⚠️ Ошибка обработки скриншота. Продолжаю без скриншота."
                         )
-                        context.user_data['waiting_google_auth'] = True
-                        context.user_data['auth_type'] = 'feedback'
-                        return
-                
-                # Отправляем обратную связь
-                result = feedback_service.submit_feedback(
-                    feedback_type=feedback_type,
-                    comment=feedback_text,
-                    screenshot_url=screenshot_url,
-                    use_apps_script=use_apps_script
-                )
-                
-                # Очищаем данные
-                context.user_data.pop('feedback_type', None)
-                context.user_data.pop('feedback_step', None)
-                context.user_data.pop('feedback_text', None)
-                context.user_data.pop('feedback_screenshot', None)
-                context.user_data.pop('pending_photo_file', None)
-                
-                keyboard = [[InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await update.message.reply_text(
-                    f"✅ Отправлено\n\n"
-                    f"Тип: {feedback_type}\n"
-                    f"Дата: {result['date']}\n"
-                    f"Номер записи: #{result['number']}\n"
-                    f"Лист: {result['sheet']}",
-                    reply_markup=reply_markup
-                )
-            except Exception as e:
-                logger.error(f"Ошибка отправки обратной связи: {e}", exc_info=True)
-                keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="feedback_show")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await update.message.reply_text(
-                    f"❌ Ошибка отправки обратной связи:\n{str(e)[:300]}",
-                    reply_markup=reply_markup
-                )
+                    else:
+                        await update.message.reply_text(
+                            f"⚠️ Ошибка загрузки скриншота: {str(e)[:200]}. Продолжаю без скриншота."
+                        )
             return
     
     # Проверяем, находимся ли мы в режиме ожидания аудио для встречи (ВЫСШИЙ ПРИОРИТЕТ)
