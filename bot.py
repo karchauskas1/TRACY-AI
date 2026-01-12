@@ -3750,7 +3750,8 @@ def main():
         set_database(db)
         
         # Запускаем HTTP сервер в отдельном потоке (так как он блокирующий)
-        http_host = config.HOST or 'localhost'
+        # Используем '0.0.0.0' чтобы слушать на всех интерфейсах, а не только localhost
+        http_host = config.HOST if config.HOST and config.HOST != 'localhost' else '0.0.0.0'
         http_port = config.PORT or 8080
         
         def run_http_server():
