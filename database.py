@@ -1720,20 +1720,27 @@ class Database:
                 return result
             else:
                 # Для SQLite выбираем только существующие колонки (без sheet_name и sheet_row_number, если их нет)
+                # Выполняем запрос
                 cursor.execute("""
                     SELECT id, user_id, feedback_type, comment, screenshot_url, created_at
                     FROM feedback
                     ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
                 """, (limit, offset))
+                
+                # Получаем результаты
+                rows = cursor.fetchall()
                 columns = [desc[0] for desc in cursor.description]
+                
                 result = []
-                for row in cursor.fetchall():
+                for row in rows:
                     row_dict = dict(zip(columns, row))
                     # Добавляем None для отсутствующих колонок
                     row_dict['sheet_name'] = None
                     row_dict['sheet_row_number'] = None
                     result.append(row_dict)
+                
+                logger.debug(f"get_all_feedback SQLite: получено {len(result)} записей из {len(rows)} строк")
                 return result
         except Exception as e:
             logger.error(f"Ошибка получения обратной связи: {e}", exc_info=True)
