@@ -45,3 +45,17 @@ os.makedirs(TOKENS_DIR, exist_ok=True)
 # Web App
 WEB_APP_URL = os.getenv("WEB_APP_URL")  # HTTPS URL веб-приложения (GitHub Pages)
 
+# Feedback Service (Google Sheets/Drive)
+FEEDBACK_SPREADSHEET_ID = os.getenv("FEEDBACK_SPREADSHEET_ID", "")
+FEEDBACK_SHEET_MAPPING = {}  # Маппинг user_id -> название листа
+# Парсим из переменной окружения (формат: "user_id1:лист1,user_id2:лист2")
+env_feedback_mapping = os.getenv("FEEDBACK_SHEET_MAPPING", "")
+if env_feedback_mapping:
+    for pair in env_feedback_mapping.split(","):
+        if ":" in pair:
+            user_id_str, sheet_name = pair.split(":", 1)
+            try:
+                FEEDBACK_SHEET_MAPPING[int(user_id_str.strip())] = sheet_name.strip()
+            except ValueError:
+                pass  # Игнорируем неверные форматы
+

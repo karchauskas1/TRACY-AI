@@ -21,6 +21,7 @@ from decision_engine import DecisionEngine
 from calendar_google import GoogleCalendar
 from meeting_processor import MeetingProcessor
 from reminder_scheduler import ReminderScheduler
+from feedback_service import FeedbackService
 import config
 
 logging.basicConfig(
@@ -579,6 +580,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Кнопки настроек и помощи
         keyboard.append([InlineKeyboardButton("⚙️ Настройки", callback_data="settings_show")])
         keyboard.append([InlineKeyboardButton("❓ Как пользоваться", callback_data="help_show")])
+        keyboard.append([InlineKeyboardButton("💬 Обратная связь", callback_data="feedback_show")])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -628,6 +630,138 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
+        return
+    
+    elif data == "feedback_show":
+        # Показываем меню обратной связи
+        keyboard = [
+            [InlineKeyboardButton("🐛 Сообщить о баге", callback_data="feedback_bug")],
+            [InlineKeyboardButton("💡 Сделать предложение", callback_data="feedback_suggestion")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_show")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "💬 Обратная связь\n\n"
+            "Выбери тип обратной связи:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "feedback_bug":
+        # Начинаем процесс отправки бага
+        context.user_data['feedback_type'] = 'баг'
+        context.user_data['feedback_step'] = 'text'
+        
+        keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="feedback_cancel")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "🐛 Сообщить о баге\n\n"
+            "Введите свой комментарий:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "feedback_suggestion":
+        # Начинаем процесс отправки предложения
+        context.user_data['feedback_type'] = 'предложение'
+        context.user_data['feedback_step'] = 'text'
+        
+        keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="feedback_cancel")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "💡 Сделать предложение\n\n"
+            "Введите свой комментарий:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "feedback_cancel":
+        # Отмена обратной связи
+        context.user_data.pop('feedback_type', None)
+        context.user_data.pop('feedback_step', None)
+        context.user_data.pop('feedback_text', None)
+        context.user_data.pop('feedback_screenshot', None)
+        
+        keyboard = [
+            [InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "❌ Обратная связь отменена.",
+            reply_markup=reply_markup
+        )
+        return
+    
+    elif data == "feedback_skip_screenshot":
+        # Пропустить скриншот и отправить обратную связь
+        feedback_type = context.user_data.get('feedback_type')
+        feedback_text = context.user_data.get('feedback_text')
+        
+        if not feedback_type or not feedback_text:
+            await query.answer("Ошибка: не найден текст комментария", show_alert=True)
+            return
+        
+        await query.answer("Отправляю обратную связь...")
+        
+        try:
+            feedback_service = FeedbackService(user_id)
+            
+            # Проверяем авторизацию
+            if not feedback_service.get_credentials():
+                # Нужна авторизация
+                auth_url = feedback_service.get_authorization_url()
+                keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(
+                    "🔐 Требуется авторизация Google\n\n"
+                    "Для отправки обратной связи нужно авторизоваться в Google.\n\n"
+                    "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
+                    reply_markup=reply_markup
+                )
+                context.user_data['waiting_google_auth'] = True
+                context.user_data['auth_type'] = 'feedback'
+                return
+            
+            # Отправляем обратную связь
+            result = feedback_service.submit_feedback(
+                feedback_type=feedback_type,
+                comment=feedback_text,
+                screenshot_url=None
+            )
+            
+            # Очищаем данные
+            context.user_data.pop('feedback_type', None)
+            context.user_data.pop('feedback_step', None)
+            context.user_data.pop('feedback_text', None)
+            context.user_data.pop('feedback_screenshot', None)
+            
+            keyboard = [[InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                f"✅ Отправлено\n\n"
+                f"Тип: {feedback_type}\n"
+                f"Дата: {result['date']}\n"
+                f"Номер записи: #{result['number']}\n"
+                f"Лист: {result['sheet']}",
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки обратной связи: {e}", exc_info=True)
+            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="feedback_show")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                f"❌ Ошибка отправки обратной связи:\n{str(e)[:300]}",
+                reply_markup=reply_markup
+            )
         return
     
     elif data == "help_show":
@@ -2163,6 +2297,142 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
     
+    # Проверяем, находимся ли мы в режиме обратной связи (ВЫСШИЙ ПРИОРИТЕТ)
+    if context.user_data.get('feedback_step'):
+        feedback_step = context.user_data.get('feedback_step')
+        feedback_type = context.user_data.get('feedback_type')
+        
+        if feedback_step == 'text':
+            # Ожидаем текст комментария
+            if update.message.text:
+                context.user_data['feedback_text'] = update.message.text
+                context.user_data['feedback_step'] = 'screenshot'
+                
+                keyboard = [
+                    [InlineKeyboardButton("⏭️ Пропустить", callback_data="feedback_skip_screenshot")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="feedback_cancel")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    "📸 Отправь скриншот (или нажми \"Пропустить\"):",
+                    reply_markup=reply_markup
+                )
+                return
+            else:
+                await update.message.reply_text(
+                    "❌ Пожалуйста, отправь текстовый комментарий."
+                )
+                return
+        
+        elif feedback_step == 'screenshot':
+            # Ожидаем скриншот или пропуск
+            screenshot_url = None
+            
+            if update.message.photo:
+                # Получаем фото
+                photo = update.message.photo[-1]  # Берем самое большое фото
+                photo_file = await context.bot.get_file(photo.file_id)
+                
+                try:
+                    feedback_service = FeedbackService(user_id)
+                    
+                    # Проверяем авторизацию
+                    if not feedback_service.get_credentials():
+                        # Нужна авторизация
+                        auth_url = feedback_service.get_authorization_url()
+                        keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        await update.message.reply_text(
+                            "🔐 Требуется авторизация Google\n\n"
+                            "Для загрузки скриншота нужно авторизоваться в Google.\n\n"
+                            "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
+                            reply_markup=reply_markup
+                        )
+                        context.user_data['waiting_google_auth'] = True
+                        context.user_data['auth_type'] = 'feedback'
+                        context.user_data['pending_photo_file'] = photo_file
+                        return
+                    
+                    # Загружаем фото в память
+                    from io import BytesIO
+                    photo_io = BytesIO()
+                    await photo_file.download_to_memory(photo_io)
+                    photo_io.seek(0)
+                    
+                    # Загружаем в Drive
+                    filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                    screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
+                    
+                    if not screenshot_url:
+                        await update.message.reply_text(
+                            "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
+                        )
+                except Exception as e:
+                    logger.error(f"Ошибка загрузки скриншота: {e}", exc_info=True)
+                    await update.message.reply_text(
+                        f"⚠️ Ошибка загрузки скриншота: {str(e)[:200]}. Продолжаю без скриншота."
+                    )
+            
+            # Отправляем обратную связь
+            feedback_text = context.user_data.get('feedback_text')
+            
+            try:
+                feedback_service = FeedbackService(user_id)
+                
+                # Проверяем авторизацию
+                if not feedback_service.get_credentials():
+                    # Нужна авторизация
+                    auth_url = feedback_service.get_authorization_url()
+                    keyboard = [[InlineKeyboardButton("🔗 Авторизоваться в Google", url=auth_url)]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await update.message.reply_text(
+                        "🔐 Требуется авторизация Google\n\n"
+                        "Для отправки обратной связи нужно авторизоваться в Google.\n\n"
+                        "Нажми кнопку ниже, авторизуйся и скопируй URL из адресной строки (с параметром code), затем отправь его боту.",
+                        reply_markup=reply_markup
+                    )
+                    context.user_data['waiting_google_auth'] = True
+                    context.user_data['auth_type'] = 'feedback'
+                    return
+                
+                # Отправляем обратную связь
+                result = feedback_service.submit_feedback(
+                    feedback_type=feedback_type,
+                    comment=feedback_text,
+                    screenshot_url=screenshot_url
+                )
+                
+                # Очищаем данные
+                context.user_data.pop('feedback_type', None)
+                context.user_data.pop('feedback_step', None)
+                context.user_data.pop('feedback_text', None)
+                context.user_data.pop('feedback_screenshot', None)
+                context.user_data.pop('pending_photo_file', None)
+                
+                keyboard = [[InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    f"✅ Отправлено\n\n"
+                    f"Тип: {feedback_type}\n"
+                    f"Дата: {result['date']}\n"
+                    f"Номер записи: #{result['number']}\n"
+                    f"Лист: {result['sheet']}",
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                logger.error(f"Ошибка отправки обратной связи: {e}", exc_info=True)
+                keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="feedback_show")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    f"❌ Ошибка отправки обратной связи:\n{str(e)[:300]}",
+                    reply_markup=reply_markup
+                )
+            return
+    
     # Проверяем, находимся ли мы в режиме ожидания аудио для встречи (ВЫСШИЙ ПРИОРИТЕТ)
     # В этом режиме ВСЕ голосовые сообщения идут на расшифровку встречи, а не на создание событий
     if context.user_data.get('waiting_meeting_audio'):
@@ -2262,6 +2532,98 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• Изображения и скриншоты\n\n"
                 "Этот тип файла пока не поддерживается. Отправь аудиофайл или изображение."
             )
+            return
+    
+    # Проверяем ожидание Google OAuth для обратной связи
+    if context.user_data.get('waiting_google_auth') and context.user_data.get('auth_type') == 'feedback':
+        if update.message.text:
+            auth_response = update.message.text.strip()
+            
+            try:
+                feedback_service = FeedbackService(user_id)
+                
+                if feedback_service.handle_callback(auth_response):
+                    context.user_data.pop('waiting_google_auth', None)
+                    context.user_data.pop('auth_type', None)
+                    
+                    # Если был отложенный скриншот, обрабатываем его
+                    pending_photo_file = context.user_data.pop('pending_photo_file', None)
+                    if pending_photo_file and context.user_data.get('feedback_step') == 'screenshot':
+                        try:
+                            from io import BytesIO
+                            photo_io = BytesIO()
+                            await pending_photo_file.download_to_memory(photo_io)
+                            photo_io.seek(0)
+                            
+                            filename = f"feedback_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                            screenshot_url = feedback_service.upload_screenshot_to_drive(photo_io, filename)
+                            
+                            if screenshot_url:
+                                context.user_data['feedback_screenshot'] = screenshot_url
+                                await update.message.reply_text(
+                                    "✅ Скриншот загружен! Продолжаю отправку обратной связи..."
+                                )
+                            else:
+                                await update.message.reply_text(
+                                    "⚠️ Не удалось загрузить скриншот. Продолжаю без скриншота."
+                                )
+                        except Exception as e:
+                            logger.error(f"Ошибка обработки отложенного скриншота: {e}", exc_info=True)
+                            await update.message.reply_text(
+                                "⚠️ Ошибка загрузки скриншота. Продолжаю без скриншота."
+                            )
+                    
+                    # Продолжаем процесс обратной связи
+                    feedback_type = context.user_data.get('feedback_type')
+                    feedback_text = context.user_data.get('feedback_text')
+                    screenshot_url = context.user_data.get('feedback_screenshot')
+                    
+                    if feedback_type and feedback_text:
+                        try:
+                            result = feedback_service.submit_feedback(
+                                feedback_type=feedback_type,
+                                comment=feedback_text,
+                                screenshot_url=screenshot_url
+                            )
+                            
+                            # Очищаем данные
+                            context.user_data.pop('feedback_type', None)
+                            context.user_data.pop('feedback_step', None)
+                            context.user_data.pop('feedback_text', None)
+                            context.user_data.pop('feedback_screenshot', None)
+                            
+                            keyboard = [[InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            await update.message.reply_text(
+                                f"✅ Отправлено\n\n"
+                                f"Тип: {feedback_type}\n"
+                                f"Дата: {result['date']}\n"
+                                f"Номер записи: #{result['number']}\n"
+                                f"Лист: {result['sheet']}",
+                                reply_markup=reply_markup
+                            )
+                        except Exception as e:
+                            logger.error(f"Ошибка отправки обратной связи после авторизации: {e}", exc_info=True)
+                            keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="feedback_show")]]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            await update.message.reply_text(
+                                f"❌ Ошибка отправки обратной связи:\n{str(e)[:300]}",
+                                reply_markup=reply_markup
+                            )
+                    else:
+                        await update.message.reply_text(
+                            "✅ Авторизация успешна! Теперь можешь отправить обратную связь через меню."
+                        )
+                else:
+                    await update.message.reply_text(
+                        "❌ Ошибка авторизации. Проверь URL и попробуй снова."
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка обработки Google OAuth callback для обратной связи: {e}", exc_info=True)
+                await update.message.reply_text(
+                    f"❌ Ошибка авторизации: {str(e)[:300]}"
+                )
             return
     
     # Проверяем процесс подключения iCloud (пошаговый)

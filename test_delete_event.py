@@ -69,3 +69,4 @@ if __name__ == "__main__":
         print(f"\n❌ Ошибка: {e}", exc_info=True)
         sys.exit(1)
 
+
