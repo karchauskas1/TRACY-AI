@@ -317,23 +317,17 @@ async def get_feedback_handler(request: web_request.Request):
         db_to_use = Database()
         
         try:
-            # Получаем данные из БД
-            feedback_list = db_to_use.get_all_feedback(limit=limit, offset=offset)
+            # Получаем данные из БД - сначала пробуем без offset
+            feedback_list = db_to_use.get_all_feedback(limit=limit, offset=0)
             total_count = db_to_use.get_feedback_count()
             
             logger.info(f"📊 HTTP API: Получено {len(feedback_list)} записей, total={total_count}")
             
-            # КРИТИЧЕСКАЯ ПРОВЕРКА: если feedback_list пустой, но total_count > 0, пробуем без offset
+            # Если пусто, но есть записи, пробуем с большим limit
             if len(feedback_list) == 0 and total_count > 0:
-                logger.warning(f"⚠️ HTTP API: feedback_list пустой при limit={limit}, offset={offset}, total={total_count}. Пробую без offset.")
-                feedback_list = db_to_use.get_all_feedback(limit=limit, offset=0)
-                logger.info(f"📊 HTTP API: После повторного запроса получено {len(feedback_list)} записей")
-                
-            # Если все еще пусто, пробуем без limit
-            if len(feedback_list) == 0 and total_count > 0:
-                logger.warning(f"⚠️ HTTP API: Все еще пусто. Пробую без limit.")
+                logger.warning(f"⚠️ HTTP API: feedback_list пустой, но total={total_count}. Пробую с limit=1000.")
                 feedback_list = db_to_use.get_all_feedback(limit=1000, offset=0)
-                logger.info(f"📊 HTTP API: После запроса без limit получено {len(feedback_list)} записей")
+                logger.info(f"📊 HTTP API: После запроса с limit=1000 получено {len(feedback_list)} записей")
                 
         except Exception as e:
             logger.error(f"❌ HTTP API: Ошибка при получении обратной связи: {e}", exc_info=True)
