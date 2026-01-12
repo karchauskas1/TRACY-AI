@@ -2156,6 +2156,67 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 logger.info(f"Отправлен статус календарей для пользователя {user_id}: Google={google_connected}, iCloud={icloud_connected}")
                 return
+            
+            elif action == 'get_feedback':
+                # Получение обратной связи для веб-приложения (только для супер-пользователя)
+                # Проверяем, является ли пользователь супер-пользователем
+                if str(user_id) != str(config.SUPER_USER_ID):
+                    logger.warning(f"Попытка получить обратную связь от неавторизованного пользователя {user_id}")
+                    await update.message.reply_text(
+                        "❌ Доступ запрещен. Только супер-пользователь может просматривать обратную связь.",
+                        reply_to_message_id=update.message.message_id
+                    )
+                    return
+                
+                limit = int(data.get('limit', 100))
+                offset = int(data.get('offset', 0))
+                
+                # Получаем обратную связь из БД
+                feedback_list = db.get_all_feedback(limit=limit, offset=offset)
+                total_count = db.get_feedback_count()
+                
+                # Формируем ответ
+                from datetime import datetime
+                web_feedback = []
+                for item in feedback_list:
+                    created_at = item.get('created_at')
+                    if isinstance(created_at, datetime):
+                        created_at_str = created_at.isoformat()
+                    elif isinstance(created_at, str):
+                        created_at_str = created_at
+                    else:
+                        created_at_str = None
+                    
+                    web_feedback.append({
+                        'id': str(item.get('id', '')),
+                        'userId': str(item.get('user_id', '')),
+                        'type': item.get('feedback_type'),
+                        'comment': item.get('comment'),
+                        'screenshotUrl': item.get('screenshot_url'),
+                        'sheetName': item.get('sheet_name'),
+                        'sheetRowNumber': item.get('sheet_row_number'),
+                        'createdAt': created_at_str
+                    })
+                
+                import json
+                import base64
+                feedback_data = json.dumps({
+                    'action': 'feedback_data',
+                    'feedback': web_feedback,
+                    'total': total_count,
+                    'limit': limit,
+                    'offset': offset,
+                    'timestamp': datetime.now().isoformat()
+                }, ensure_ascii=False)
+                
+                encoded_data = base64.b64encode(feedback_data.encode('utf-8')).decode('utf-8')
+                await update.message.reply_text(
+                    f"TRACY_FEEDBACK_DATA:{encoded_data}",
+                    reply_markup=None,
+                    parse_mode=None
+                )
+                logger.info(f"Отправлена обратная связь для пользователя {user_id}: {len(web_feedback)} записей, total={total_count}")
+                return
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"Ошибка обработки web_app_data: {e}")
             # Продолжаем обычную обработку

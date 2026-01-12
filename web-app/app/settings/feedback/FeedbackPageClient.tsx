@@ -99,56 +99,85 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
       setLoading(true)
       setError(null)
 
-      // Получаем API URL
+      // Проверяем, открыто ли через Telegram Web App
+      const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
+
+      // ПРИОРИТЕТ 1: Прямой HTTP API запрос (работает для localhost и если нет Mixed Content блокировки)
       let apiBaseUrl = "http://5.35.126.42:8080"
       
-      // Если открыто через Telegram Web App, используем серверный API
-      if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-        apiBaseUrl = "http://5.35.126.42:8080"
-      } else if (typeof window !== "undefined" && window.location.hostname === "localhost") {
-        apiBaseUrl = "http://localhost:8080"
+      if (typeof window !== "undefined") {
+        if (window.location.hostname === "localhost") {
+          apiBaseUrl = "http://localhost:8080"
+        } else {
+          // Для GitHub Pages используем серверный API
+          apiBaseUrl = "http://5.35.126.42:8080"
+        }
       }
 
       console.log(`[Feedback] Запрос к API: ${apiBaseUrl}/api/feedback?user_id=${user.id}&limit=100`)
       
-      const response = await fetch(`${apiBaseUrl}/api/feedback?user_id=${user.id}&limit=100`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-      })
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/feedback?user_id=${user.id}&limit=100`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          mode: "cors",
+        })
 
-      console.log(`[Feedback] Ответ API: status=${response.status}, ok=${response.ok}`)
+        console.log(`[Feedback] Ответ API: status=${response.status}, ok=${response.ok}`)
 
-      if (!response.ok) {
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`[Feedback] Получено данных:`, data)
+          setFeedback(data.feedback || [])
+          setLoading(false)
+          return
+        } else {
+          let errorMessage = "Ошибка загрузки обратной связи"
+          
+          if (response.status === 403) {
+            errorMessage = "Доступ запрещен. Только супер-пользователь может просматривать обратную связь."
+          } else if (response.status === 400) {
+            errorMessage = "Неверный запрос. Проверьте параметры."
+          } else if (response.status === 500) {
+            errorMessage = "Ошибка сервера. Попробуйте позже."
+          } else {
+            try {
+              const errorData = await response.json()
+              errorMessage = errorData.error || `Ошибка ${response.status}: ${response.statusText}`
+            } catch {
+              errorMessage = `Ошибка ${response.status}: ${response.statusText}`
+            }
+          }
+          
+          console.error(`[Feedback] Ошибка API: ${errorMessage}`)
+          setError(errorMessage)
+          setLoading(false)
+          return
+        }
+      } catch (fetchError: any) {
+        // Если HTTP запрос не удался (Mixed Content или сеть)
+        console.warn(`[Feedback] HTTP запрос не удался:`, fetchError)
+        
+        // Проверяем тип ошибки
         let errorMessage = "Ошибка загрузки обратной связи"
         
-        if (response.status === 403) {
-          errorMessage = "Доступ запрещен. Только супер-пользователь может просматривать обратную связь."
-        } else if (response.status === 400) {
-          errorMessage = "Неверный запрос. Проверьте параметры."
-        } else if (response.status === 500) {
-          errorMessage = "Ошибка сервера. Попробуйте позже."
-        } else {
-          try {
-            const errorData = await response.json()
-            errorMessage = errorData.error || `Ошибка ${response.status}: ${response.statusText}`
-          } catch {
-            errorMessage = `Ошибка ${response.status}: ${response.statusText}`
+        if (fetchError instanceof TypeError && fetchError.message.includes("Failed to fetch")) {
+          // Mixed Content Policy или проблемы с сетью
+          if (window.location.protocol === "https:") {
+            errorMessage = "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к обратной связи или проверьте подключение к интернету."
+          } else {
+            errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету или попробуйте позже."
           }
+        } else if (fetchError.message) {
+          errorMessage = fetchError.message
         }
         
-        console.error(`[Feedback] Ошибка API: ${errorMessage}`)
+        console.error(`[Feedback] Установлена ошибка: ${errorMessage}`)
         setError(errorMessage)
         setLoading(false)
-        return
       }
-
-      const data = await response.json()
-      console.log(`[Feedback] Получено данных:`, data)
-      setFeedback(data.feedback || [])
-      setLoading(false)
     } catch (e: any) {
       console.error(`[Feedback] Исключение при загрузке:`, e)
       
