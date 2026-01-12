@@ -2626,15 +2626,75 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
     
-    # Проверяем процесс подключения iCloud (пошаговый)
+    # Проверяем процесс подключения iCloud (пошаговый) - ВЫСШИЙ ПРИОРИТЕТ
     icloud_step = context.user_data.get('icloud_step')
     if icloud_step:
+        # Проверяем, что это текстовое сообщение
+        if not update.message.text:
+            await update.message.reply_text(
+                "❌ Пожалуйста, отправь текстовое сообщение."
+            )
+            return
+        
         if icloud_step == 'email':
             # Шаг 1: Получаем email
             email = update.message.text.strip()
+            
+            # Улучшенная валидация email: должен содержать @ и домен после @
             if '@' not in email:
                 await update.message.reply_text(
                     "❌ Неверный формат email!\n\n"
+                    "Email должен содержать символ @.\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`\n"
+                    "`user@gmail.com`\n"
+                    "`test@mail.ru`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Проверяем, что после @ есть домен (минимум одна точка и символы)
+            email_parts = email.split('@')
+            if len(email_parts) != 2:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Email должен содержать ровно один символ @.\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            local_part, domain = email_parts
+            if not local_part or not domain:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Email должен содержать имя пользователя до @ и домен после @.\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Проверяем, что домен содержит хотя бы одну точку (например, mail.ru, gmail.com)
+            if '.' not in domain:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Домен должен содержать точку (например, mail.ru, gmail.com).\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`\n"
+                    "`user@gmail.com`\n"
+                    "`test@mail.ru`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Проверяем, что после последней точки есть хотя бы один символ
+            domain_parts = domain.split('.')
+            if len(domain_parts) < 2 or not domain_parts[-1]:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Домен должен содержать доменное расширение (например, .com, .ru).\n\n"
                     "Отправь корректный email адрес, например:\n"
                     "`ivan@icloud.com`",
                     parse_mode="Markdown"
@@ -2852,6 +2912,188 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         context.user_data['waiting_google_url'] = False
         return
+    
+    # Проверяем процесс подключения iCloud (пошаговый) - ДО извлечения текста!
+    # Это критически важно, чтобы email не обрабатывался как обычное сообщение
+    icloud_step = context.user_data.get('icloud_step')
+    if icloud_step:
+        # Проверяем, что это текстовое сообщение
+        if not update.message or not update.message.text:
+            await update.message.reply_text(
+                "❌ Пожалуйста, отправь текстовое сообщение."
+            )
+            return
+        
+        if icloud_step == 'email':
+            # Шаг 1: Получаем email
+            email = update.message.text.strip()
+            
+            # Улучшенная валидация email: должен содержать @ и домен после @
+            if '@' not in email:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Email должен содержать символ @.\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`\n"
+                    "`user@gmail.com`\n"
+                    "`test@mail.ru`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Проверяем, что после @ есть домен (минимум одна точка и символы)
+            email_parts = email.split('@')
+            if len(email_parts) != 2:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Email должен содержать ровно один символ @.\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            local_part, domain = email_parts
+            if not local_part or not domain:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Email должен содержать имя пользователя до @ и домен после @.\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Проверяем, что домен содержит хотя бы одну точку (например, mail.ru, gmail.com)
+            if '.' not in domain:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Домен должен содержать точку (например, mail.ru, gmail.com).\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`\n"
+                    "`user@gmail.com`\n"
+                    "`test@mail.ru`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Проверяем, что после последней точки есть хотя бы один символ
+            domain_parts = domain.split('.')
+            if len(domain_parts) < 2 or not domain_parts[-1]:
+                await update.message.reply_text(
+                    "❌ Неверный формат email!\n\n"
+                    "Домен должен содержать доменное расширение (например, .com, .ru).\n\n"
+                    "Отправь корректный email адрес, например:\n"
+                    "`ivan@icloud.com`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Сохраняем email и переходим к следующему шагу
+            context.user_data['icloud_email'] = email
+            context.user_data['icloud_step'] = 'password'
+            
+            keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="icloud_cancel")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                f"🔑 Шаг 2 из 2: Введи пароль приложения\n\n"
+                f"Apple ID: {email}\n\n"
+                "Отправь пароль приложения (App-Specific Password), который ты создал на appleid.apple.com\n\n"
+                "Формат: xxxx-xxxx-xxxx-xxxx (16 символов в 4 группах через дефис)\n\n"
+                "⚠️ Важно: Используй пароль приложения, НЕ обычный пароль Apple ID!",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+            return
+        
+        elif icloud_step == 'password':
+            # Шаг 2: Получаем пароль и подключаемся
+            password = update.message.text.strip()
+            email = context.user_data.get('icloud_email')
+            
+            # Валидация формата пароля
+            if '-' not in password or len(password.replace('-', '')) != 16:
+                await update.message.reply_text(
+                    "⚠️ Похоже, что это не пароль приложения!\n\n"
+                    "Пароль приложения имеет формат:\n"
+                    "`xxxx-xxxx-xxxx-xxxx` (16 символов в 4 группах)\n\n"
+                    "Убедись, что:\n"
+                    "• Используешь пароль из раздела 'Пароли приложений'\n"
+                    "• НЕ используешь обычный пароль Apple ID\n"
+                    "• Скопировал пароль полностью со всеми дефисами\n\n"
+                    "Отправь пароль еще раз:",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Подключаемся к iCloud
+            status_msg = await update.message.reply_text(
+                f"🔌 Подключаюсь к iCloud Calendar...\n\n"
+                f"⏳ Пожалуйста, подожди..."
+            )
+            
+            try:
+                from calendar_icloud import ICloudCalendar
+                caldav_url = "https://caldav.icloud.com"
+                calendar = ICloudCalendar(user_id, caldav_url, email, password)
+                
+                if calendar.connect():
+                    db.save_calendar_connection(
+                        user_id=user_id,
+                        provider='icloud',
+                        calendar_id='primary',
+                        credentials=password  # Сохраняем пароль для будущего использования
+                    )
+                    
+                    keyboard = [[InlineKeyboardButton("⬅️ Назад в настройки", callback_data="settings_show")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await status_msg.edit_text(
+                        "✅ iCloud Calendar успешно подключен!\n\n"
+                        "События будут синхронизироваться с твоим iCloud Calendar.\n\n"
+                        "Попробуй создать событие, например:\n"
+                        "«Встреча завтра в 15:00»",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                    
+                    # Отправляем обновленный статус календарей в веб-приложение
+                    await send_calendar_status_to_web_app(user_id, context)
+                    
+                    context.user_data.pop('icloud_step', None)
+                    context.user_data.pop('icloud_email', None)
+                else:
+                    await status_msg.edit_text(
+                        "❌ Не удалось подключиться к iCloud Calendar.\n\n"
+                        "Проверь:\n"
+                        "• Правильность Apple ID и пароля приложения\n"
+                        "• Что двухфакторная аутентификация включена\n"
+                        "• Что используешь пароль приложения, а не обычный пароль\n\n"
+                        "Попробуй еще раз через /settings"
+                    )
+                    context.user_data.pop('icloud_step', None)
+                    context.user_data.pop('icloud_email', None)
+            except Exception as e:
+                logger.error(f"Ошибка подключения iCloud: {e}", exc_info=True)
+                error_msg = str(e).lower()
+                
+                if 'authentication' in error_msg or 'unauthorized' in error_msg or '401' in error_msg:
+                    detailed_error = (
+                        "❌ Ошибка аутентификации\n\n"
+                        "Возможные причины:\n"
+                        "• Неверный Apple ID или пароль\n"
+                        "• Использован обычный пароль вместо пароля приложения\n"
+                        "• Двухфакторная аутентификация не включена\n\n"
+                        "Проверь настройки на appleid.apple.com и попробуй снова."
+                    )
+                else:
+                    detailed_error = f"❌ Ошибка подключения: {str(e)}\n\nПопробуй еще раз через /settings"
+                
+                await status_msg.edit_text(detailed_error, parse_mode="Markdown")
+                context.user_data.pop('icloud_step', None)
+                context.user_data.pop('icloud_email', None)
+            
+            return
     
     # Извлекаем текст из сообщения (любого типа)
     text = None
