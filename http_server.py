@@ -372,8 +372,21 @@ async def get_feedback_handler(request: web_request.Request):
         
         web_feedback = []
         logger.info(f"📊 HTTP API: Начинаю обработку {len(feedback_list)} записей")
+        
+        # КРИТИЧЕСКАЯ ПРОВЕРКА: если feedback_list пустой, но total_count > 0, возвращаем ошибку для диагностики
+        if len(feedback_list) == 0 and total_count > 0:
+            logger.error(f"❌ HTTP API: КРИТИЧЕСКАЯ ОШИБКА: feedback_list пустой, но total_count={total_count}")
+            return json_response({
+                'error': 'Internal error: feedback_list is empty but total_count > 0',
+                'debug': {
+                    'feedback_list_length': len(feedback_list),
+                    'total_count': total_count,
+                    'limit': limit,
+                    'offset': offset
+                }
+            }, status=500)
+        
         for idx, item in enumerate(feedback_list):
-            logger.debug(f"📊 HTTP API: Обработка записи {idx+1}: {item}")
             try:
                 created_at = item.get('created_at')
                 if isinstance(created_at, datetime):
@@ -395,9 +408,10 @@ async def get_feedback_handler(request: web_request.Request):
                 })
             except Exception as e:
                 logger.error(f"❌ HTTP API: Ошибка обработки записи {idx+1}: {e}", exc_info=True)
+                import traceback
+                logger.error(traceback.format_exc())
         
         logger.info(f"📊 HTTP API: Сформировано {len(web_feedback)} записей для ответа")
-        logger.info(f"📊 HTTP API: Возвращаю ответ с {len(web_feedback)} записями, total={total_count}")
         
         return json_response({
             'feedback': web_feedback,
