@@ -830,12 +830,16 @@ class Database:
                 # В PostgreSQL cursor.fetchall() возвращает кортежи, если не RealDictCursor
                 try:
                     if self.use_postgresql:
-                        # Просто берем первый элемент кортежа, если знаем индекс, или не логируем title
-                        logger.info(f"🔍 БД: Первые {min(all_events_count, 3)} событий найдены")
+                        # Для отладки просто выводим количество, так как all_rows - это список кортежей
+                        logger.info(f"🔍 БД: Найдено {all_events_count} записей в БД")
                     else:
                         logger.info(f"🔍 БД: Примеры событий: {[dict(r).get('title') for r in all_rows[:3]]}")
                 except Exception as log_err:
                     logger.debug(f"Ошибка логирования примеров: {log_err}")
+            
+            # ВАЖНО: Если мы используем PostgreSQL, нам нужно переоткрыть курсор как RealDictCursor 
+            # для основного запроса, если мы хотим работать со словарями.
+            # Но для начала просто выполним основной запрос.
             
             if start_from:
                 query += f" AND start_time >= {param_placeholder}"
