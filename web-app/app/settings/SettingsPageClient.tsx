@@ -36,13 +36,16 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
         const tgUser = tg.initDataUnsafe?.user
         if (tgUser) {
           const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")
+          const userId = tgUser.id.toString()
           setUser({
-            id: tgUser.id.toString(),
+            id: userId,
             name: fullName || tgUser.first_name || "Пользователь",
             avatarUrl: tgUser.photo_url,
             first_name: tgUser.first_name,
             last_name: tgUser.last_name,
           })
+          // Проверяем, является ли пользователь супер-пользователем (ID: 308477378)
+          setIsSuperUser(userId === "308477378")
         }
       } else {
         const savedUser = localStorage.getItem("telegram_user")
@@ -104,6 +107,15 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
       href: "/settings/calendars",
     },
   ]
+
+  // Добавляем пункт "Обратная связь" только для супер-пользователя
+  if (isSuperUser) {
+    settingsItems.push({
+      icon: MessageSquare,
+      label: "Обратная связь",
+      href: "/settings/feedback",
+    })
+  }
 
   const handleThemeToggle = () => {
     if (theme === "dark") {
