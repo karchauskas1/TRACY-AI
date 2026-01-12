@@ -66,5 +66,5 @@ FEEDBACK_APPS_SCRIPT_URL = os.getenv(
 )
 
 # Супер-пользователь (может просматривать всю обратную связь)
-SUPER_USER_ID = int(os.getenv("SUPER_USER_ID", "308477378"))
+SUPER_USER_ID = int(os.getenv("SUPER_USER_ID", "308477387"))
 

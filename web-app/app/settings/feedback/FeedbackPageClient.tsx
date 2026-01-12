@@ -26,18 +26,69 @@ interface FeedbackPageClientProps {
 
 export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProps) {
   const router = useRouter()
-  const [user] = useState(initialUser)
+  const [user, setUser] = useState(initialUser)
   const [feedback, setFeedback] = useState<FeedbackItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const SUPER_USER_ID = "308477387" // ID супер-пользователя
 
   useEffect(() => {
-    loadFeedback()
+    // Загружаем данные пользователя из Telegram Web App или localStorage
+    if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg) {
+        tg.ready()
+        const tgUser = tg.initDataUnsafe?.user
+        if (tgUser) {
+          const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")
+          const userId = tgUser.id.toString()
+          setUser({
+            id: userId,
+            name: fullName || tgUser.first_name || "Пользователь",
+            avatarUrl: tgUser.photo_url,
+            first_name: tgUser.first_name,
+            last_name: tgUser.last_name,
+          })
+        }
+      } else {
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser)
+            const fullName = [parsed.first_name, parsed.last_name].filter(Boolean).join(" ")
+            const userId = parsed.id?.toString()
+            setUser({
+              ...parsed,
+              id: userId,
+              name: fullName || parsed.first_name || "Пользователь",
+            })
+          } catch (e) {
+            console.error("Failed to parse user:", e)
+          }
+        }
+      }
+    }
   }, [])
+
+  useEffect(() => {
+    if (user?.id) {
+      loadFeedback()
+    } else {
+      setLoading(false)
+      setError("Пользователь не найден")
+    }
+  }, [user])
 
   const loadFeedback = async () => {
     if (!user?.id) {
       setError("Пользователь не найден")
+      setLoading(false)
+      return
+    }
+
+    // Проверяем, является ли пользователь супер-пользователем
+    if (user.id !== SUPER_USER_ID) {
+      setError("Доступ запрещен. Только супер-пользователь может просматривать обратную связь.")
       setLoading(false)
       return
     }
