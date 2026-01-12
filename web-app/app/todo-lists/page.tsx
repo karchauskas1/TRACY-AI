@@ -91,14 +91,22 @@ export default function TodoListsPage() {
         mode: "cors",
       })
 
+      console.log(`[TodoLists] API Response: status=${response.status}, ok=${response.ok}`)
+      
       if (!response.ok) {
-        throw new Error("Ошибка загрузки списков")
+        const errorText = await response.text()
+        console.error(`[TodoLists] API Error: ${response.status} ${response.statusText}`, errorText)
+        if (response.status === 404) {
+          throw new Error("API endpoint не найден. Сервер не обновлен.")
+        }
+        throw new Error(`Ошибка загрузки списков: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
+      console.log(`[TodoLists] API Data:`, data)
       setLists(data.lists || [])
     } catch (e: any) {
-      console.error("Ошибка загрузки списков:", e)
+      console.error("[TodoLists] Ошибка загрузки списков:", e)
       setError(e.message || "Не удалось загрузить списки задач")
     } finally {
       setLoading(false)

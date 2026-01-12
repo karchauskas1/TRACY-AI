@@ -88,8 +88,11 @@ export default function ChatPage() {
         mode: "cors",
       })
 
+      console.log(`[Chat] Messages API Response: status=${messagesResponse.status}, ok=${messagesResponse.ok}`)
+      
       if (messagesResponse.ok) {
         const messagesData = await messagesResponse.json()
+        console.log(`[Chat] Messages API Data:`, messagesData)
         setMessages(messagesData.messages || [])
         
         // Если истории нет, загружаем приветственное сообщение
@@ -97,6 +100,11 @@ export default function ChatPage() {
           await loadGreeting()
         }
       } else {
+        const errorText = await messagesResponse.text()
+        console.error(`[Chat] Messages API Error: ${messagesResponse.status} ${messagesResponse.statusText}`, errorText)
+        if (messagesResponse.status === 404) {
+          setError("API endpoint не найден. Сервер не обновлен.")
+        }
         // Если ошибка загрузки истории, пробуем загрузить приветствие
         await loadGreeting()
       }
@@ -127,8 +135,11 @@ export default function ChatPage() {
         mode: "cors",
       })
 
+      console.log(`[Chat] Greeting API Response: status=${response.status}, ok=${response.ok}`)
+      
       if (response.ok) {
         const data = await response.json()
+        console.log(`[Chat] Greeting API Data:`, data)
         if (data.greeting) {
           // Добавляем приветственное сообщение в список
           const greetingMsg: ChatMessage = {
@@ -138,6 +149,12 @@ export default function ChatPage() {
             created_at: new Date().toISOString(),
           }
           setMessages([greetingMsg])
+        }
+      } else {
+        const errorText = await response.text()
+        console.error(`[Chat] Greeting API Error: ${response.status} ${response.statusText}`, errorText)
+        if (response.status === 404) {
+          setError("API endpoint не найден. Сервер не обновлен.")
         }
       }
     } catch (e) {
