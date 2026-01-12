@@ -312,20 +312,32 @@ async def get_feedback_handler(request: web_request.Request):
         limit = int(request.query.get('limit', 100))
         offset = int(request.query.get('offset', 0))
         
-        if not db_instance:
-            logger.error("❌ HTTP API: db_instance не инициализирован!")
-            return json_response({'error': 'Database not initialized'}, status=500)
-
+        # Используем db_instance если есть, иначе создаем новый экземпляр
+        db_to_use = db_instance
+        if not db_to_use:
+            logger.warning("⚠️ HTTP API: db_instance не инициализирован, создаю новый экземпляр БД")
+            from database import Database
+            db_to_use = Database()
+        
         try:
             # Получаем данные из БД
-            feedback_list = db_instance.get_all_feedback(limit=limit, offset=offset)
-            total_count = db_instance.get_feedback_count()
+            feedback_list = db_to_use.get_all_feedback(limit=limit, offset=offset)
+            total_count = db_to_use.get_feedback_count()
+            
+            logger.info(f"📊 HTTP API: Получено {len(feedback_list)} записей, total={total_count}")
             
             # КРИТИЧЕСКАЯ ПРОВЕРКА: если feedback_list пустой, но total_count > 0, пробуем без offset
             if len(feedback_list) == 0 and total_count > 0:
                 logger.warning(f"⚠️ HTTP API: feedback_list пустой при limit={limit}, offset={offset}, total={total_count}. Пробую без offset.")
-                feedback_list = db_instance.get_all_feedback(limit=limit, offset=0)
+                feedback_list = db_to_use.get_all_feedback(limit=limit, offset=0)
                 logger.info(f"📊 HTTP API: После повторного запроса получено {len(feedback_list)} записей")
+                
+            # Если все еще пусто, пробуем без limit
+            if len(feedback_list) == 0 and total_count > 0:
+                logger.warning(f"⚠️ HTTP API: Все еще пусто. Пробую без limit.")
+                feedback_list = db_to_use.get_all_feedback(limit=1000, offset=0)
+                logger.info(f"📊 HTTP API: После запроса без limit получено {len(feedback_list)} записей")
+                
         except Exception as e:
             logger.error(f"❌ HTTP API: Ошибка при получении обратной связи: {e}", exc_info=True)
             import traceback
