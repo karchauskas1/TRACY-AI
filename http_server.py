@@ -312,12 +312,9 @@ async def get_feedback_handler(request: web_request.Request):
         limit = int(request.query.get('limit', 100))
         offset = int(request.query.get('offset', 0))
         
-        # Используем db_instance если есть, иначе создаем новый экземпляр
-        db_to_use = db_instance
-        if not db_to_use:
-            logger.warning("⚠️ HTTP API: db_instance не инициализирован, создаю новый экземпляр БД")
-            from database import Database
-            db_to_use = Database()
+        # ВСЕГДА создаем новый экземпляр БД для надежности (избегаем проблем с потоками)
+        from database import Database
+        db_to_use = Database()
         
         try:
             # Получаем данные из БД
