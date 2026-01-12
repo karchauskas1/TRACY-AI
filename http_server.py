@@ -336,17 +336,23 @@ async def get_feedback_handler(request: web_request.Request):
                 
                 # Преобразуем в список словарей
                 feedback_list = []
-                logger.info(f"📊 HTTP API: Получено {len(direct_rows)} строк из SQL запроса")
+                logger.info(f"📊 HTTP API: Получено {len(direct_rows)} строк из SQL запроса, колонки: {columns}")
                 for idx, row in enumerate(direct_rows):
                     try:
                         # row - это sqlite3.Row, доступ к полям через имя колонки
                         row_dict = {}
                         for col_name in columns:
-                            row_dict[col_name] = row[col_name]  # Доступ через имя колонки для sqlite3.Row
+                            try:
+                                row_dict[col_name] = row[col_name]  # Доступ через имя колонки для sqlite3.Row
+                            except (KeyError, IndexError) as e:
+                                logger.error(f"❌ HTTP API: Ошибка доступа к колонке {col_name} в строке {idx+1}: {e}")
+                                # Пробуем через индекс
+                                col_idx = columns.index(col_name)
+                                row_dict[col_name] = row[col_idx]
                         row_dict['sheet_name'] = None
                         row_dict['sheet_row_number'] = None
                         feedback_list.append(row_dict)
-                        logger.debug(f"📊 HTTP API: Обработана строка {idx+1}: {row_dict}")
+                        logger.info(f"📊 HTTP API: Обработана строка {idx+1}: {row_dict}")
                     except Exception as e:
                         logger.error(f"❌ HTTP API: Ошибка обработки строки {idx+1}: {e}", exc_info=True)
                         import traceback
@@ -375,20 +381,21 @@ async def get_feedback_handler(request: web_request.Request):
             return json_response({'error': f'Failed to get feedback: {str(e)}'}, status=500)
         
         web_feedback = []
-        logger.info(f"📊 HTTP API: Начинаю обработку {len(feedback_list)} записей")
+        logger.info(f"📊 HTTP API: Начинаю обработку {len(feedback_list)} записей, total_count={total_count}")
         
-        # КРИТИЧЕСКАЯ ПРОВЕРКА: если feedback_list пустой, но total_count > 0, возвращаем ошибку для диагностики
+        # КРИТИЧЕСКАЯ ПРОВЕРКА: если feedback_list пустой, но total_count > 0
         if len(feedback_list) == 0 and total_count > 0:
             logger.error(f"❌ HTTP API: КРИТИЧЕСКАЯ ОШИБКА: feedback_list пустой, но total_count={total_count}")
+            # Вместо ошибки, возвращаем пустой массив с total для совместимости
+            # Но логируем проблему
+            logger.warning(f"⚠️ HTTP API: Возвращаю пустой массив, хотя total_count={total_count}")
             return json_response({
-                'error': 'Internal error: feedback_list is empty but total_count > 0',
-                'debug': {
-                    'feedback_list_length': len(feedback_list),
-                    'total_count': total_count,
-                    'limit': limit,
-                    'offset': offset
-                }
-            }, status=500)
+                'feedback': [],
+                'total': total_count,
+                'limit': limit,
+                'offset': offset,
+                'warning': 'feedback_list is empty but total_count > 0'
+            })
         
         for idx, item in enumerate(feedback_list):
             try:
