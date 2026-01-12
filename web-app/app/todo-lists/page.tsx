@@ -107,7 +107,17 @@ export default function TodoListsPage() {
       setLists(data.lists || [])
     } catch (e: any) {
       console.error("[TodoLists] Ошибка загрузки списков:", e)
-      setError(e.message || "Не удалось загрузить списки задач")
+      
+      // Проверяем, является ли это ошибкой Mixed Content Policy
+      if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
+        if (typeof window !== "undefined" && window.location.protocol === "https:") {
+          setError("Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к спискам задач.")
+        } else {
+          setError("Не удалось подключиться к серверу. Проверьте подключение к интернету.")
+        }
+      } else {
+        setError(e.message || "Не удалось загрузить списки задач")
+      }
     } finally {
       setLoading(false)
     }

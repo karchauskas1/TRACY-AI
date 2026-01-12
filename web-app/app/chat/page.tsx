@@ -110,7 +110,17 @@ export default function ChatPage() {
       }
     } catch (e: any) {
       console.error("Ошибка загрузки чата:", e)
-      setError(e.message || "Не удалось загрузить чат")
+      
+      // Проверяем, является ли это ошибкой Mixed Content Policy
+      if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
+        if (typeof window !== "undefined" && window.location.protocol === "https:") {
+          setError("Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к чату.")
+        } else {
+          setError("Не удалось подключиться к серверу. Проверьте подключение к интернету.")
+        }
+      } else {
+        setError(e.message || "Не удалось загрузить чат")
+      }
       // Пробуем загрузить приветствие даже при ошибке
       await loadGreeting()
     } finally {
@@ -157,8 +167,15 @@ export default function ChatPage() {
           setError("API endpoint не найден. Сервер не обновлен.")
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Ошибка загрузки приветствия:", e)
+      
+      // Проверяем, является ли это ошибкой Mixed Content Policy
+      if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
+        if (typeof window !== "undefined" && window.location.protocol === "https:") {
+          setError("Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к чату.")
+        }
+      }
       // Если не удалось загрузить приветствие, добавляем базовое
       const fallbackGreeting: ChatMessage = {
         id: Date.now(),
