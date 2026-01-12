@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, startOfWeek, endOfWeek } from "date-fns"
 import { ru } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, Settings } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
@@ -90,15 +90,6 @@ export function CalendarGrid({
           >
             Сегодня
           </Button>
-          <Link href="/settings">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-foreground hover:bg-accent"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-          </Link>
         </div>
       </div>
 
