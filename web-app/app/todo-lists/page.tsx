@@ -234,6 +234,7 @@ export default function TodoListsPage() {
         // #endregion
         setLists(data.lists)
         setError(null) // Очищаем ошибку при успехе
+        setErrorDetails(null) // Очищаем детали ошибки
         setLoading(false) // Убеждаемся, что loading выключен
       } else if (Array.isArray(data.lists)) {
         console.log(`[TodoLists] ✅ Загружено ${data.lists.length} списков (без success поля)`)
@@ -242,6 +243,7 @@ export default function TodoListsPage() {
         // #endregion
         setLists(data.lists)
         setError(null) // Очищаем ошибку при успехе
+        setErrorDetails(null) // Очищаем детали ошибки
         setLoading(false) // Убеждаемся, что loading выключен
       } else if (data.error) {
         console.error(`[TodoLists] ❌ API вернул ошибку:`, data.error)
