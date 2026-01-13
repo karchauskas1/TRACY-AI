@@ -293,11 +293,24 @@ export default function TodoListsPage() {
           )}
 
           {/* Список списков задач */}
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : lists.length === 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Загрузка...</span>
+                </div>
+              ) : error ? (
+                <Card className="border-destructive">
+                  <CardContent className="pt-6">
+                    <div className="text-center space-y-4">
+                      <p className="text-destructive font-semibold">Ошибка загрузки</p>
+                      <p className="text-sm text-muted-foreground">{error}</p>
+                      <Button onClick={loadLists} variant="outline">
+                        Попробовать снова
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : lists.length === 0 ? (
             <Card className="border-border">
               <CardContent className="pt-6">
                 <div className="text-center space-y-4">

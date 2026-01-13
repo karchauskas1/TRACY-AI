@@ -349,11 +349,26 @@ export default function ChatPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : messages.length === 0 ? (
+          {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Загрузка...</span>
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center h-full">
+                <Card className="border-destructive">
+                  <CardContent className="pt-6">
+                    <div className="text-center space-y-4">
+                      <p className="text-destructive font-semibold">Ошибка загрузки</p>
+                      <p className="text-sm text-muted-foreground">{error}</p>
+                      <Button onClick={loadChat} variant="outline">
+                        Попробовать снова
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <Card className="border-border">
               <CardContent className="pt-6">
