@@ -7,14 +7,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
 import Link from "next/link"
+import { useTelegramUser } from "../../lib/useTelegramUser"
 
 export default function AssistantPage() {
   const router = useRouter()
+  const { user: telegramUser, userId, isLoading: userLoading } = useTelegramUser()
   const [user, setUser] = useState<any>(null)
   const [isSuperUser, setIsSuperUser] = useState(false)
 
   useEffect(() => {
-    // Загружаем данные пользователя из Telegram Web App или localStorage
+    // Если пользователь не загружен и не загружается, перенаправляем на логин
+    if (!userLoading && !userId) {
+      router.push("/login")
+      return
+    }
+
+    // Если пользователь загружен, обновляем состояние
+    if (telegramUser && userId) {
+      const fullName = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(" ")
+      setUser({
+        id: userId,
+        name: fullName || telegramUser.first_name || "Пользователь",
+        avatarUrl: telegramUser.photo_url,
+        first_name: telegramUser.first_name,
+        last_name: telegramUser.last_name,
+        username: telegramUser.username,
+      })
+      // Проверяем, является ли пользователь супер-пользователем (ID: 308477378)
+      setIsSuperUser(userId === "308477378" || userId === "332023536")
+    }
+
+    // Настраиваем Telegram Web App, если доступен
     if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
       if (tg) {
@@ -22,42 +45,9 @@ export default function AssistantPage() {
         tg.expand()
         tg.setHeaderColor("#1a1a20")
         tg.setBackgroundColor("#1a1a20")
-        
-        const tgUser = tg.initDataUnsafe?.user
-        if (tgUser) {
-          const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")
-          const userId = tgUser.id.toString()
-          setUser({
-            id: userId,
-            name: fullName || tgUser.first_name || "Пользователь",
-            avatarUrl: tgUser.photo_url,
-            first_name: tgUser.first_name,
-            last_name: tgUser.last_name,
-            username: tgUser.username,
-          })
-          // Проверяем, является ли пользователь супер-пользователем (ID: 308477378)
-          setIsSuperUser(userId === "308477378")
-        }
-      } else {
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            const fullName = [parsed.first_name, parsed.last_name].filter(Boolean).join(" ")
-            const userId = parsed.id?.toString()
-            setUser({
-              ...parsed,
-              name: fullName || parsed.first_name || "Пользователь",
-            })
-            // Проверяем, является ли пользователь супер-пользователем
-            setIsSuperUser(userId === "308477378")
-          } catch (e) {
-            console.error("Failed to parse user:", e)
-          }
-        }
       }
     }
-  }, [])
+  }, [telegramUser, userId, userLoading, router])
 
   const displayName = user?.name || [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Пользователь"
   const avatarInitials = displayName

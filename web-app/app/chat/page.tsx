@@ -30,19 +30,17 @@ export default function ChatPage() {
   const [greetingLoaded, setGreetingLoaded] = useState(false)
 
   useEffect(() => {
+    // Если пользователь не авторизован, перенаправляем на логин
+    if (!userLoading && !userId) {
+      router.push("/login")
+      return
+    }
+
     // Загружаем чат только после получения user_id
     if (!userLoading && userId) {
       loadChat()
-    } else if (!userLoading && !userId) {
-      // Если user_id не получен, показываем ошибку
-      if (userError) {
-        setError(userError)
-      } else {
-        setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
-      }
-      setLoading(false)
     }
-  }, [userId, userLoading, userError])
+  }, [userId, userLoading, router])
 
   useEffect(() => {
     // Прокрутка к последнему сообщению

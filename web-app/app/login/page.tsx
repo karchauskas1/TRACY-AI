@@ -1,9 +1,12 @@
 "use client"
 
 // Login page for TRACY web app
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Script from "next/script"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
+import { Button } from "../../components/ui/button"
+import { MessageCircle, ExternalLink, Sparkles } from "lucide-react"
 
 declare global {
   interface Window {
@@ -16,81 +19,158 @@ declare global {
 
 export default function LoginPage() {
   const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+  const [isTelegramWebApp, setIsTelegramWebApp] = useState(false)
   const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
 
   useEffect(() => {
-    // Если открыто через Telegram Web App, сразу переходим в календарь
+    // Если открыто через Telegram Web App, сразу переходим
     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp
       tg.ready()
+      tg.expand()
+      setIsTelegramWebApp(true)
+      
       // Сохраняем данные пользователя из Telegram Web App
       const user = tg.initDataUnsafe?.user
       if (user) {
-        localStorage.setItem("telegram_user", JSON.stringify({
+        const userData = {
           id: user.id.toString(),
           first_name: user.first_name,
           last_name: user.last_name,
           username: user.username,
           photo_url: user.photo_url,
-        }))
+        }
+        localStorage.setItem("telegram_user", JSON.stringify(userData))
+        router.push("/assistant")
+        return
       }
-      router.push("/calendar")
-      return
     }
 
-    // Если уже есть сохраненный пользователь, переходим в календарь
+    // Если уже есть сохраненный пользователь, переходим
     const savedUser = localStorage.getItem("telegram_user")
     if (savedUser) {
-      router.push("/calendar")
-      return
+      try {
+        const parsed = JSON.parse(savedUser)
+        if (parsed.id && parsed.id !== "demo") {
+          router.push("/assistant")
+          return
+        }
+      } catch (e) {
+        // Невалидные данные, удаляем
+        localStorage.removeItem("telegram_user")
+      }
     }
 
-    // Иначе показываем виджет авторизации (только если открыто не через Telegram Web App)
+    // Настраиваем callback для Telegram Login Widget
     window.onTelegramAuth = (user: any) => {
-      // Сохраняем данные пользователя в localStorage
-      localStorage.setItem("telegram_user", JSON.stringify(user))
-      router.push("/calendar")
+      console.log("[Login] Telegram auth callback:", user)
+      
+      // Преобразуем данные пользователя в нужный формат
+      const userData = {
+        id: user.id.toString(), // Важно: преобразуем в строку
+        first_name: user.first_name || "",
+        last_name: user.last_name || "",
+        username: user.username || "",
+        photo_url: user.photo_url || "",
+        auth_date: user.auth_date,
+        hash: user.hash,
+      }
+      
+      // Сохраняем в localStorage
+      localStorage.setItem("telegram_user", JSON.stringify(userData))
+      
+      // Перенаправляем в приложение
+      router.push("/assistant")
     }
+    
+    setIsLoading(false)
   }, [router])
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+          <p className="mt-4 text-muted-foreground">Загрузка...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-8 rounded-2xl bg-card p-8 shadow-sm">
-        <div className="text-center">
-          <h1 className="text-3xl font-semibold">TRACY</h1>
-          <p className="mt-2 text-muted-foreground">
-            Войдите через Telegram
-          </p>
-        </div>
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center space-y-2">
+          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <Sparkles className="h-8 w-8 text-primary" />
+          </div>
+          <CardTitle className="text-3xl">TRACY</CardTitle>
+          <CardDescription className="text-base">
+            AI-ассистент для управления календарем
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {!isTelegramWebApp && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-sm font-medium mb-2">Войдите через Telegram</p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Авторизуйтесь, чтобы использовать все возможности TRACY
+                </p>
+              </div>
+              
+              {/* Telegram Login Widget */}
+              <div className="flex justify-center">
+                <div
+                  id="telegram-login"
+                  data-telegram-login={botUsername}
+                  data-size="large"
+                  data-onauth="onTelegramAuth(user)"
+                  data-request-access="write"
+                  data-userpic="true"
+                  data-radius="8"
+                />
+              </div>
 
-        <div className="space-y-4">
-          <div
-            id="telegram-login"
-            data-telegram-login={botUsername}
-            data-size="large"
-            data-onauth="onTelegramAuth(user)"
-            data-request-access="write"
-            className="flex justify-center"
-          />
+              <Script
+                src="https://telegram.org/js/telegram-widget.js?22"
+                strategy="afterInteractive"
+              />
 
-          <Script
-            src="https://telegram.org/js/telegram-widget.js?22"
-            strategy="afterInteractive"
-          />
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">или</span>
+                </div>
+              </div>
 
-          <div className="text-center space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Или откройте через Telegram бота
-            </p>
-            <a
-              href={`https://t.me/${botUsername}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              Открыть в Telegram
-            </a>
-            <div className="pt-4 border-t">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  window.open(`https://t.me/${botUsername}`, '_blank')
+                }}
+              >
+                <MessageCircle className="mr-2 h-4 w-4" />
+                Открыть в Telegram
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {isTelegramWebApp && (
+            <div className="text-center space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Приложение открыто через Telegram. Авторизация выполняется автоматически...
+              </p>
+            </div>
+          )}
+
+          <div className="pt-4 border-t">
+            <div className="text-center">
               <button
                 onClick={() => {
                   // Создаем демо-пользователя для просмотра интерфейса
@@ -100,16 +180,19 @@ export default function LoginPage() {
                     last_name: "Пользователь",
                     username: "demo",
                   }))
-                  router.push("/calendar")
+                  router.push("/assistant")
                 }}
-                className="text-sm text-muted-foreground hover:text-foreground underline"
+                className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
               >
-                Продолжить без авторизации (демо)
+                Продолжить без авторизации (демо-режим)
               </button>
+              <p className="text-xs text-muted-foreground mt-2">
+                В демо-режиме данные не сохраняются
+              </p>
             </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

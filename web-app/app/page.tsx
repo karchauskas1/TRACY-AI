@@ -26,14 +26,31 @@ export default function HomePage() {
           username: user.username,
           photo_url: user.photo_url,
         }))
+        // Сразу переходим на главный экран "Личный ассистент"
+        router.push("/assistant")
+      } else {
+        // Если нет пользователя в WebApp, проверяем localStorage
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          router.push("/assistant")
+        } else {
+          router.push("/login")
+        }
       }
-      // Сразу переходим на главный экран "Личный ассистент"
-      router.push("/assistant")
     } else {
       // Проверяем, есть ли сохраненный пользователь
       const savedUser = localStorage.getItem("telegram_user")
       if (savedUser) {
-        router.push("/assistant")
+        try {
+          const parsed = JSON.parse(savedUser)
+          if (parsed.id && parsed.id !== "demo") {
+            router.push("/assistant")
+          } else {
+            router.push("/login")
+          }
+        } catch (e) {
+          router.push("/login")
+        }
       } else {
         router.push("/login")
       }

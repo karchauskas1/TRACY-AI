@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Глобальная ссылка на БД
 db_instance: Optional[Database] = None
 
+# Временное хранилище токенов авторизации (token -> user_id)
+# В production можно использовать Redis или БД
+auth_tokens: Dict[str, Dict] = {}
+
 
 def set_database(db: Database):
     """Устанавливает глобальную ссылку на БД."""

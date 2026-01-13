@@ -87,8 +87,9 @@ export function useTelegramUser(): UseTelegramUserResult {
         }
       }
 
-      // Пользователь не найден
-      setError('Пользователь не найден. Откройте приложение через Telegram.')
+      // Пользователь не найден - не устанавливаем ошибку, просто возвращаем null
+      // Это позволит компонентам показать редирект на логин
+      setError(null)
       setIsLoading(false)
       
     } catch (e: any) {

@@ -3,27 +3,43 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { CalendarPageClient } from "./CalendarPageClient"
+import { useTelegramUser } from "../../lib/useTelegramUser"
 
 export default function CalendarPage() {
   const router = useRouter()
+  const { userId, isLoading } = useTelegramUser()
 
   useEffect(() => {
-    // Если открыто через Telegram Web App, сохраняем данные пользователя
-    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-      const tg = (window as any).Telegram.WebApp
-      tg.ready()
-      const user = tg.initDataUnsafe?.user
-      if (user) {
-        localStorage.setItem("telegram_user", JSON.stringify({
-          id: user.id.toString(),
-          first_name: user.first_name,
-          last_name: user.last_name,
-          username: user.username,
-          photo_url: user.photo_url,
-        }))
+    // Если пользователь не загружен и не загружается, перенаправляем на логин
+    if (!isLoading && !userId) {
+      router.push("/login")
+      return
+    }
+
+    // Настраиваем Telegram Web App, если доступен
+    if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg) {
+        tg.ready()
+        tg.expand()
       }
     }
-  }, [])
+  }, [userId, isLoading, router])
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+          <p className="mt-4 text-muted-foreground">Загрузка...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!userId) {
+    return null // Редирект на логин
+  }
 
   return <CalendarPageClient />
 }

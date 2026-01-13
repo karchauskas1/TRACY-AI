@@ -37,19 +37,17 @@ export default function TodoListsPage() {
   const [creating, setCreating] = useState(false)
 
   useEffect(() => {
+    // Если пользователь не авторизован, перенаправляем на логин
+    if (!userLoading && !userId) {
+      router.push("/login")
+      return
+    }
+
     // Загружаем списки только после получения user_id
     if (!userLoading && userId) {
       loadLists()
-    } else if (!userLoading && !userId) {
-      // Если user_id не получен, показываем ошибку
-      if (userError) {
-        setError(userError)
-      } else {
-        setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
-      }
-      setLoading(false)
     }
-  }, [userId, userLoading, userError])
+  }, [userId, userLoading, router])
 
   const loadLists = async () => {
     // Ждем, пока user_id будет получен
