@@ -166,28 +166,25 @@ async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     message_text = (
         "🌐 Веб-приложение TRACY\n\n"
-        "Откройте веб-приложение в браузере для полного доступа ко всем функциям:\n"
+        "Откройте веб-приложение для доступа ко всем функциям:\n"
         "• 💬 Чат с AI-ассистентом\n"
         "• 📅 Календарь событий\n"
         "• 📝 История встреч\n"
         "• ✅ Списки задач\n"
         "• ⚙️ Настройки\n\n"
-        "⚠️ *Важно:* Для корректной работы откройте приложение в браузере (Safari, Chrome), "
-        "а не во встроенном просмотре Telegram.\n\n"
-        f"🔗 Ссылка: `{web_url}`"
+        "Нажмите кнопку ниже, чтобы открыть приложение."
     )
     
-    # Используем обычную URL кнопку вместо WebApp для обхода ограничений Telegram WebView
+    # Используем WebApp кнопку для открытия в Telegram Mini App
     if "localhost" not in web_url.lower() and web_url.startswith("https://"):
         keyboard = [[InlineKeyboardButton(
-            "🌐 Открыть в браузере",
-            url=web_url  # Обычная ссылка - откроется в браузере
+            "🚀 Открыть приложение",
+            web_app=WebAppInfo(url=web_url)  # WebApp - откроется в Telegram
         )]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             message_text,
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
+            reply_markup=reply_markup
         )
         return
     
@@ -3672,8 +3669,18 @@ def main():
                 logger.error("reminder_scheduler не инициализирован для проверки напоминаний")
             logger.info("✅ Первая проверка напоминаний завершена")
             
-            # Menu Button не устанавливаем - используем обычные ссылки для обхода ограничений Telegram WebView
-            logger.info("ℹ️ Menu Button не устанавливается - используем обычные URL для веб-приложения")
+            # Устанавливаем Menu Button для веб-приложения (глобально для всех чатов)
+            web_url = os.getenv("WEB_APP_URL")
+            if web_url and "localhost" not in web_url.lower() and web_url.startswith("https://"):
+                try:
+                    menu_button = MenuButtonWebApp(text="TRACY", web_app=WebAppInfo(url=web_url))
+                    # Устанавливаем глобально (chat_id=None означает глобальная настройка)
+                    await app.bot.set_chat_menu_button(chat_id=None, menu_button=menu_button)
+                    logger.info(f"✅ Menu Button установлен: {web_url}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось установить Menu Button: {e}")
+            else:
+                logger.info("⚠️ WEB_APP_URL не настроен или не HTTPS, Menu Button не установлен")
             
             # Устанавливаем команды бота (для меню команд)
             try:

@@ -807,6 +807,79 @@ async def generate_chat_greeting_handler(request: web_request.Request):
         return json_response({'error': str(e)}, status=500)
 
 
+async def telegram_proxy_handler(request: web_request.Request):
+    """
+    Универсальный прокси для Telegram Mini App.
+    Принимает запросы от Mini App и проксирует их к внутренним эндпоинтам.
+    
+    POST /api/telegram-proxy
+    Body: {
+        "endpoint": "/api/events",
+        "method": "GET",
+        "params": {"user_id": 123},
+        "data": null
+    }
+    """
+    try:
+        # Получаем данные запроса
+        try:
+            proxy_data = await request.json()
+        except Exception as e:
+            logger.error(f"❌ Telegram Proxy: Invalid JSON: {e}")
+            return json_response({'error': f'Invalid JSON: {str(e)}'}, status=400)
+        
+        endpoint = proxy_data.get('endpoint')
+        method = proxy_data.get('method', 'GET').upper()
+        params = proxy_data.get('params', {})
+        data_payload = proxy_data.get('data')
+        
+        if not endpoint:
+            return json_response({'error': 'endpoint required'}, status=400)
+        
+        logger.info(f"📡 Telegram Proxy: {method} {endpoint} params={params}")
+        
+        # Построим новый URL с параметрами
+        from urllib.parse import urlencode
+        query_string = urlencode(params) if params else ""
+        # Используем localhost для внутренних запросов
+        internal_url = f"http://localhost:8080{endpoint}"
+        if query_string:
+            internal_url += f"?{query_string}"
+        
+        # Используем aiohttp client для внутреннего запроса
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            try:
+                if method == 'GET':
+                    async with session.get(internal_url) as resp:
+                        result = await resp.json()
+                        status = resp.status
+                elif method == 'POST':
+                    async with session.post(internal_url, json=data_payload) as resp:
+                        result = await resp.json()
+                        status = resp.status
+                elif method == 'PUT':
+                    async with session.put(internal_url, json=data_payload) as resp:
+                        result = await resp.json()
+                        status = resp.status
+                elif method == 'DELETE':
+                    async with session.delete(internal_url) as resp:
+                        result = await resp.json()
+                        status = resp.status
+                else:
+                    return json_response({'error': f'Unsupported method: {method}'}, status=400)
+                
+                logger.info(f"✅ Telegram Proxy: Response {status}")
+                return json_response(result, status=status)
+            except Exception as e:
+                logger.error(f"❌ Telegram Proxy: Internal request failed: {e}")
+                return json_response({'error': f'Internal request failed: {str(e)}'}, status=500)
+    
+    except Exception as e:
+        logger.error(f"❌ Telegram Proxy: Error: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
 async def send_chat_message_handler(request: web_request.Request):
     """POST /api/chat/send - Отправить сообщение и получить ответ от AI."""
     try:
@@ -1001,6 +1074,9 @@ def create_app():
     app.router.add_get('/api/chat/messages', get_chat_messages_handler)
     app.router.add_get('/api/chat/greeting', generate_chat_greeting_handler)
     app.router.add_post('/api/chat/send', send_chat_message_handler)
+    
+    # Telegram Mini App Proxy - универсальный прокси для всех запросов
+    app.router.add_post('/api/telegram-proxy', telegram_proxy_handler)
     
     return app
 

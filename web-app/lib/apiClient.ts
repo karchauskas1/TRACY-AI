@@ -2,9 +2,21 @@
  * Единый API клиент для всех запросов к бэкенду
  * Использует NEXT_PUBLIC_API_URL из переменных окружения
  * Добавляет таймауты, обработку ошибок и логирование
+ * 
+ * Автоматически использует Telegram Proxy для Mini App
  */
 
 const DEFAULT_TIMEOUT = 15000 // 15 секунд
+
+/**
+ * Проверяет, запущено ли приложение в Telegram Mini App
+ */
+function isTelegramMiniApp(): boolean {
+  if (typeof window === 'undefined') return false
+  
+  const tg = (window as any).Telegram?.WebApp
+  return !!(tg && tg.initData)
+}
 
 interface RequestOptions extends RequestInit {
   timeout?: number
