@@ -157,15 +157,22 @@ export default function AssistantPage() {
           <div className="space-y-4">
             {/* Чат с Tracy */}
             <div 
-              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer active:scale-98"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 console.log("[Assistant] Click: Chat")
+                alert("Клик на Чат с Tracy")
                 const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
-                window.location.href = `${basePath}/chat/`
+                setTimeout(() => window.location.href = `${basePath}/chat/`, 100)
               }}
-              style={{ touchAction: 'manipulation' }}
+              onTouchStart={(e) => {
+                console.log("[Assistant] Touch: Chat")
+              }}
+              style={{ 
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'rgba(139, 92, 246, 0.3)'
+              }}
             >
               <div className="p-6">
                 <div className="flex items-center gap-4">
@@ -184,15 +191,22 @@ export default function AssistantPage() {
 
             {/* Calendar */}
             <div 
-              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer active:scale-98"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 console.log("[Assistant] Click: Calendar")
+                alert("Клик на Календарь")
                 const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
-                window.location.href = `${basePath}/calendar/`
+                setTimeout(() => window.location.href = `${basePath}/calendar/`, 100)
               }}
-              style={{ touchAction: 'manipulation' }}
+              onTouchStart={(e) => {
+                console.log("[Assistant] Touch: Calendar")
+              }}
+              style={{ 
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'rgba(139, 92, 246, 0.3)'
+              }}
             >
               <div className="p-6">
                 <div className="flex items-center gap-4">
@@ -211,15 +225,22 @@ export default function AssistantPage() {
 
             {/* История расшифровок */}
             <div 
-              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer active:scale-98"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 console.log("[Assistant] Click: History")
+                alert("Клик на История")
                 const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
-                window.location.href = `${basePath}/meetings/history/`
+                setTimeout(() => window.location.href = `${basePath}/meetings/history/`, 100)
               }}
-              style={{ touchAction: 'manipulation' }}
+              onTouchStart={(e) => {
+                console.log("[Assistant] Touch: History")
+              }}
+              style={{ 
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'rgba(139, 92, 246, 0.3)'
+              }}
             >
               <div className="p-6">
                 <div className="flex items-center gap-4">
@@ -238,15 +259,22 @@ export default function AssistantPage() {
 
             {/* Списки задач */}
             <div 
-              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer active:scale-98"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 console.log("[Assistant] Click: Todo Lists")
+                alert("Клик на Списки задач")
                 const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
-                window.location.href = `${basePath}/todo-lists/`
+                setTimeout(() => window.location.href = `${basePath}/todo-lists/`, 100)
               }}
-              style={{ touchAction: 'manipulation' }}
+              onTouchStart={(e) => {
+                console.log("[Assistant] Touch: Todo Lists")
+              }}
+              style={{ 
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'rgba(139, 92, 246, 0.3)'
+              }}
             >
               <div className="p-6">
                 <div className="flex items-center gap-4">
