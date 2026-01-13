@@ -73,7 +73,45 @@ export default function TodoListsPage() {
   }, [user])
 
   const loadLists = async () => {
-    if (!user?.id) return
+    // Получаем user_id из разных источников
+    let userId: string | null = null
+    
+    if (user?.id) {
+      userId = user.id.toString()
+    } else if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg?.initDataUnsafe?.user?.id) {
+        userId = tg.initDataUnsafe.user.id.toString()
+        // Сохраняем user для будущего использования
+        if (!user) {
+          setUser({
+            id: userId,
+            first_name: tg.initDataUnsafe.user.first_name,
+            last_name: tg.initDataUnsafe.user.last_name,
+          })
+        }
+      } else {
+        // Пробуем получить из localStorage
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser)
+            userId = parsed.id?.toString() || null
+          } catch (e) {
+            console.error("[TodoLists] Error parsing saved user:", e)
+          }
+        }
+      }
+    }
+    
+    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
+      console.error("[TodoLists] ❌ User ID не найден или невалиден:", userId)
+      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
+      setLoading(false)
+      return
+    }
+    
+    console.log(`[TodoLists] User ID: ${userId}`)
 
     try {
       setLoading(true)
@@ -83,7 +121,7 @@ export default function TodoListsPage() {
         ? "http://localhost:8080"
         : "https://api.pasekaproduction.ru"
 
-      const response = await fetch(`${apiBaseUrl}/api/todo-lists?user_id=${user.id}`, {
+      const response = await fetch(`${apiBaseUrl}/api/todo-lists?user_id=${userId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -151,7 +189,35 @@ export default function TodoListsPage() {
   }
 
   const createList = async () => {
-    if (!user?.id || !newListTitle.trim()) return
+    if (!newListTitle.trim()) return
+
+    // Получаем user_id из разных источников
+    let userId: string | null = null
+    
+    if (user?.id) {
+      userId = user.id.toString()
+    } else if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg?.initDataUnsafe?.user?.id) {
+        userId = tg.initDataUnsafe.user.id.toString()
+      } else {
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser)
+            userId = parsed.id?.toString() || null
+          } catch (e) {
+            console.error("[TodoLists] Error parsing saved user:", e)
+          }
+        }
+      }
+    }
+    
+    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
+      console.error("[TodoLists] ❌ User ID не найден или невалиден:", userId)
+      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
+      return
+    }
 
     try {
       setCreating(true)
@@ -168,7 +234,7 @@ export default function TodoListsPage() {
         },
         mode: "cors",
         body: JSON.stringify({
-          user_id: parseInt(user.id),
+          user_id: parseInt(userId),
           title: newListTitle.trim(),
         }),
       })

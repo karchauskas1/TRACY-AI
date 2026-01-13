@@ -69,7 +69,45 @@ export default function ChatPage() {
   }, [messages])
 
   const loadChat = async () => {
-    if (!user?.id) return
+    // Получаем user_id из разных источников
+    let userId: string | null = null
+    
+    if (user?.id) {
+      userId = user.id.toString()
+    } else if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg?.initDataUnsafe?.user?.id) {
+        userId = tg.initDataUnsafe.user.id.toString()
+        // Сохраняем user для будущего использования
+        if (!user) {
+          setUser({
+            id: userId,
+            first_name: tg.initDataUnsafe.user.first_name,
+            last_name: tg.initDataUnsafe.user.last_name,
+          })
+        }
+      } else {
+        // Пробуем получить из localStorage
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser)
+            userId = parsed.id?.toString() || null
+          } catch (e) {
+            console.error("[Chat] Error parsing saved user:", e)
+          }
+        }
+      }
+    }
+    
+    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
+      console.error("[Chat] ❌ User ID не найден или невалиден:", userId)
+      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
+      setLoading(false)
+      return
+    }
+    
+    console.log(`[Chat] User ID: ${userId}`)
 
     try {
       setLoading(true)
@@ -80,7 +118,7 @@ export default function ChatPage() {
         : "https://api.pasekaproduction.ru"
 
       // Загружаем историю сообщений
-      const messagesResponse = await fetch(`${apiBaseUrl}/api/chat/messages?user_id=${user.id}&limit=50`, {
+      const messagesResponse = await fetch(`${apiBaseUrl}/api/chat/messages?user_id=${userId}&limit=50`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -166,7 +204,7 @@ export default function ChatPage() {
         ? "http://localhost:8080"
         : "https://api.pasekaproduction.ru"
 
-      const response = await fetch(`${apiBaseUrl}/api/chat/greeting?user_id=${user.id}`, {
+      const response = await fetch(`${apiBaseUrl}/api/chat/greeting?user_id=${userId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -226,7 +264,35 @@ export default function ChatPage() {
   }
 
   const sendMessage = async () => {
-    if (!user?.id || !inputMessage.trim() || sending) return
+    if (!inputMessage.trim() || sending) return
+
+    // Получаем user_id из разных источников
+    let userId: string | null = null
+    
+    if (user?.id) {
+      userId = user.id.toString()
+    } else if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg?.initDataUnsafe?.user?.id) {
+        userId = tg.initDataUnsafe.user.id.toString()
+      } else {
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser)
+            userId = parsed.id?.toString() || null
+          } catch (e) {
+            console.error("[Chat] Error parsing saved user:", e)
+          }
+        }
+      }
+    }
+    
+    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
+      console.error("[Chat] ❌ User ID не найден или невалиден:", userId)
+      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
+      return
+    }
 
     const userMessage: ChatMessage = {
       id: Date.now(),
@@ -254,7 +320,7 @@ export default function ChatPage() {
         },
         mode: "cors",
         body: JSON.stringify({
-          user_id: parseInt(user.id),
+          user_id: parseInt(userId),
           message: messageText,
         }),
       })
