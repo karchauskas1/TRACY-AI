@@ -72,8 +72,15 @@ export default function AssistantPage() {
             <span className="text-sm font-medium">TRACY</span>
           </div>
           <button 
-            onClick={() => router.push("/settings")}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              console.log("[Assistant] Click: Settings")
+              const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
+              window.location.href = `${basePath}/settings/`
+            }}
             className="text-foreground hover:text-muted-foreground transition-colors"
+            style={{ touchAction: 'manipulation' }}
           >
             <Settings className="h-5 w-5" />
           </button>
@@ -127,8 +134,15 @@ export default function AssistantPage() {
                       Для полного доступа ко всем функциям и сохранения данных авторизуйтесь через Telegram
                     </p>
                     <Button
-                      onClick={() => router.push("/login")}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        console.log("[Assistant] Click: Login")
+                        const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
+                        window.location.href = `${basePath}/login/`
+                      }}
                       className="bg-amber-600 hover:bg-amber-700 text-white"
+                      style={{ touchAction: 'manipulation' }}
                     >
                       <MessageCircle className="mr-2 h-4 w-4" />
                       Войти через Telegram
@@ -140,13 +154,20 @@ export default function AssistantPage() {
           )}
 
           {/* Main Features */}
-          <div className="space-y-8">
+          <div className="space-y-4">
             {/* Чат с Tracy */}
-            <Card 
-              className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
-              onClick={() => router.push("/chat")}
+            <div 
+              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log("[Assistant] Click: Chat")
+                const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
+                window.location.href = `${basePath}/chat/`
+              }}
+              style={{ touchAction: 'manipulation' }}
             >
-              <CardContent className="p-6">
+              <div className="p-6">
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <MessageCircle className="h-6 w-6 text-primary" />
@@ -158,15 +179,22 @@ export default function AssistantPage() {
                     </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Calendar */}
-            <Card 
-              className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
-              onClick={() => router.push("/calendar")}
+            <div 
+              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log("[Assistant] Click: Calendar")
+                const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
+                window.location.href = `${basePath}/calendar/`
+              }}
+              style={{ touchAction: 'manipulation' }}
             >
-              <CardContent className="p-6">
+              <div className="p-6">
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <Calendar className="h-6 w-6 text-primary" />
@@ -178,15 +206,22 @@ export default function AssistantPage() {
                     </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* История расшифровок */}
-            <Card 
-              className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
-              onClick={() => router.push("/meetings/history")}
+            <div 
+              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log("[Assistant] Click: History")
+                const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
+                window.location.href = `${basePath}/meetings/history/`
+              }}
+              style={{ touchAction: 'manipulation' }}
             >
-              <CardContent className="p-6">
+              <div className="p-6">
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <History className="h-6 w-6 text-primary" />
@@ -198,15 +233,22 @@ export default function AssistantPage() {
                     </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Списки задач */}
-            <Card 
-              className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
-              onClick={() => router.push("/todo-lists")}
+            <div 
+              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log("[Assistant] Click: Todo Lists")
+                const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
+                window.location.href = `${basePath}/todo-lists/`
+              }}
+              style={{ touchAction: 'manipulation' }}
             >
-              <CardContent className="p-6">
+              <div className="p-6">
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <ListTodo className="h-6 w-6 text-primary" />
@@ -218,17 +260,24 @@ export default function AssistantPage() {
                     </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (
               <>
-                <Card 
-                  className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
-                  onClick={() => router.push("/settings/feedback")}
+                <div 
+                  className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    console.log("[Assistant] Click: Feedback")
+                    const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
+                    window.location.href = `${basePath}/settings/feedback/`
+                  }}
+                  style={{ touchAction: 'manipulation' }}
                 >
-                  <CardContent className="p-6">
+                  <div className="p-6">
                     <div className="flex items-center gap-4">
                       <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                         <MessageSquare className="h-6 w-6 text-primary" />
@@ -240,13 +289,20 @@ export default function AssistantPage() {
                         </p>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card 
-                  className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
-                  onClick={() => router.push("/debug")}
+                  </div>
+                </div>
+                <div 
+                  className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    console.log("[Assistant] Click: Debug")
+                    const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
+                    window.location.href = `${basePath}/debug/`
+                  }}
+                  style={{ touchAction: 'manipulation' }}
                 >
-                  <CardContent className="p-6">
+                  <div className="p-6">
                     <div className="flex items-center gap-4">
                       <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                         <Settings className="h-6 w-6 text-primary" />
@@ -258,8 +314,8 @@ export default function AssistantPage() {
                         </p>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </>
             )}
           </div>
