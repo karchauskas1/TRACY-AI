@@ -209,7 +209,7 @@ export default function ChatPage() {
         
         // Если истории нет, загружаем приветственное сообщение
         if (!messagesData.messages || messagesData.messages.length === 0) {
-          await loadGreeting()
+          await loadGreeting(userId)
         }
       } else {
         let errorText = ""
@@ -225,7 +225,7 @@ export default function ChatPage() {
           setError(`Ошибка загрузки сообщений: ${messagesResponse.status}`)
         }
         // Если ошибка загрузки истории, пробуем загрузить приветствие
-        await loadGreeting()
+        await loadGreeting(userId)
       }
     } catch (e: any) {
       console.error("Ошибка загрузки чата:", e)
@@ -249,11 +249,11 @@ export default function ChatPage() {
     }
   }
 
-  const loadGreeting = async () => {
+  const loadGreeting = async (currentUserId?: string | null) => {
     if (greetingLoaded) return
 
     // Получаем user_id из разных источников
-    let userId: string | null = null
+    let userId: string | null = currentUserId || null
     
     if (user?.id) {
       userId = user.id.toString()
