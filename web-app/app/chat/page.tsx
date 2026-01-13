@@ -27,19 +27,30 @@ export default function ChatPage() {
 
   useEffect(() => {
     // Загружаем данные пользователя
-    if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.ready()
-        const tgUser = tg.initDataUnsafe?.user
-        if (tgUser) {
-          setUser({
-            id: tgUser.id.toString(),
-            first_name: tgUser.first_name,
-            last_name: tgUser.last_name,
-          })
+    // Ждем немного, чтобы убедиться, что родительский компонент сохранил пользователя
+    const loadUser = () => {
+      if (typeof window !== "undefined") {
+        const tg = (window as any).Telegram?.WebApp
+        if (tg) {
+          tg.ready()
+          const tgUser = tg.initDataUnsafe?.user
+          if (tgUser) {
+            const userData = {
+              id: tgUser.id.toString(),
+              first_name: tgUser.first_name,
+              last_name: tgUser.last_name,
+            }
+            setUser(userData)
+            // Сохраняем в localStorage для надежности
+            localStorage.setItem("telegram_user", JSON.stringify({
+              ...userData,
+              username: tgUser.username,
+              photo_url: tgUser.photo_url,
+            }))
+            return
+          }
         }
-      } else {
+        // Пробуем получить из localStorage (может быть сохранен родительским компонентом)
         const savedUser = localStorage.getItem("telegram_user")
         if (savedUser) {
           try {
@@ -55,6 +66,18 @@ export default function ChatPage() {
         }
       }
     }
+    
+    // Пробуем сразу
+    loadUser()
+    
+    // Если не получилось, пробуем еще раз через небольшую задержку
+    const timeoutId = setTimeout(() => {
+      if (!user) {
+        loadUser()
+      }
+    }, 100)
+    
+    return () => clearTimeout(timeoutId)
   }, [])
 
   useEffect(() => {
