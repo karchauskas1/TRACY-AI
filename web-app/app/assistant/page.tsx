@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle } from "lucide-react"
+import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
@@ -197,23 +197,42 @@ export default function AssistantPage() {
 
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (
-              <Link href="/settings/feedback">
-                <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <MessageSquare className="h-6 w-6 text-primary" />
+              <>
+                <Link href="/settings/feedback">
+                  <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <MessageSquare className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold mb-1">Обратная связь</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Просмотр всех сообщений об ошибках и предложениях
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-1">Обратная связь</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Просмотр всех сообщений об ошибках и предложениях
-                        </p>
+                    </CardContent>
+                  </Card>
+                </Link>
+                <Link href="/debug">
+                  <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Settings className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold mb-1">Debug: Network</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Мониторинг сетевых запросов и диагностика ошибок
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </>
             )}
           </div>
         </div>

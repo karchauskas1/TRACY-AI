@@ -9,6 +9,8 @@ import { CalendarGrid } from "../../components/calendar/CalendarGrid"
 import { Button } from "../../components/ui/button"
 import { formatTime } from "../../lib/utils"
 import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../lib/error-utils"
+import { apiGet, formatApiError, type ApiError } from "../../lib/apiClient"
+import { useTelegramUser } from "../../lib/useTelegramUser"
 
 interface Event {
   id: string
@@ -26,400 +28,159 @@ export function CalendarPageClient() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [events, setEvents] = useState<Event[]>([])
   const [eventsByDate, setEventsByDate] = useState<Record<string, number>>({})
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // Начинаем с false, ждем user_id
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
-  const [user, setUser] = useState<any>(null)
+  
+  // Используем хук для получения user_id
+  const { user, userId, isLoading: userLoading, error: userError } = useTelegramUser()
 
-  useEffect(() => {
-    // Загружаем данные пользователя из Telegram Web App или localStorage
-    // Ждем немного, чтобы убедиться, что родительский компонент сохранил пользователя
-    const loadUser = () => {
-      if (typeof window !== "undefined") {
-        const tg = (window as any).Telegram?.WebApp
-        if (tg) {
-          tg.ready()
-          const tgUser = tg.initDataUnsafe?.user
-          if (tgUser) {
-            const userData = {
-              id: tgUser.id.toString(),
-              first_name: tgUser.first_name,
-              last_name: tgUser.last_name,
-              username: tgUser.username,
-              photo_url: tgUser.photo_url,
+  const loadEvents = async (forceRefresh: boolean = false) => {
+    // Ждем, пока user_id будет получен
+    if (userLoading) {
+      console.log("[Calendar] Ожидание user_id...")
+      return
+    }
+    
+    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
+      console.error("[Calendar] ❌ User ID не найден или невалиден:", userId)
+      if (userError) {
+        setError(userError)
+        setErrorDetails({
+          code: "AUTH_ERROR",
+          message: userError,
+          context: "Загрузка событий календаря",
+        })
+      }
+      setLoading(false)
+      return
+    }
+    
+    if (forceRefresh) {
+      setLoading(true)
+    }
+    
+    // Проверяем, открыто ли через Telegram Web App
+    const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
+    if (tg) {
+      tg.ready()
+      tg.expand()
+    }
+    
+    // Сначала загружаем из localStorage для быстрого отображения
+    const storedEvents = localStorage.getItem("tracy_events")
+    if (storedEvents && !forceRefresh) {
+      try {
+        const parsedEvents = JSON.parse(storedEvents)
+        if (Array.isArray(parsedEvents) && parsedEvents.length > 0) {
+          console.log(`[Calendar] Загружено ${parsedEvents.length} событий из localStorage`)
+          setEvents(parsedEvents)
+          
+          const counts: Record<string, number> = {}
+          parsedEvents.forEach((event: Event) => {
+            try {
+              const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+              counts[dateKey] = (counts[dateKey] || 0) + 1
+            } catch (e) {
+              console.error("Error parsing event date:", e, event)
             }
-            setUser(userData)
-            // Сохраняем в localStorage для надежности
-            localStorage.setItem("telegram_user", JSON.stringify(userData))
-            return
-          }
+          })
+          setEventsByDate(counts)
+          setLoading(false)
         }
-        // Пробуем получить из localStorage (может быть сохранен родительским компонентом)
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            setUser(parsed)
-          } catch (e) {
-            console.error("[Calendar] Error parsing saved user:", e)
-          }
-        }
+      } catch (e) {
+        console.error("[Calendar] Error parsing stored events:", e)
       }
     }
     
-    // Пробуем сразу
-    loadUser()
-    
-    // Если не получилось, пробуем еще раз через небольшую задержку
-    // (на случай, если родительский компонент еще не сохранил пользователя)
-    const timeoutId = setTimeout(() => {
-      if (!user) {
-        loadUser()
-      }
-    }, 100)
-    
-    return () => clearTimeout(timeoutId)
-  }, [])
-
-  const loadEvents = async (forceRefresh: boolean = false) => {
+    // Используем единый API клиент
     try {
-      if (forceRefresh) {
-        setLoading(true)
+      const data = await apiGet<{ success?: boolean; events?: Event[]; error?: string; timestamp?: string }>(
+        `/api/events`,
+        { user_id: parseInt(userId) },
+        { timeout: 15000 }
+      )
+      
+      // Обрабатываем разные форматы ответа
+      let eventsArray: Event[] = []
+      if (data.success && Array.isArray(data.events)) {
+        eventsArray = data.events
+      } else if (Array.isArray(data.events)) {
+        eventsArray = data.events
+      } else if (Array.isArray(data)) {
+        eventsArray = data
+      } else if (data.error) {
+        throw new Error(data.error)
       }
       
-      // Проверяем, открыто ли через Telegram Web App
-      const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
-      
-      // Получаем user_id из разных источников
-      let userId: string | null = null
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:66',message:'loadEvents entry',data:{forceRefresh,hasUser:!!user,hasTg:!!tg,userFromState:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      if (user?.id) {
-        userId = user.id.toString()
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:69',message:'userId from state',data:{userId,source:'user.id'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-      } else if (tg?.initDataUnsafe?.user?.id) {
-        userId = tg.initDataUnsafe.user.id.toString()
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:72',message:'userId from Telegram WebApp',data:{userId,source:'tg.initDataUnsafe.user.id',tgUserExists:!!tg.initDataUnsafe?.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        // Сохраняем user для будущего использования
-        if (!user) {
-          setUser({
-            id: userId,
-            first_name: tg.initDataUnsafe.user.first_name,
-            last_name: tg.initDataUnsafe.user.last_name,
-            username: tg.initDataUnsafe.user.username,
-            photo_url: tg.initDataUnsafe.user.photo_url,
-          })
-        }
-      } else {
-        // Пробуем получить из localStorage
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
+      if (eventsArray.length > 0) {
+        console.log(`[Calendar] ✅ Получено ${eventsArray.length} событий через API`)
+        setEvents(eventsArray)
+        setError(null)
+        setErrorDetails(null)
+        
+        // Сохраняем в localStorage
+        localStorage.setItem("tracy_events", JSON.stringify(eventsArray))
+        localStorage.setItem("tracy_events_timestamp", data.timestamp || new Date().toISOString())
+        
+        // Обновляем counts по датам
+        const counts: Record<string, number> = {}
+        eventsArray.forEach((event: Event) => {
           try {
-            const parsedUser = JSON.parse(savedUser)
-            userId = parsedUser.id?.toString() || null
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:89',message:'userId from localStorage',data:{userId,source:'localStorage',savedUserExists:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
+            const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
+            counts[dateKey] = (counts[dateKey] || 0) + 1
           } catch (e) {
-            console.error("[Calendar] Error parsing saved user:", e)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:92',message:'Error parsing localStorage user',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
+            console.error("Error parsing event date:", e, event)
           }
-        } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:95',message:'No userId found',data:{userId:null,hasUser:!!user,hasTg:!!tg,hasSavedUser:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
-        }
+        })
+        setEventsByDate(counts)
+      } else {
+        console.log(`[Calendar] Нет событий для отображения`)
+        setEvents([])
+        setEventsByDate({})
+        setError(null)
+        setErrorDetails(null)
       }
       
-      console.log(`[Calendar] User ID: ${userId}, tg: ${!!tg}, user: ${!!user}`)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:98',message:'userId validation check',data:{userId,isValid:userId&&userId!=='demo'&&userId!=='undefined'&&userId!=='null'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+      setLoading(false)
       
-      if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
-        console.error("[Calendar] ❌ User ID не найден или невалиден:", userId)
-        console.warn("[Calendar] ⚠️ User ID не найден! Не могу загрузить события.")
-        setLoading(false)
-        return
-      }
+    } catch (error: any) {
+      console.error(`[Calendar] ❌ Ошибка при запросе к API:`, error)
       
-      if (tg) {
-        // Если открыто через Telegram Web App
-        tg.ready()
-        tg.expand()
-      }
-      
-      // Сначала загружаем из localStorage для быстрого отображения
+      // Если ошибка сети, используем сохраненные события
       const storedEvents = localStorage.getItem("tracy_events")
       if (storedEvents) {
         try {
           const parsedEvents = JSON.parse(storedEvents)
-          if (Array.isArray(parsedEvents)) {
-            console.log(`[Calendar] Загружено ${parsedEvents.length} событий из localStorage`)
-            setEvents(parsedEvents)
-            
-            const counts: Record<string, number> = {}
-            parsedEvents.forEach((event: Event) => {
-              try {
-                const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-                counts[dateKey] = (counts[dateKey] || 0) + 1
-              } catch (e) {
-                console.error("Error parsing event date:", e, event)
-              }
-            })
-            setEventsByDate(counts)
-            
-            // Если есть сохраненные события, не показываем loading сразу (только при forceRefresh)
-            if (!forceRefresh && parsedEvents.length > 0) {
-              setLoading(false)
-            }
+          if (Array.isArray(parsedEvents) && parsedEvents.length > 0) {
+            console.log(`[Calendar] ⚠️ Ошибка сети, используем сохраненные события из localStorage`)
+            setError(null)
+            setLoading(false)
+            return
           }
         } catch (e) {
-          console.error("[Calendar] Error parsing stored events:", e)
-        }
-      } else {
-        console.log(`[Calendar] Нет сохраненных событий в localStorage`)
-      }
-      
-      // ПРИОРИТЕТ 1: Прямой вызов HTTP API (основной способ)
-      // Используем серверный API для получения событий
-      let apiBaseUrl = "https://api.pasekaproduction.ru"
-      
-      if (typeof window !== 'undefined') {
-        if (window.location.hostname === 'localhost') {
-          apiBaseUrl = 'http://localhost:8080'
-        } else {
-          // Для GitHub Pages используем серверный API
-          apiBaseUrl = "https://api.pasekaproduction.ru"
+          // Игнорируем ошибки парсинга
         }
       }
       
-      // Загружаем события через HTTP API
-      const apiUrl = `${apiBaseUrl}/api/events?user_id=${userId}`
+      // Показываем конкретную ошибку
+      const errorMessage = error.type 
+        ? formatApiError(error)
+        : (error.message || "Не удалось загрузить события")
       
-      try {
-        console.log(`[Calendar] Запрос к API: ${apiUrl}`)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:158',message:'API request before fetch',data:{apiUrl,userId,apiBaseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        const response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          mode: 'cors',
-        })
-        
-        console.log(`[Calendar] Ответ API: status=${response.status}, ok=${response.ok}`)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:170',message:'API response received',data:{status:response.status,ok:response.ok,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
-        if (response.ok) {
-          let data
-          try {
-            const responseText = await response.text()
-            console.log(`[Calendar] Raw API Response:`, responseText.substring(0, 500))
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:175',message:'Raw API response received',data:{responseLength:responseText.length,responsePreview:responseText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-            data = JSON.parse(responseText)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:178',message:'JSON parsed successfully',data:{hasSuccess:!!data.success,hasEvents:!!data.events,eventsIsArray:Array.isArray(data.events),eventsCount:Array.isArray(data.events)?data.events.length:0,dataKeys:Object.keys(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-          } catch (e) {
-            console.error(`[Calendar] Ошибка парсинга JSON:`, e)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:182',message:'JSON parse error',data:{error:String(e),hasStoredEvents:!!storedEvents},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-            // Пробуем использовать сохраненные события
-            if (storedEvents) {
-              console.log(`[Calendar] Используем сохраненные события из localStorage`)
-              setLoading(false)
-              return
-            }
-            setLoading(false)
-            return
-          }
-          
-          console.log(`[Calendar] Parsed API Data:`, data)
-          
-          // Обрабатываем разные форматы ответа
-          let eventsArray: Event[] = []
-          if (data.success && Array.isArray(data.events)) {
-            eventsArray = data.events
-            console.log(`[Calendar] ✅ Успешно загружено ${eventsArray.length} событий (формат: success + events)`)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:195',message:'Events extracted (format: success+events)',data:{eventsCount:eventsArray.length,firstEvent:eventsArray[0]||null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-          } else if (Array.isArray(data.events)) {
-            eventsArray = data.events
-            console.log(`[Calendar] ✅ Загружено ${eventsArray.length} событий (формат: events)`)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:200',message:'Events extracted (format: events)',data:{eventsCount:eventsArray.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-          } else if (Array.isArray(data)) {
-            eventsArray = data
-            console.log(`[Calendar] ✅ Загружено ${eventsArray.length} событий (формат: array)`)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:205',message:'Events extracted (format: array)',data:{eventsCount:eventsArray.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-          } else if (data.error) {
-            console.error(`[Calendar] ❌ API вернул ошибку:`, data.error)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:210',message:'API returned error',data:{error:data.error,hasStoredEvents:!!storedEvents},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-            // Пробуем использовать сохраненные события
-            if (storedEvents) {
-              console.log(`[Calendar] Используем сохраненные события из localStorage`)
-              setLoading(false)
-              return
-            }
-            setLoading(false)
-            return
-          } else {
-            console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:222',message:'Unexpected data format',data:{dataKeys:Object.keys(data),hasStoredEvents:!!storedEvents},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-            // Пробуем использовать сохраненные события
-            if (storedEvents) {
-              console.log(`[Calendar] Используем сохраненные события из localStorage`)
-              setLoading(false)
-              return
-            }
-            setLoading(false)
-            return
-          }
-          
-          if (eventsArray.length > 0) {
-            console.log(`[Calendar] ✅ Получено ${eventsArray.length} событий через HTTP API`)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:230',message:'Setting events to state',data:{eventsCount:eventsArray.length,firstEventTitle:eventsArray[0]?.title,firstEventStartAt:eventsArray[0]?.startAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
-            setEvents(eventsArray)
-            setError(null) // Очищаем ошибку при успехе
-            setErrorDetails(null) // Очищаем детали ошибки
-            
-            // Сохраняем в localStorage
-            localStorage.setItem("tracy_events", JSON.stringify(eventsArray))
-            localStorage.setItem("tracy_events_timestamp", data.timestamp || new Date().toISOString())
-            
-            // Обновляем counts по датам
-            const counts: Record<string, number> = {}
-            eventsArray.forEach((event: Event) => {
-              try {
-                const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
-                counts[dateKey] = (counts[dateKey] || 0) + 1
-              } catch (e) {
-                console.error("Error parsing event date:", e, event)
-                // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:242',message:'Error parsing event date',data:{error:String(e),eventStartAt:event.startAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-                // #endregion
-              }
-            })
-            setEventsByDate(counts)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:248',message:'EventsByDate set',data:{countsKeys:Object.keys(counts),countsValues:Object.values(counts)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
-          } else {
-            console.log(`[Calendar] Нет событий для отображения`)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:252',message:'No events to display',data:{eventsArrayLength:eventsArray.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-            setEvents([])
-            setEventsByDate({})
-            setError(null) // Очищаем ошибку, если событий нет (это нормально)
-            setErrorDetails(null) // Очищаем детали ошибки
-          }
-          
-          setLoading(false)
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:258',message:'loadEvents completed successfully',data:{eventsCount:eventsArray.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
-          return
-        } else {
-          let errorText = ""
-          try {
-            errorText = await response.text()
-          } catch (e) {
-            errorText = response.statusText
-          }
-          console.error(`[Calendar] ❌ API вернул ошибку: ${response.status} ${response.statusText}`, errorText)
-          
-          // Если API недоступен, используем сохраненные события из localStorage
-          if (storedEvents) {
-            console.log(`[Calendar] ⚠️ API недоступен, используем сохраненные события из localStorage`)
-            setError(null) // Очищаем ошибку, если есть сохраненные события
-            setLoading(false)
-            return
-          }
-          
-          // Если нет сохраненных событий, показываем ошибку
-          const details = await getErrorDetails(null, response, "Загрузка событий календаря")
-          setErrorDetails(details)
-          setError(formatErrorForDisplay(details))
-          setLoading(false)
-          return
-        }
-      } catch (error: any) {
-        console.error(`[Calendar] ❌ Ошибка при запросе к HTTP API:`, error)
-        
-        // Если ошибка сети, используем сохраненные события
-        if (storedEvents) {
-          console.log(`[Calendar] ⚠️ Ошибка сети, используем сохраненные события из localStorage`)
-          setError(null) // Очищаем ошибку, если есть сохраненные события
-          setLoading(false)
-          return
-        }
-        
-        // Если нет сохраненных событий, показываем ошибку
-        let details: ErrorDetails
-        if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
-          if (typeof window !== "undefined" && window.location.protocol === "https:") {
-            details = {
-              code: "NETWORK_ERROR",
-              message: "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к календарю.",
-              context: "Загрузка событий календаря",
-            }
-          } else {
-            details = {
-              code: "NETWORK_ERROR",
-              message: "Не удалось подключиться к серверу. Проверьте подключение к интернету.",
-              context: "Загрузка событий календаря",
-            }
-          }
-        } else {
-          details = await getErrorDetails(error, undefined, "Загрузка событий календаря")
-        }
-        setErrorDetails(details)
-        setError(formatErrorForDisplay(details))
-      }
-      
-      // Если не удалось загрузить и нет сохраненных событий
-      setLoading(false)
-      
-    } catch (error: any) {
-      console.error("Failed to load events:", error)
-      setEvents([])
-      setEventsByDate({})
-      const details = await getErrorDetails(error, undefined, "Загрузка событий календаря")
-      setErrorDetails(details)
-      setError(formatErrorForDisplay(details))
+      setError(errorMessage)
+      setErrorDetails({
+        code: String(error.status || error.type || "UNKNOWN"),
+        message: error.message || errorMessage,
+        context: "Загрузка событий календаря",
+      })
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Загружаем события при монтировании компонента
-    if (user?.id) {
+    // Загружаем события только после получения user_id
+    if (!userLoading && userId) {
       loadEvents(true)
     }
     
@@ -468,10 +229,10 @@ export function CalendarPageClient() {
   
   useEffect(() => {
     // Автоматическое обновление событий при открытом веб-приложении
-    if (user?.id) {
+    if (!userLoading && userId) {
       // Обновление каждые 30 секунд для синхронизации с ботом
       const intervalId = setInterval(() => {
-        console.log(`[Calendar] Автоматическое обновление событий для пользователя ${user.id}`)
+        console.log(`[Calendar] Автоматическое обновление событий для пользователя ${userId}`)
         loadEvents(true)
       }, 30000) // Обновление каждые 30 секунд
       
@@ -497,7 +258,7 @@ export function CalendarPageClient() {
         document.removeEventListener("visibilitychange", handleVisibilityChange)
       }
     }
-  }, [user?.id])
+  }, [userId, userLoading])
 
   const selectedDateKey = format(selectedDate, "yyyy-MM-dd")
   const dayEvents = events.filter(

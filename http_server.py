@@ -920,14 +920,38 @@ def create_app():
     # CORS middleware для разрешения запросов из веб-приложения
     @web.middleware
     async def cors_middleware(request, handler):
-        # Разрешаем CORS для всех источников (в production можно ограничить)
+        # Разрешенные origins
+        allowed_origins = [
+            'https://karchauskas1.github.io',
+            'http://localhost:3000',
+            'http://localhost:3001',
+        ]
+        
+        # Получаем origin из запроса
+        origin = request.headers.get('Origin', '')
+        
+        # Определяем, какой origin разрешить
+        allow_origin = None
+        if origin in allowed_origins:
+            allow_origin = origin
+        elif origin.startswith('https://karchauskas1.github.io'):
+            # Разрешаем любой поддомен GitHub Pages
+            allow_origin = origin
+        elif not origin:  # Для запросов без Origin (например, curl)
+            allow_origin = '*'
+        
+        # Обработка preflight OPTIONS запросов
         if request.method == 'OPTIONS':
-            response = web.Response()
-            response.headers['Access-Control-Allow-Origin'] = '*'
+            response = web.Response(status=204)  # 204 No Content для OPTIONS
+            if allow_origin:
+                response.headers['Access-Control-Allow-Origin'] = allow_origin
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Access-Control-Max-Age'] = '3600'
+            # Важно: для preflight также нужен Vary header
+            response.headers['Vary'] = 'Origin'
+            logger.info(f"✅ CORS preflight разрешен: {origin} -> {allow_origin}")
             return response
         
         try:
@@ -936,11 +960,15 @@ def create_app():
             logger.error(f"Ошибка в handler: {e}", exc_info=True)
             response = json_response({'error': str(e)}, status=500)
         
-        # Добавляем CORS заголовки ко всем ответам
-        response.headers['Access-Control-Allow-Origin'] = '*'
+        # Добавляем CORS заголовки ко всем ответам (включая ошибки)
+        if allow_origin:
+            response.headers['Access-Control-Allow-Origin'] = allow_origin
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
         response.headers['Access-Control-Allow-Credentials'] = 'true'
+        # Vary header для правильного кеширования CORS
+        response.headers['Vary'] = 'Origin'
+        
         return response
     
     app.middlewares.append(cors_middleware)

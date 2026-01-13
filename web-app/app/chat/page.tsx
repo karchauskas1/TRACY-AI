@@ -7,6 +7,8 @@ import { Card, CardContent } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { Textarea } from "../../components/ui/textarea"
 import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../lib/error-utils"
+import { apiGet, apiPost, formatApiError, type ApiError } from "../../lib/apiClient"
+import { useTelegramUser } from "../../lib/useTelegramUser"
 
 interface ChatMessage {
   id: number
@@ -17,7 +19,7 @@ interface ChatMessage {
 
 export default function ChatPage() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const { user, userId, isLoading: userLoading, error: userError } = useTelegramUser()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputMessage, setInputMessage] = useState("")
   const [loading, setLoading] = useState(true)
@@ -28,65 +30,19 @@ export default function ChatPage() {
   const [greetingLoaded, setGreetingLoaded] = useState(false)
 
   useEffect(() => {
-    // Загружаем данные пользователя
-    // Ждем немного, чтобы убедиться, что родительский компонент сохранил пользователя
-    const loadUser = () => {
-      if (typeof window !== "undefined") {
-        const tg = (window as any).Telegram?.WebApp
-        if (tg) {
-          tg.ready()
-          const tgUser = tg.initDataUnsafe?.user
-          if (tgUser) {
-            const userData = {
-              id: tgUser.id.toString(),
-              first_name: tgUser.first_name,
-              last_name: tgUser.last_name,
-            }
-            setUser(userData)
-            // Сохраняем в localStorage для надежности
-            localStorage.setItem("telegram_user", JSON.stringify({
-              ...userData,
-              username: tgUser.username,
-              photo_url: tgUser.photo_url,
-            }))
-            return
-          }
-        }
-        // Пробуем получить из localStorage (может быть сохранен родительским компонентом)
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            setUser({
-              id: parsed.id?.toString(),
-              first_name: parsed.first_name,
-              last_name: parsed.last_name,
-            })
-          } catch (e) {
-            console.error("Failed to parse user:", e)
-          }
-        }
-      }
-    }
-    
-    // Пробуем сразу
-    loadUser()
-    
-    // Если не получилось, пробуем еще раз через небольшую задержку
-    const timeoutId = setTimeout(() => {
-      if (!user) {
-        loadUser()
-      }
-    }, 100)
-    
-    return () => clearTimeout(timeoutId)
-  }, [])
-
-  useEffect(() => {
-    if (user?.id) {
+    // Загружаем чат только после получения user_id
+    if (!userLoading && userId) {
       loadChat()
+    } else if (!userLoading && !userId) {
+      // Если user_id не получен, показываем ошибку
+      if (userError) {
+        setError(userError)
+      } else {
+        setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
+      }
+      setLoading(false)
     }
-  }, [user])
+  }, [userId, userLoading, userError])
 
   useEffect(() => {
     // Прокрутка к последнему сообщению
@@ -94,60 +50,14 @@ export default function ChatPage() {
   }, [messages])
 
   const loadChat = async () => {
-    // Получаем user_id из разных источников
-    let userId: string | null = null
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:71',message:'loadChat entry',data:{hasUser:!!user,userFromState:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
-    if (user?.id) {
-      userId = user.id.toString()
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:76',message:'userId from state',data:{userId,source:'user.id'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-    } else if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg?.initDataUnsafe?.user?.id) {
-        userId = tg.initDataUnsafe.user.id.toString()
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:81',message:'userId from Telegram WebApp',data:{userId,source:'tg.initDataUnsafe.user.id',tgUserExists:!!tg.initDataUnsafe?.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-        // Сохраняем user для будущего использования
-        if (!user) {
-          setUser({
-            id: userId,
-            first_name: tg.initDataUnsafe.user.first_name,
-            last_name: tg.initDataUnsafe.user.last_name,
-          })
-        }
-      } else {
-        // Пробуем получить из localStorage
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            userId = parsed.id?.toString() || null
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:96',message:'userId from localStorage',data:{userId,source:'localStorage'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-            // #endregion
-          } catch (e) {
-            console.error("[Chat] Error parsing saved user:", e)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:99',message:'Error parsing localStorage user',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-            // #endregion
-          }
-        } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:103',message:'No userId found',data:{userId:null,hasUser:!!user,hasTg:!!tg,hasSavedUser:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-          // #endregion
-        }
-      }
+    // Ждем, пока user_id будет получен
+    if (userLoading) {
+      console.log("[Chat] Ожидание user_id...")
+      return
     }
     
     if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
       console.error("[Chat] ❌ User ID не найден или невалиден:", userId)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:107',message:'Invalid userId - returning early',data:{userId,isDemo:userId==='demo',isUndefined:userId==='undefined',isNull:userId==='null'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
       const errorMessage = userId === "demo" 
         ? "Демо-режим не поддерживает чат. Откройте приложение через Telegram."
         : "Не удалось определить ID пользователя. Откройте приложение через Telegram."
@@ -155,141 +65,56 @@ export default function ChatPage() {
       setLoading(false)
       return
     }
-    
-    console.log(`[Chat] User ID: ${userId}`)
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:113',message:'userId validated - proceeding to API call',data:{userId,isValid:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
 
     try {
       setLoading(true)
       setError(null)
+      setErrorDetails(null)
 
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      // Загружаем историю сообщений
-      const messagesApiUrl = `${apiBaseUrl}/api/chat/messages?user_id=${userId}&limit=50`
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:121',message:'API request before fetch (messages)',data:{apiUrl:messagesApiUrl,userId,apiBaseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      const messagesResponse = await fetch(messagesApiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-      })
-
-      console.log(`[Chat] Messages API Response: status=${messagesResponse.status}, ok=${messagesResponse.ok}`)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:132',message:'Messages API response received',data:{status:messagesResponse.status,ok:messagesResponse.ok,statusText:messagesResponse.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
+      // Загружаем историю сообщений через единый API клиент
+      const messagesData = await apiGet<{ success?: boolean; messages?: ChatMessage[]; error?: string }>(
+        `/api/chat/messages`,
+        { user_id: parseInt(userId), limit: 50 },
+        { timeout: 15000 }
+      )
       
-      if (messagesResponse.ok) {
-        let messagesData
-        try {
-          const responseText = await messagesResponse.text()
-          console.log(`[Chat] Raw Messages Response:`, responseText)
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:136',message:'Raw messages response received',data:{responseLength:responseText.length,responsePreview:responseText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          messagesData = JSON.parse(responseText)
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:139',message:'Messages JSON parsed successfully',data:{hasSuccess:!!messagesData.success,hasMessages:!!messagesData.messages,messagesIsArray:Array.isArray(messagesData.messages),messagesCount:Array.isArray(messagesData.messages)?messagesData.messages.length:0,dataKeys:Object.keys(messagesData)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-        } catch (e) {
-          console.error(`[Chat] Ошибка парсинга JSON:`, e)
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:142',message:'Messages JSON parse error',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          throw new Error("Неверный формат ответа от сервера")
-        }
-        
-        console.log(`[Chat] Parsed Messages Data:`, messagesData)
-        
-        if (messagesData.success && Array.isArray(messagesData.messages)) {
-          console.log(`[Chat] ✅ Успешно загружено ${messagesData.messages.length} сообщений`)
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:150',message:'Messages extracted (format: success+messages)',data:{messagesCount:messagesData.messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          setMessages(messagesData.messages)
-          setError(null) // Очищаем ошибку при успехе
-        } else if (Array.isArray(messagesData.messages)) {
-          console.log(`[Chat] ✅ Загружено ${messagesData.messages.length} сообщений (без success поля)`)
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:154',message:'Messages extracted (format: messages)',data:{messagesCount:messagesData.messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          setMessages(messagesData.messages)
-          setError(null) // Очищаем ошибку при успехе
-        } else if (messagesData.error) {
-          console.error(`[Chat] ❌ API вернул ошибку:`, messagesData.error)
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:158',message:'API returned error in messagesData',data:{error:messagesData.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          throw new Error(messagesData.error || "Ошибка загрузки сообщений")
-        } else {
-          console.warn(`[Chat] ⚠️ Неожиданный формат данных:`, messagesData)
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:162',message:'Unexpected messagesData format',data:{dataKeys:Object.keys(messagesData)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          setMessages([])
-          setError(null) // Очищаем ошибку
-          setErrorDetails(null) // Очищаем детали ошибки
-        }
-        
-        // Если истории нет, загружаем приветственное сообщение
-        if (!messagesData.messages || messagesData.messages.length === 0) {
-          await loadGreeting(userId)
-        }
-        
-        setLoading(false) // Убеждаемся, что loading выключен после успешной загрузки
+      if (messagesData.success && Array.isArray(messagesData.messages)) {
+        setMessages(messagesData.messages)
+      } else if (Array.isArray(messagesData.messages)) {
+        setMessages(messagesData.messages)
+      } else if (messagesData.error) {
+        throw new Error(messagesData.error)
       } else {
-        let errorText = ""
-        try {
-          errorText = await messagesResponse.text()
-        } catch (e) {
-          errorText = messagesResponse.statusText
-        }
-        console.error(`[Chat] Messages API Error: ${messagesResponse.status} ${messagesResponse.statusText}`, errorText)
-        if (messagesResponse.status === 404) {
-          setError("API endpoint не найден. Сервер не обновлен.")
-        } else {
-          setError(`Ошибка загрузки сообщений: ${messagesResponse.status}`)
-        }
-        // Если ошибка загрузки истории, пробуем загрузить приветствие
+        setMessages([])
+      }
+      
+      setError(null)
+      setErrorDetails(null)
+      
+      // Если истории нет, загружаем приветственное сообщение
+      if (!messagesData.messages || messagesData.messages.length === 0) {
         await loadGreeting(userId)
       }
+      
+      setLoading(false)
     } catch (e: any) {
       console.error("Ошибка загрузки чата:", e)
       
-      let errorMessage = "Не удалось загрузить чат"
-      
-      // Проверяем, является ли это ошибкой Mixed Content Policy
-      if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
-        if (typeof window !== "undefined" && window.location.protocol === "https:") {
-          errorMessage = "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к чату."
-        } else {
-          errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету."
-        }
-      } else if (e.message) {
-        if (e.message.includes("Invalid user_id") || e.message.includes("user_id required")) {
-          errorMessage = "Не удалось определить ID пользователя. Откройте приложение через Telegram."
-        } else if (e.message.includes("demo")) {
-          errorMessage = "Демо-режим не поддерживает чат. Откройте приложение через Telegram."
-        } else {
-          errorMessage = e.message
-        }
-      }
+      const errorMessage = e.type 
+        ? formatApiError(e)
+        : (e.message || "Не удалось загрузить чат")
       
       setError(errorMessage)
+      setErrorDetails({
+        code: String(e.status || e.type || "UNKNOWN"),
+        message: e.message || errorMessage,
+        context: "Загрузка чата",
+      })
       
-      // Пробуем загрузить приветствие даже при ошибке (только если user_id валиден)
+      // Пробуем загрузить приветствие даже при ошибке
       if (userId && userId !== "demo" && userId !== "undefined" && userId !== "null") {
         await loadGreeting(userId)
       }
-    } finally {
       setLoading(false)
     }
   }
@@ -297,90 +122,34 @@ export default function ChatPage() {
   const loadGreeting = async (currentUserId?: string | null) => {
     if (greetingLoaded) return
 
-    // Получаем user_id из разных источников
-    let userId: string | null = currentUserId || null
-    
-    if (user?.id) {
-      userId = user.id.toString()
-    } else if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg?.initDataUnsafe?.user?.id) {
-        userId = tg.initDataUnsafe.user.id.toString()
-      } else {
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            userId = parsed.id?.toString() || null
-          } catch (e) {
-            console.error("[Chat] Error parsing saved user:", e)
-          }
-        }
-      }
-    }
-    
-    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
-      console.error("[Chat] ❌ User ID не найден для приветствия:", userId)
+    const userIdToUse = currentUserId || userId
+    if (!userIdToUse || userIdToUse === "demo" || userIdToUse === "undefined" || userIdToUse === "null") {
+      console.error("[Chat] ❌ User ID не найден для приветствия:", userIdToUse)
       return
     }
 
     try {
       setGreetingLoaded(true)
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      const response = await fetch(`${apiBaseUrl}/api/chat/greeting?user_id=${userId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-      })
-
-      console.log(`[Chat] Greeting API Response: status=${response.status}, ok=${response.ok}`)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:245',message:'loadGreeting API response received',data:{status:response.status,ok:response.ok,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
       
-      if (response.ok) {
-        const data = await response.json()
-        console.log(`[Chat] Greeting API Data:`, data)
-          if (data.success && data.greeting) {
-            // Добавляем приветственное сообщение в список
-            const greetingMsg: ChatMessage = {
-              id: Date.now(),
-              role: "assistant",
-              content: data.greeting,
-              created_at: new Date().toISOString(),
-            }
-            setMessages((prev) => prev.length === 0 ? [greetingMsg] : prev)
-          } else if (data.greeting) {
-            // Добавляем приветственное сообщение в список
-            const greetingMsg: ChatMessage = {
-              id: Date.now(),
-              role: "assistant",
-              content: data.greeting,
-              created_at: new Date().toISOString(),
-            }
-            setMessages((prev) => prev.length === 0 ? [greetingMsg] : prev)
-          }
-      } else {
-        const errorText = await response.text()
-        console.error(`[Chat] Greeting API Error: ${response.status} ${response.statusText}`, errorText)
-        if (response.status === 404) {
-          setError("API endpoint не найден. Сервер не обновлен.")
+      const result = await apiGet<{ success?: boolean; greeting?: string; error?: string }>(
+        `/api/chat/greeting`,
+        { user_id: parseInt(userIdToUse) },
+        { timeout: 15000 }
+      )
+      
+      if (result.success && result.greeting) {
+        const greetingMsg: ChatMessage = {
+          id: Date.now(),
+          role: "assistant",
+          content: result.greeting,
+          created_at: new Date().toISOString(),
         }
+        setMessages((prev) => prev.length === 0 ? [greetingMsg] : prev)
+      } else if (result.error) {
+        console.error(`[Chat] Greeting API Error:`, result.error)
       }
     } catch (e: any) {
       console.error("Ошибка загрузки приветствия:", e)
-      
-      // Проверяем, является ли это ошибкой Mixed Content Policy
-      if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
-        if (typeof window !== "undefined" && window.location.protocol === "https:") {
-          setError("Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к чату.")
-        }
-      }
       // Если не удалось загрузить приветствие, добавляем базовое
       const fallbackGreeting: ChatMessage = {
         id: Date.now(),
@@ -393,35 +162,7 @@ export default function ChatPage() {
   }
 
   const sendMessage = async () => {
-    if (!inputMessage.trim() || sending) return
-
-    // Получаем user_id из разных источников
-    let userId: string | null = null
-    
-    if (user?.id) {
-      userId = user.id.toString()
-    } else if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg?.initDataUnsafe?.user?.id) {
-        userId = tg.initDataUnsafe.user.id.toString()
-      } else {
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            userId = parsed.id?.toString() || null
-          } catch (e) {
-            console.error("[Chat] Error parsing saved user:", e)
-          }
-        }
-      }
-    }
-    
-    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
-      console.error("[Chat] ❌ User ID не найден или невалиден:", userId)
-      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
-      return
-    }
+    if (!inputMessage.trim() || sending || !userId) return
 
     const userMessage: ChatMessage = {
       id: Date.now(),
@@ -436,75 +177,42 @@ export default function ChatPage() {
     setInputMessage("")
     setSending(true)
     setError(null)
+    setErrorDetails(null)
 
     try {
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      const response = await fetch(`${apiBaseUrl}/api/chat/send`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-        body: JSON.stringify({
+      const result = await apiPost<{ success?: boolean; message?: string; error?: string }>(
+        `/api/chat/send`,
+        {
           user_id: parseInt(userId),
           message: messageText,
-        }),
-      })
+        },
+        { timeout: 30000 }
+      )
 
-      if (!response.ok) {
-        let errorText = ""
-        try {
-          const errorData = await response.json()
-          errorText = errorData.error || response.statusText
-        } catch (e) {
-          errorText = await response.text().catch(() => response.statusText)
-        }
-        throw new Error(errorText || "Ошибка отправки сообщения")
-      }
-
-      let data
-      try {
-        const responseText = await response.text()
-        console.log(`[Chat] Raw Send Response:`, responseText)
-        data = JSON.parse(responseText)
-      } catch (e) {
-        console.error(`[Chat] Ошибка парсинга JSON:`, e)
-        throw new Error("Неверный формат ответа от сервера")
-      }
-      
-      console.log(`[Chat] Parsed Send Data:`, data)
-      
-      if (data.success && data.message) {
-        console.log(`[Chat] ✅ Получен ответ от AI`)
+      if (result.success && result.message) {
         const assistantMessage: ChatMessage = {
           id: Date.now() + 1,
           role: "assistant",
-          content: data.message,
+          content: result.message,
           created_at: new Date().toISOString(),
         }
         setMessages((prev) => [...prev, assistantMessage])
-      } else if (data.message) {
-        console.log(`[Chat] ✅ Получен ответ от AI (без success поля)`)
-        const assistantMessage: ChatMessage = {
-          id: Date.now() + 1,
-          role: "assistant",
-          content: data.message,
-          created_at: new Date().toISOString(),
-        }
-        setMessages((prev) => [...prev, assistantMessage])
-      } else if (data.error) {
-        console.error(`[Chat] ❌ API вернул ошибку:`, data.error)
-        throw new Error(data.error || "Ошибка отправки сообщения")
-      } else {
-        console.warn(`[Chat] ⚠️ Неожиданный формат ответа:`, data)
-        throw new Error("Неожиданный формат ответа от сервера")
+        setError(null)
+        setErrorDetails(null)
+      } else if (result.error) {
+        throw new Error(result.error)
       }
     } catch (e: any) {
       console.error("Ошибка отправки сообщения:", e)
-      setError(e.message || "Не удалось отправить сообщение")
+      const errorMessage = e.type 
+        ? formatApiError(e)
+        : (e.message || "Не удалось отправить сообщение")
+      setError(errorMessage)
+      setErrorDetails({
+        code: String(e.status || e.type || "UNKNOWN"),
+        message: e.message || errorMessage,
+        context: "Отправка сообщения",
+      })
     } finally {
       setSending(false)
     }

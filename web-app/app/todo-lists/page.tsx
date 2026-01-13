@@ -6,7 +6,8 @@ import { ArrowLeft, Plus, ListTodo, CheckSquare2, Square, Trash2, Loader2 } from
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
-import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../lib/error-utils"
+import { apiGet, apiPost, formatApiError, type ApiError } from "../../lib/apiClient"
+import { useTelegramUser } from "../../lib/useTelegramUser"
 
 interface TodoList {
   id: number
@@ -27,351 +28,122 @@ interface TodoItem {
 
 export default function TodoListsPage() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const { user, userId, isLoading: userLoading, error: userError } = useTelegramUser()
   const [lists, setLists] = useState<TodoList[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newListTitle, setNewListTitle] = useState("")
   const [creating, setCreating] = useState(false)
 
   useEffect(() => {
-    // Загружаем данные пользователя
-    // Ждем немного, чтобы убедиться, что родительский компонент сохранил пользователя
-    const loadUser = () => {
-      if (typeof window !== "undefined") {
-        const tg = (window as any).Telegram?.WebApp
-        if (tg) {
-          tg.ready()
-          const tgUser = tg.initDataUnsafe?.user
-          if (tgUser) {
-            const userData = {
-              id: tgUser.id.toString(),
-              first_name: tgUser.first_name,
-              last_name: tgUser.last_name,
-            }
-            setUser(userData)
-            // Сохраняем в localStorage для надежности
-            localStorage.setItem("telegram_user", JSON.stringify({
-              ...userData,
-              username: tgUser.username,
-              photo_url: tgUser.photo_url,
-            }))
-            return
-          }
-        }
-        // Пробуем получить из localStorage (может быть сохранен родительским компонентом)
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            setUser({
-              id: parsed.id?.toString(),
-              first_name: parsed.first_name,
-              last_name: parsed.last_name,
-            })
-          } catch (e) {
-            console.error("Failed to parse user:", e)
-          }
-        }
-      }
-    }
-    
-    // Пробуем сразу
-    loadUser()
-    
-    // Если не получилось, пробуем еще раз через небольшую задержку
-    const timeoutId = setTimeout(() => {
-      if (!user) {
-        loadUser()
-      }
-    }, 100)
-    
-    return () => clearTimeout(timeoutId)
-  }, [])
-
-  useEffect(() => {
-    if (user?.id) {
+    // Загружаем списки только после получения user_id
+    if (!userLoading && userId) {
       loadLists()
+    } else if (!userLoading && !userId) {
+      // Если user_id не получен, показываем ошибку
+      if (userError) {
+        setError(userError)
+      } else {
+        setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
+      }
+      setLoading(false)
     }
-  }, [user])
+  }, [userId, userLoading, userError])
 
   const loadLists = async () => {
-    // Получаем user_id из разных источников
-    let userId: string | null = null
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:75',message:'loadLists entry',data:{hasUser:!!user,userFromState:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    if (user?.id) {
-      userId = user.id.toString()
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:80',message:'userId from state',data:{userId,source:'user.id'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-    } else if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg?.initDataUnsafe?.user?.id) {
-        userId = tg.initDataUnsafe.user.id.toString()
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:85',message:'userId from Telegram WebApp',data:{userId,source:'tg.initDataUnsafe.user.id',tgUserExists:!!tg.initDataUnsafe?.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-        // Сохраняем user для будущего использования
-        if (!user) {
-          setUser({
-            id: userId,
-            first_name: tg.initDataUnsafe.user.first_name,
-            last_name: tg.initDataUnsafe.user.last_name,
-          })
-        }
-      } else {
-        // Пробуем получить из localStorage
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            userId = parsed.id?.toString() || null
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:100',message:'userId from localStorage',data:{userId,source:'localStorage'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
-          } catch (e) {
-            console.error("[TodoLists] Error parsing saved user:", e)
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:103',message:'Error parsing localStorage user',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
-          }
-        } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:107',message:'No userId found',data:{userId:null,hasUser:!!user,hasTg:!!tg,hasSavedUser:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
-        }
-      }
+    // Ждем, пока user_id будет получен
+    if (userLoading) {
+      console.log("[TodoLists] Ожидание user_id...")
+      return
     }
     
     if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
       console.error("[TodoLists] ❌ User ID не найден или невалиден:", userId)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:111',message:'Invalid userId - returning early',data:{userId,isDemo:userId==='demo',isUndefined:userId==='undefined',isNull:userId==='null'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      const errorMessage = userId === "demo" 
-        ? "Демо-режим не поддерживает загрузку списков задач. Откройте приложение через Telegram."
-        : "Не удалось определить ID пользователя. Откройте приложение через Telegram."
-      setError(errorMessage)
+      if (userError) {
+        setError(userError)
+      } else {
+        const errorMessage = userId === "demo" 
+          ? "Демо-режим не поддерживает загрузку списков задач. Откройте приложение через Telegram."
+          : "Не удалось определить ID пользователя. Откройте приложение через Telegram."
+        setError(errorMessage)
+      }
       setLoading(false)
       return
     }
     
-    console.log(`[TodoLists] User ID: ${userId}`)
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:118',message:'userId validated - proceeding to API call',data:{userId,isValid:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-
     try {
       setLoading(true)
       setError(null)
 
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      const apiUrl = `${apiBaseUrl}/api/todo-lists?user_id=${userId}`
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:124',message:'API request before fetch',data:{apiUrl,userId,apiBaseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-      })
-
-      console.log(`[TodoLists] API Response: status=${response.status}, ok=${response.ok}`)
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:135',message:'API response received',data:{status:response.status,ok:response.ok,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
+      const data = await apiGet<{ success?: boolean; lists?: TodoList[]; error?: string }>(
+        `/api/todo-lists`,
+        { user_id: parseInt(userId) },
+        { timeout: 15000 }
+      )
       
-      if (!response.ok) {
-        let errorText = ""
-        try {
-          errorText = await response.text()
-        } catch (e) {
-          errorText = response.statusText
-        }
-        console.error(`[TodoLists] API Error: ${response.status} ${response.statusText}`, errorText)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:143',message:'API error response',data:{status:response.status,statusText:response.statusText,errorText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        if (response.status === 404) {
-          throw new Error("API endpoint не найден. Сервер не обновлен.")
-        }
-        throw new Error(`Ошибка загрузки списков: ${response.status} ${response.statusText}`)
-      }
-
-      let data
-      try {
-        const responseText = await response.text()
-        console.log(`[TodoLists] Raw API Response:`, responseText)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:153',message:'Raw API response received',data:{responseLength:responseText.length,responsePreview:responseText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        data = JSON.parse(responseText)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:156',message:'JSON parsed successfully',data:{hasSuccess:!!data.success,hasLists:!!data.lists,listsIsArray:Array.isArray(data.lists),listsCount:Array.isArray(data.lists)?data.lists.length:0,dataKeys:Object.keys(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-      } catch (e) {
-        console.error(`[TodoLists] Ошибка парсинга JSON:`, e)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:160',message:'JSON parse error',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        throw new Error("Неверный формат ответа от сервера")
-      }
-      
-      console.log(`[TodoLists] Parsed API Data:`, data)
-      
+      // Обрабатываем разные форматы ответа
+      let listsArray: TodoList[] = []
       if (data.success && Array.isArray(data.lists)) {
-        console.log(`[TodoLists] ✅ Успешно загружено ${data.lists.length} списков`)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:168',message:'Lists extracted (format: success+lists)',data:{listsCount:data.lists.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        setLists(data.lists)
-        setError(null) // Очищаем ошибку при успехе
-        setErrorDetails(null) // Очищаем детали ошибки
-        setLoading(false) // Убеждаемся, что loading выключен
+        listsArray = data.lists
       } else if (Array.isArray(data.lists)) {
-        console.log(`[TodoLists] ✅ Загружено ${data.lists.length} списков (без success поля)`)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:172',message:'Lists extracted (format: lists)',data:{listsCount:data.lists.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        setLists(data.lists)
-        setError(null) // Очищаем ошибку при успехе
-        setErrorDetails(null) // Очищаем детали ошибки
-        setLoading(false) // Убеждаемся, что loading выключен
+        listsArray = data.lists
       } else if (data.error) {
-        console.error(`[TodoLists] ❌ API вернул ошибку:`, data.error)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:176',message:'API returned error in data',data:{error:data.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        throw new Error(data.error || "Ошибка загрузки списков")
-      } else {
-        console.warn(`[TodoLists] ⚠️ Неожиданный формат данных:`, data)
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:180',message:'Unexpected data format',data:{dataKeys:Object.keys(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        setLists([])
-        setError(null) // Очищаем ошибку
-        setErrorDetails(null) // Очищаем детали ошибки
-        setLoading(false) // Убеждаемся, что loading выключен
+        throw new Error(data.error)
       }
+      
+      console.log(`[TodoLists] ✅ Загружено ${listsArray.length} списков`)
+      setLists(listsArray)
+      setError(null)
+      setLoading(false)
+      
     } catch (e: any) {
       console.error("[TodoLists] Ошибка загрузки списков:", e)
       
-      let errorMessage = "Не удалось загрузить списки задач"
-      
-      // Проверяем, является ли это ошибкой Mixed Content Policy
-      if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
-        if (typeof window !== "undefined" && window.location.protocol === "https:") {
-          errorMessage = "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к спискам задач."
-        } else {
-          errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету."
-        }
-      } else if (e.message) {
-        if (e.message.includes("Invalid user_id") || e.message.includes("user_id required")) {
-          errorMessage = "Не удалось определить ID пользователя. Откройте приложение через Telegram."
-        } else if (e.message.includes("demo")) {
-          errorMessage = "Демо-режим не поддерживает загрузку списков задач. Откройте приложение через Telegram."
-        } else {
-          errorMessage = e.message
-        }
-      }
+      // Показываем конкретную ошибку
+      const errorMessage = e.type 
+        ? formatApiError(e)
+        : (e.message || "Не удалось загрузить списки задач")
       
       setError(errorMessage)
-    } finally {
       setLoading(false)
     }
   }
 
   const createList = async () => {
-    if (!newListTitle.trim()) return
-
-    // Получаем user_id из разных источников
-    let userId: string | null = null
-    
-    if (user?.id) {
-      userId = user.id.toString()
-    } else if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg?.initDataUnsafe?.user?.id) {
-        userId = tg.initDataUnsafe.user.id.toString()
-      } else {
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            userId = parsed.id?.toString() || null
-          } catch (e) {
-            console.error("[TodoLists] Error parsing saved user:", e)
-          }
-        }
-      }
-    }
-    
-    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
-      console.error("[TodoLists] ❌ User ID не найден или невалиден:", userId)
-      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
-      return
-    }
+    if (!newListTitle.trim() || !userId) return
 
     try {
       setCreating(true)
       setError(null)
 
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      const response = await fetch(`${apiBaseUrl}/api/todo-lists`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-        body: JSON.stringify({
+      const result = await apiPost<{ success?: boolean; list?: TodoList; error?: string }>(
+        `/api/todo-lists`,
+        {
           user_id: parseInt(userId),
           title: newListTitle.trim(),
-        }),
-      })
+        },
+        { timeout: 15000 }
+      )
 
-      if (!response.ok) {
-        let errorText = ""
-        try {
-          const responseText = await response.text()
-          console.error(`[TodoLists] Create Error Response:`, responseText)
-          const errorData = JSON.parse(responseText)
-          errorText = errorData.error || response.statusText
-        } catch (e) {
-          errorText = response.statusText || "Ошибка создания списка"
-        }
-        throw new Error(errorText || "Ошибка создания списка")
+      if (result.success && result.list) {
+        setNewListTitle("")
+        setShowCreateForm(false)
+        await loadLists()
+      } else if (result.error) {
+        setError(result.error)
+      } else {
+        // Если нет ошибки, но и нет success, все равно обновляем список
+        setNewListTitle("")
+        setShowCreateForm(false)
+        await loadLists()
       }
-
-      let result
-      try {
-        const responseText = await response.text()
-        console.log(`[TodoLists] Create Success Response:`, responseText)
-        result = JSON.parse(responseText)
-      } catch (e) {
-        console.error(`[TodoLists] Ошибка парсинга ответа создания:`, e)
-        throw new Error("Неверный формат ответа от сервера")
-      }
-      
-      console.log(`[TodoLists] ✅ Список создан:`, result)
-      
-      setNewListTitle("")
-      setShowCreateForm(false)
-      await loadLists()
     } catch (e: any) {
       console.error("Ошибка создания списка:", e)
-      setError(e.message || "Не удалось создать список")
+      const errorMessage = e.type 
+        ? formatApiError(e)
+        : (e.message || "Не удалось создать список")
+      setError(errorMessage)
     } finally {
       setCreating(false)
     }

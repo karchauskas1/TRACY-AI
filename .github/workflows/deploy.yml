@@ -55,7 +55,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           NODE_ENV: production
           NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME }}
-          NEXT_PUBLIC_API_URL: http://5.35.126.42
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         run: npm run build
       
       - name: Setup Pages

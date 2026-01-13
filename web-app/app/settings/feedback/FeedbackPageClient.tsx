@@ -6,6 +6,7 @@ import { ArrowLeft, X, MessageSquare, Bug, Lightbulb, Image as ImageIcon, Loader
 import { Card, CardContent } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
 import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../../lib/error-utils"
+import { apiGet, formatApiError, type ApiError } from "../../../lib/apiClient"
 
 interface FeedbackItem {
   id: string
@@ -148,134 +149,47 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
       setLoading(true)
       setError(null)
 
-      // ПРИОРИТЕТ 1: Прямой HTTP API запрос (работает для localhost и если нет Mixed Content блокировки)
-      let apiBaseUrl = "https://api.pasekaproduction.ru"
+      // Используем единый API клиент
+      const data = await apiGet<{ success?: boolean; feedback?: FeedbackItem[]; error?: string }>(
+        `/api/feedback`,
+        { user_id: parseInt(userId), limit: 100 },
+        { timeout: 15000 }
+      )
       
-      if (typeof window !== "undefined") {
-        if (window.location.hostname === "localhost") {
-          apiBaseUrl = "http://localhost:8080"
-        } else {
-          // Для GitHub Pages используем серверный API
-          apiBaseUrl = "https://api.pasekaproduction.ru"
-        }
+      if (data.success && Array.isArray(data.feedback)) {
+        console.log(`[Feedback] ✅ Успешно загружено ${data.feedback.length} записей`)
+        setFeedback(data.feedback)
+        setError(null)
+        setErrorDetails(null)
+      } else if (Array.isArray(data.feedback)) {
+        console.log(`[Feedback] ✅ Загружено ${data.feedback.length} записей (без success поля)`)
+        setFeedback(data.feedback)
+        setError(null)
+        setErrorDetails(null)
+      } else if (data.error) {
+        console.error(`[Feedback] ❌ API вернул ошибку:`, data.error)
+        throw new Error(data.error || "Ошибка загрузки обратной связи")
+      } else {
+        console.warn(`[Feedback] ⚠️ Неожиданный формат данных:`, data)
+        setFeedback([])
+        setError(null)
+        setErrorDetails(null)
       }
-
-      console.log(`[Feedback] Запрос к API: ${apiBaseUrl}/api/feedback?user_id=${userId}&limit=100`)
       
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/feedback?user_id=${userId}&limit=100`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          mode: "cors",
-        })
-
-        console.log(`[Feedback] Ответ API: status=${response.status}, ok=${response.ok}`)
-
-        if (response.ok) {
-          let data
-          try {
-            const responseText = await response.text()
-            console.log(`[Feedback] Raw API Response:`, responseText.substring(0, 500))
-            data = JSON.parse(responseText)
-          } catch (e) {
-            console.error(`[Feedback] Ошибка парсинга JSON:`, e)
-            throw new Error("Неверный формат ответа от сервера")
-          }
-          
-          console.log(`[Feedback] Parsed API Data:`, data)
-          
-          if (data.success && Array.isArray(data.feedback)) {
-            console.log(`[Feedback] ✅ Успешно загружено ${data.feedback.length} записей`)
-            setFeedback(data.feedback)
-            setError(null) // Очищаем ошибку при успехе
-          } else if (Array.isArray(data.feedback)) {
-            console.log(`[Feedback] ✅ Загружено ${data.feedback.length} записей (без success поля)`)
-            setFeedback(data.feedback)
-            setError(null) // Очищаем ошибку при успехе
-          } else if (data.error) {
-            console.error(`[Feedback] ❌ API вернул ошибку:`, data.error)
-            throw new Error(data.error || "Ошибка загрузки обратной связи")
-          } else {
-            console.warn(`[Feedback] ⚠️ Неожиданный формат данных:`, data)
-            setFeedback([])
-            setError(null) // Очищаем ошибку
-          }
-          
-          setLoading(false)
-          return
-        } else {
-          let errorMessage = "Ошибка загрузки обратной связи"
-          
-          if (response.status === 403) {
-            errorMessage = "Доступ запрещен. Только супер-пользователь может просматривать обратную связь."
-          } else if (response.status === 400) {
-            let errorData
-            try {
-              const responseText = await response.text()
-              errorData = JSON.parse(responseText)
-              if (errorData.error && errorData.error.includes("Invalid user_id")) {
-                errorMessage = "Не удалось определить ID пользователя. Откройте приложение через Telegram."
-              } else {
-                errorMessage = errorData.error || "Неверный запрос. Проверьте параметры."
-              }
-            } catch {
-              errorMessage = "Неверный запрос. Проверьте параметры."
-            }
-          } else if (response.status === 500) {
-            errorMessage = "Ошибка сервера. Попробуйте позже."
-          } else {
-            try {
-              const responseText = await response.text()
-              const errorData = JSON.parse(responseText)
-              errorMessage = errorData.error || `Ошибка ${response.status}: ${response.statusText}`
-            } catch {
-              errorMessage = `Ошибка ${response.status}: ${response.statusText}`
-            }
-          }
-          
-          console.error(`[Feedback] Ошибка API: ${errorMessage}`)
-          setError(errorMessage)
-          setLoading(false)
-          return
-        }
-      } catch (fetchError: any) {
-        // Если HTTP запрос не удался (Mixed Content или сеть)
-        console.warn(`[Feedback] HTTP запрос не удался:`, fetchError)
-        
-        // Проверяем тип ошибки
-        let errorMessage = "Ошибка загрузки обратной связи"
-        
-        if (fetchError instanceof TypeError && fetchError.message.includes("Failed to fetch")) {
-          // Mixed Content Policy или проблемы с сетью
-          if (window.location.protocol === "https:") {
-            errorMessage = "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к обратной связи или проверьте подключение к интернету."
-          } else {
-            errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету или попробуйте позже."
-          }
-        } else if (fetchError.message) {
-          errorMessage = fetchError.message
-        }
-        
-        console.error(`[Feedback] Установлена ошибка: ${errorMessage}`)
-        setError(errorMessage)
-        setLoading(false)
-      }
+      setLoading(false)
     } catch (e: any) {
-      console.error(`[Feedback] Исключение при загрузке:`, e)
+      console.error(`[Feedback] Ошибка загрузки:`, e)
       
-      // Проверяем тип ошибки
-      let errorMessage = "Ошибка загрузки обратной связи"
+      const errorMessage = e.type 
+        ? formatApiError(e)
+        : (e.message || "Не удалось загрузить обратную связь")
       
-      if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
-        errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету или попробуйте позже."
-      } else if (e.message) {
-        errorMessage = e.message
-      }
-      
-      console.error(`[Feedback] Установлена ошибка: ${errorMessage}`)
       setError(errorMessage)
+      setErrorDetails({
+        code: String(e.status || e.type || "UNKNOWN"),
+        message: e.message || errorMessage,
+        context: "Загрузка обратной связи",
+      })
       setLoading(false)
     }
   }
