@@ -146,7 +146,10 @@ export default function ChatPage() {
       // #region agent log
       fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:107',message:'Invalid userId - returning early',data:{userId,isDemo:userId==='demo',isUndefined:userId==='undefined',isNull:userId==='null'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
       // #endregion
-      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
+      const errorMessage = userId === "demo" 
+        ? "Демо-режим не поддерживает чат. Откройте приложение через Telegram."
+        : "Не удалось определить ID пользователя. Откройте приложение через Telegram."
+      setError(errorMessage)
       setLoading(false)
       return
     }
@@ -253,20 +256,31 @@ export default function ChatPage() {
     } catch (e: any) {
       console.error("Ошибка загрузки чата:", e)
       
+      let errorMessage = "Не удалось загрузить чат"
+      
       // Проверяем, является ли это ошибкой Mixed Content Policy
       if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
         if (typeof window !== "undefined" && window.location.protocol === "https:") {
-          setError("Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к чату.")
+          errorMessage = "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к чату."
         } else {
-          setError("Не удалось подключиться к серверу. Проверьте подключение к интернету.")
+          errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету."
         }
-      } else if (e.message && (e.message.includes("Invalid user_id") || e.message.includes("user_id required"))) {
-        setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
-      } else {
-        setError(e.message || "Не удалось загрузить чат")
+      } else if (e.message) {
+        if (e.message.includes("Invalid user_id") || e.message.includes("user_id required")) {
+          errorMessage = "Не удалось определить ID пользователя. Откройте приложение через Telegram."
+        } else if (e.message.includes("demo")) {
+          errorMessage = "Демо-режим не поддерживает чат. Откройте приложение через Telegram."
+        } else {
+          errorMessage = e.message
+        }
       }
-      // Пробуем загрузить приветствие даже при ошибке
-      await loadGreeting(userId)
+      
+      setError(errorMessage)
+      
+      // Пробуем загрузить приветствие даже при ошибке (только если user_id валиден)
+      if (userId && userId !== "demo" && userId !== "undefined" && userId !== "null") {
+        await loadGreeting(userId)
+      }
     } finally {
       setLoading(false)
     }

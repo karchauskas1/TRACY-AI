@@ -150,7 +150,10 @@ export default function TodoListsPage() {
       // #region agent log
       fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:111',message:'Invalid userId - returning early',data:{userId,isDemo:userId==='demo',isUndefined:userId==='undefined',isNull:userId==='null'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
-      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
+      const errorMessage = userId === "demo" 
+        ? "Демо-режим не поддерживает загрузку списков задач. Откройте приложение через Telegram."
+        : "Не удалось определить ID пользователя. Откройте приложение через Telegram."
+      setError(errorMessage)
       setLoading(false)
       return
     }
