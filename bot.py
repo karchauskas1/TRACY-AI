@@ -166,32 +166,30 @@ async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     message_text = (
         "🌐 Веб-приложение TRACY\n\n"
-        "Веб-интерфейс доступен по адресу:\n"
-        f"`{web_url}`\n\n"
-        "В веб-приложении ты можешь:\n"
-        "• Просматривать календарь\n"
-        "• Создавать и редактировать события\n"
-        "• Обрабатывать встречи и создавать резюме\n"
-        "• Настраивать календари\n\n"
-        "Открой этот адрес в браузере для доступа к веб-интерфейсу."
+        "Откройте веб-приложение в браузере для полного доступа ко всем функциям:\n"
+        "• 💬 Чат с AI-ассистентом\n"
+        "• 📅 Календарь событий\n"
+        "• 📝 История встреч\n"
+        "• ✅ Списки задач\n"
+        "• ⚙️ Настройки\n\n"
+        "⚠️ *Важно:* Для корректной работы откройте приложение в браузере (Safari, Chrome), "
+        "а не во встроенном просмотре Telegram.\n\n"
+        f"🔗 Ссылка: `{web_url}`"
     )
     
-    # Пробуем создать Telegram Web App кнопку только для валидных HTTPS URL (не localhost)
+    # Используем обычную URL кнопку вместо WebApp для обхода ограничений Telegram WebView
     if "localhost" not in web_url.lower() and web_url.startswith("https://"):
-        try:
-            keyboard = [[InlineKeyboardButton(
-                "🌐 Открыть веб-приложение",
-                web_app=WebAppInfo(url=web_url)
-            )]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(
-                message_text,
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
-            )
-            return
-        except Exception as e:
-            logger.warning(f"Не удалось создать кнопку для веб-приложения: {e}")
+        keyboard = [[InlineKeyboardButton(
+            "🌐 Открыть в браузере",
+            url=web_url  # Обычная ссылка - откроется в браузере
+        )]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            message_text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
     
     # Для localhost или если кнопка не получилась - отправляем просто текст
     await update.message.reply_text(message_text, parse_mode="Markdown")
@@ -3674,18 +3672,8 @@ def main():
                 logger.error("reminder_scheduler не инициализирован для проверки напоминаний")
             logger.info("✅ Первая проверка напоминаний завершена")
             
-            # Устанавливаем Menu Button для веб-приложения (глобально для всех чатов)
-            web_url = os.getenv("WEB_APP_URL")
-            if web_url and "localhost" not in web_url.lower() and web_url.startswith("https://"):
-                try:
-                    menu_button = MenuButtonWebApp(text="TRACY", web_app=WebAppInfo(url=web_url))
-                    # Устанавливаем глобально (chat_id=None означает глобальная настройка)
-                    await app.bot.set_chat_menu_button(chat_id=None, menu_button=menu_button)
-                    logger.info(f"✅ Menu Button установлен: {web_url}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Не удалось установить Menu Button: {e}")
-            else:
-                logger.info("⚠️ WEB_APP_URL не настроен или не HTTPS, Menu Button не установлен")
+            # Menu Button не устанавливаем - используем обычные ссылки для обхода ограничений Telegram WebView
+            logger.info("ℹ️ Menu Button не устанавливается - используем обычные URL для веб-приложения")
             
             # Устанавливаем команды бота (для меню команд)
             try:
