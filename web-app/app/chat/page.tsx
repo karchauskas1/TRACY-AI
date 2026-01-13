@@ -196,7 +196,34 @@ export default function ChatPage() {
   }
 
   const loadGreeting = async () => {
-    if (!user?.id || greetingLoaded) return
+    if (greetingLoaded) return
+
+    // Получаем user_id из разных источников
+    let userId: string | null = null
+    
+    if (user?.id) {
+      userId = user.id.toString()
+    } else if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg?.initDataUnsafe?.user?.id) {
+        userId = tg.initDataUnsafe.user.id.toString()
+      } else {
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser)
+            userId = parsed.id?.toString() || null
+          } catch (e) {
+            console.error("[Chat] Error parsing saved user:", e)
+          }
+        }
+      }
+    }
+    
+    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
+      console.error("[Chat] ❌ User ID не найден для приветствия:", userId)
+      return
+    }
 
     try {
       setGreetingLoaded(true)
