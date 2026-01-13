@@ -34,6 +34,7 @@ function shouldUseProxy(): boolean {
 interface RequestOptions extends RequestInit {
   timeout?: number
   skipErrorLog?: boolean
+  params?: Record<string, any>
 }
 
 export interface ApiError {
