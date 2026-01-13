@@ -18,6 +18,19 @@ function isTelegramMiniApp(): boolean {
   return !!(tg && tg.initData)
 }
 
+/**
+ * Проверяет, нужно ли использовать прокси
+ * На Vercel всегда используем встроенный /api/proxy для единообразия
+ */
+function shouldUseProxy(): boolean {
+  // На Vercel всегда используем прокси (проще и одинаково для всех)
+  if (typeof window !== 'undefined') {
+    // В продакшене (не localhost) всегда через прокси
+    return window.location.hostname !== 'localhost'
+  }
+  return false
+}
+
 interface RequestOptions extends RequestInit {
   timeout?: number
   skipErrorLog?: boolean
@@ -196,12 +209,71 @@ export function formatApiError(error: ApiError): string {
 
 /**
  * Основная функция для выполнения API запросов
+ * На Vercel (production) использует /api/proxy для обхода CORS
  */
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const startTime = Date.now()
+  
+  // На production (не localhost) используем Next.js proxy
+  const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  
+  if (!isLocalhost) {
+    // Production: используем /api/proxy
+    console.log('[apiClient] 🔄 Using Next.js /api/proxy')
+    
+    try {
+      const proxyResponse = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+        body: JSON.stringify({
+          path: endpoint,
+          method: options.method || 'GET',
+          params: options.params,
+          body: options.body ? JSON.parse(options.body as string) : undefined,
+        }),
+        signal: options.signal,
+      })
+      
+      if (!proxyResponse.ok) {
+        throw new Error(`HTTP ${proxyResponse.status}: ${proxyResponse.statusText}`)
+      }
+      
+      const result = await proxyResponse.json()
+      
+      // Логируем в debug
+      if (typeof window !== 'undefined' && (window as any).__API_DEBUG__) {
+        (window as any).__API_DEBUG__.log({
+          url: `/api/proxy -> ${endpoint}`,
+          status: proxyResponse.status,
+          elapsedMs: Date.now() - startTime,
+          type: 'SUCCESS',
+        })
+      }
+      
+      return result as T
+    } catch (error: any) {
+      // Логируем ошибку
+      if (typeof window !== 'undefined' && (window as any).__API_DEBUG__) {
+        (window as any).__API_DEBUG__.log({
+          url: `/api/proxy -> ${endpoint}`,
+          error: error.message,
+          elapsedMs: Date.now() - startTime,
+          status: 'ERROR',
+          type: 'NETWORK',
+        })
+      }
+      throw error
+    }
+  }
+  
+  // Localhost: прямой запрос к API
+  console.log('[apiClient] 🏠 Localhost - direct request')
   
   // Получаем base URL
   let baseUrl: string

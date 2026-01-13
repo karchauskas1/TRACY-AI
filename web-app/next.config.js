@@ -1,34 +1,47 @@
 /** @type {import('next').NextConfig} */
-const path = require('path')
-const isProd = process.env.NODE_ENV === 'production'
-// Репозиторий называется TRACY-AI на GitHub
-const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1] || 'TRACY-AI'
-
 const nextConfig = {
-  output: 'export',
-  basePath: isProd ? `/${repoName}` : '',
+  // SSG/CSR режим для Vercel - НЕ используем export
+  // output: 'export', // УДАЛЕНО - используем серверный режим
+  
+  // Корневые роуты - НЕТ basePath
+  // basePath: '/TRACY-AI', // УДАЛЕНО - домен будет корневым
+  
+  // Отключаем строгий режим для совместимости с Telegram SDK
+  reactStrictMode: false,
+  
+  // Оптимизации для production
+  swcMinify: true,
+  
+  // Разрешаем изображения с внешних доменов
   images: {
-    unoptimized: true,
+    domains: ['api.pasekaproduction.ru'],
+    unoptimized: false, // Включаем оптимизацию на Vercel
   },
-  trailingSlash: true,
+  
+  // Environment variables доступные на клиенте
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || (isProd ? 'https://api.pasekaproduction.ru' : 'http://localhost:8080'),
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
+    NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || '',
   },
-  webpack: (config) => {
-    // Явно настраиваем алиас для разрешения @/ путей
-    const rootPath = path.resolve(__dirname)
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@': rootPath,
-    }
-    // Также настраиваем modules для правильного разрешения
-    config.resolve.modules = [
-      ...(config.resolve.modules || []),
-      rootPath,
+  
+  // Headers для безопасности и CORS
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+        ],
+      },
     ]
-    return config
   },
 }
 
 module.exports = nextConfig
-

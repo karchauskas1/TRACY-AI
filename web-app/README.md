@@ -2,43 +2,47 @@
 
 Веб-приложение для управления календарем TRACY - минималистичный интерфейс в стиле Apple.
 
+**🚀 Деплой:** [Vercel](https://vercel.com) | **📱 Telegram Mini App** поддерживается
+
 ## Технологии
 
 - **Next.js 14** (App Router) + TypeScript
 - **TailwindCSS** + **shadcn/ui** компоненты
-- **Prisma** + PostgreSQL
-- **Telegram Login** для авторизации
+- **Vercel** для хостинга и API Proxy
+- **Telegram Mini App** нативная поддержка
 - **Google Calendar OAuth** интеграция
-- **iCloud Calendar CalDAV** интеграция
+- **iCloud Calendar CalDAV** интеграция  
 - **OpenAI** для обработки встреч
 
-## Установка
+## ⚡ Быстрый старт
 
-1. Установите зависимости:
+### Деплой на Vercel (Production)
+
+См. **[VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md)** для подробных инструкций по деплою.
+
+## Локальная разработка
+
+1. **Установите зависимости:**
 
 ```bash
 npm install
 ```
 
-2. Настройте переменные окружения:
-
-Скопируйте `.env.example` в `.env` и заполните необходимые значения:
+2. **Настройте переменные окружения:**
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-3. Настройте базу данных:
+Отредактируйте `.env.local`:
 
-```bash
-# Создайте миграцию
-npm run db:migrate
-
-# Или используйте push для разработки
-npm run db:push
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8080
+INTERNAL_API_BASE=http://localhost:8080
+NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=your_bot_dev
 ```
 
-4. Запустите приложение:
+3. **Запустите приложение:**
 
 ```bash
 npm run dev
@@ -46,87 +50,167 @@ npm run dev
 
 Приложение будет доступно по адресу [http://localhost:3000](http://localhost:3000)
 
-## Структура проекта
+## Production Deploy (Vercel)
+
+Полная инструкция: **[VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md)**
+
+**Кратко:**
+1. Подключите репозиторий к Vercel
+2. Установите Environment Variables
+3. Обновите `WEB_APP_URL` в боте
+4. Готово! 🎉
+
+## Архитектура
+
+### Telegram Mini App + Proxy
+
+```
+Telegram Mini App 
+    ↓
+Next.js /api/proxy (Vercel Edge Function)
+    ↓
+Backend API (api.pasekaproduction.ru)
+```
+
+**Преимущества:**
+- ✅ Нет CORS ошибок в Telegram WebView
+- ✅ Единый подход для Mini App и браузера  
+- ✅ Все запросы через один домен
+- ✅ Простота отладки
+
+### Структура проекта
 
 ```
 web-app/
-├── app/                    # Next.js App Router страницы
-│   ├── api/               # API endpoints
-│   ├── calendar/          # Страница календаря
-│   ├── event/             # Детали события
+├── app/                    # Next.js App Router
+│   ├── api/
+│   │   └── proxy/         # 🔥 Next.js API Proxy
+│   ├── calendar/          # Календарь
+│   ├── chat/              # Чат с Tracy
+│   ├── todo-lists/        # Списки задач
 │   ├── settings/          # Настройки
-│   └── meetings/          # Встречи и резюме
-├── components/            # React компоненты
-│   ├── ui/               # shadcn/ui компоненты
-│   ├── calendar/         # Компоненты календаря
-│   └── event/            # Компоненты событий
-├── lib/                   # Утилиты и хелперы
-│   ├── auth.ts           # Авторизация
-│   ├── prisma.ts         # Prisma client
-│   └── utils.ts          # Утилиты
-└── prisma/               # Prisma схема и миграции
-    └── schema.prisma
+│   └── meetings/          # История встреч
+├── lib/
+│   ├── apiClient.ts       # 🔥 Авто-определение прокси
+│   └── useTelegramUser.ts # Telegram SDK
+├── vercel.json            # Конфигурация Vercel
+└── .env.example           # Пример переменных
 ```
 
-## API Endpoints
+## API
 
-### Авторизация
-- `POST /api/auth/telegram` - Вход через Telegram
-- `POST /api/auth/logout` - Выход
+### Next.js API Routes
 
-### Пользователь
-- `GET /api/me` - Получить текущего пользователя
-- `PATCH /api/me` - Обновить настройки пользователя
+- **`POST /api/proxy`** - Универсальный прокси для backend API
+  ```typescript
+  // Request
+  {
+    path: '/api/events',
+    method: 'GET',
+    params: { user_id: 123 }
+  }
+  
+  // Проксирует к: https://api.pasekaproduction.ru/api/events?user_id=123
+  ```
 
-### События
-- `GET /api/events?from=YYYY-MM-DD&to=YYYY-MM-DD` - Получить события за период
-- `GET /api/events/day?date=YYYY-MM-DD` - Получить события за день
-- `GET /api/events/:id` - Получить событие
+### Backend API (через прокси)
+
+**События:**
+- `GET /api/events` - Список событий
 - `POST /api/events` - Создать событие
-- `PATCH /api/events/:id` - Обновить событие
+- `PUT /api/events/:id` - Обновить событие
 - `DELETE /api/events/:id` - Удалить событие
 
-### Календари
-- `GET /api/calendars` - Список подключенных календарей
-- `POST /api/calendars/google/connect` - Подключить Google Calendar
-- `POST /api/calendars/icloud/connect` - Подключить iCloud Calendar
+**Чат:**
+- `GET /api/chat/messages` - История чата
+- `GET /api/chat/greeting` - Приветствие
+- `POST /api/chat/send` - Отправить сообщение
 
-### Встречи
-- `POST /api/meetings` - Загрузить аудио встречи
-- `GET /api/meetings` - Список встреч
+**Задачи:**
+- `GET /api/todo-lists` - Списки задач
+- `POST /api/todo-lists` - Создать список
+- `POST /api/todo-lists/:id/items` - Добавить задачу
+
+**Встречи:**
+- `GET /api/meetings` - История расшифровок
 - `GET /api/meetings/:id` - Детали встречи
 
-## Переменные окружения
+## Environment Variables
 
-См. `.env.example` для полного списка переменных.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | ✅ Yes | Backend API URL (для клиента) |
+| `INTERNAL_API_BASE` | ✅ Yes | Backend API URL (для сервера) |
+| `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` | ⚠️ Optional | Telegram Bot username |
+
+См. `.env.example` для примера.
 
 ## Разработка
 
-### Запуск в режиме разработки
+### Scripts
 
 ```bash
+# Разработка
 npm run dev
-```
 
-### Сборка для продакшена
-
-```bash
+# Сборка
 npm run build
+
+# Production сервер (локально)
 npm start
+
+# Lint
+npm run lint
+
+# Type check
+npm run type-check
 ```
 
-### Работа с базой данных
+### Отладка
 
-```bash
-# Генерация Prisma Client
-npm run db:generate
-
-# Создание миграции
-npm run db:migrate
-
-# Открыть Prisma Studio
-npm run db:studio
+**В браузере:** DevTools Console
 ```
+[apiClient] 🔄 Using Next.js proxy
+[apiClient] 📡 Next.js Proxy GET /api/events
+```
+
+**На Vercel:** `vercel logs`
+
+### Тестирование в Telegram
+
+1. Запустите ngrok для локального тестирования:
+   ```bash
+   ngrok http 3000
+   ```
+
+2. Обновите `WEB_APP_URL` в боте на ngrok URL
+
+3. Откройте бота в Telegram и протестируйте
+
+## Troubleshooting
+
+### "Load failed" в Mini App
+
+1. Проверьте `NEXT_PUBLIC_API_URL` в Vercel
+2. Проверьте `INTERNAL_API_BASE` доступен с серверов Vercel
+3. Проверьте логи: `vercel logs`
+
+### API возвращает ошибку
+
+1. Откройте DevTools → Network
+2. Найдите запрос к `/api/proxy`
+3. Проверьте Response
+
+### Telegram Mini App не открывается
+
+1. Проверьте `WEB_APP_URL` в боте
+2. Перезапустите бота
+3. Проверьте, что URL доступен
+
+## Документация
+
+- **[VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md)** - Деплой на Vercel
+- **[MINI_APP_ARCHITECTURE.md](../MINI_APP_ARCHITECTURE.md)** - Архитектура Mini App
 
 ## Лицензия
 
