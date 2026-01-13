@@ -194,7 +194,12 @@ export function CalendarPageClient() {
             console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
           }
         } else {
-          const errorText = await response.text()
+          let errorText = ""
+          try {
+            errorText = await response.text()
+          } catch (e) {
+            errorText = response.statusText
+          }
           console.error(`[Calendar] ❌ API вернул ошибку: ${response.status} ${response.statusText}`, errorText)
           
           // Если API недоступен, используем сохраненные события из localStorage
@@ -203,6 +208,10 @@ export function CalendarPageClient() {
             setLoading(false)
             return
           }
+          
+          // Если нет сохраненных событий, показываем ошибку
+          setLoading(false)
+          return
         }
       } catch (error) {
         console.error(`[Calendar] ❌ Ошибка при запросе к HTTP API:`, error)

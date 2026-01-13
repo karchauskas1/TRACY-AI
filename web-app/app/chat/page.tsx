@@ -93,17 +93,32 @@ export default function ChatPage() {
       if (messagesResponse.ok) {
         const messagesData = await messagesResponse.json()
         console.log(`[Chat] Messages API Data:`, messagesData)
-        setMessages(messagesData.messages || [])
+        
+        if (messagesData.success && Array.isArray(messagesData.messages)) {
+          setMessages(messagesData.messages)
+        } else if (Array.isArray(messagesData.messages)) {
+          setMessages(messagesData.messages)
+        } else {
+          console.warn(`[Chat] Неожиданный формат данных:`, messagesData)
+          setMessages([])
+        }
         
         // Если истории нет, загружаем приветственное сообщение
         if (!messagesData.messages || messagesData.messages.length === 0) {
           await loadGreeting()
         }
       } else {
-        const errorText = await messagesResponse.text()
+        let errorText = ""
+        try {
+          errorText = await messagesResponse.text()
+        } catch (e) {
+          errorText = messagesResponse.statusText
+        }
         console.error(`[Chat] Messages API Error: ${messagesResponse.status} ${messagesResponse.statusText}`, errorText)
         if (messagesResponse.status === 404) {
           setError("API endpoint не найден. Сервер не обновлен.")
+        } else {
+          setError(`Ошибка загрузки сообщений: ${messagesResponse.status}`)
         }
         // Если ошибка загрузки истории, пробуем загрузить приветствие
         await loadGreeting()
@@ -150,16 +165,25 @@ export default function ChatPage() {
       if (response.ok) {
         const data = await response.json()
         console.log(`[Chat] Greeting API Data:`, data)
-        if (data.greeting) {
-          // Добавляем приветственное сообщение в список
-          const greetingMsg: ChatMessage = {
-            id: Date.now(),
-            role: "assistant",
-            content: data.greeting,
-            created_at: new Date().toISOString(),
+          if (data.success && data.greeting) {
+            // Добавляем приветственное сообщение в список
+            const greetingMsg: ChatMessage = {
+              id: Date.now(),
+              role: "assistant",
+              content: data.greeting,
+              created_at: new Date().toISOString(),
+            }
+            setMessages((prev) => prev.length === 0 ? [greetingMsg] : prev)
+          } else if (data.greeting) {
+            // Добавляем приветственное сообщение в список
+            const greetingMsg: ChatMessage = {
+              id: Date.now(),
+              role: "assistant",
+              content: data.greeting,
+              created_at: new Date().toISOString(),
+            }
+            setMessages((prev) => prev.length === 0 ? [greetingMsg] : prev)
           }
-          setMessages([greetingMsg])
-        }
       } else {
         const errorText = await response.text()
         console.error(`[Chat] Greeting API Error: ${response.status} ${response.statusText}`, errorText)
@@ -222,12 +246,20 @@ export default function ChatPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Ошибка отправки сообщения")
+        let errorText = ""
+        try {
+          const errorData = await response.json()
+          errorText = errorData.error || response.statusText
+        } catch (e) {
+          errorText = await response.text().catch(() => response.statusText)
+        }
+        throw new Error(errorText || "Ошибка отправки сообщения")
       }
 
       const data = await response.json()
+      console.log(`[Chat] Ответ API:`, data)
       
-      if (data.message) {
+      if (data.success && data.message) {
         const assistantMessage: ChatMessage = {
           id: Date.now() + 1,
           role: "assistant",
@@ -235,6 +267,17 @@ export default function ChatPage() {
           created_at: new Date().toISOString(),
         }
         setMessages((prev) => [...prev, assistantMessage])
+      } else if (data.message) {
+        const assistantMessage: ChatMessage = {
+          id: Date.now() + 1,
+          role: "assistant",
+          content: data.message,
+          created_at: new Date().toISOString(),
+        }
+        setMessages((prev) => [...prev, assistantMessage])
+      } else {
+        console.warn(`[Chat] Неожиданный формат ответа:`, data)
+        throw new Error("Неожиданный формат ответа от сервера")
       }
     } catch (e: any) {
       console.error("Ошибка отправки сообщения:", e)

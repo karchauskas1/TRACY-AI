@@ -94,7 +94,12 @@ export default function TodoListsPage() {
       console.log(`[TodoLists] API Response: status=${response.status}, ok=${response.ok}`)
       
       if (!response.ok) {
-        const errorText = await response.text()
+        let errorText = ""
+        try {
+          errorText = await response.text()
+        } catch (e) {
+          errorText = response.statusText
+        }
         console.error(`[TodoLists] API Error: ${response.status} ${response.statusText}`, errorText)
         if (response.status === 404) {
           throw new Error("API endpoint не найден. Сервер не обновлен.")
@@ -104,7 +109,15 @@ export default function TodoListsPage() {
 
       const data = await response.json()
       console.log(`[TodoLists] API Data:`, data)
-      setLists(data.lists || [])
+      
+      if (data.success && Array.isArray(data.lists)) {
+        setLists(data.lists)
+      } else if (Array.isArray(data.lists)) {
+        setLists(data.lists)
+      } else {
+        console.warn(`[TodoLists] Неожиданный формат данных:`, data)
+        setLists([])
+      }
     } catch (e: any) {
       console.error("[TodoLists] Ошибка загрузки списков:", e)
       
@@ -147,9 +160,19 @@ export default function TodoListsPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Ошибка создания списка")
+        let errorText = ""
+        try {
+          const errorData = await response.json()
+          errorText = errorData.error || response.statusText
+        } catch (e) {
+          errorText = await response.text().catch(() => response.statusText)
+        }
+        throw new Error(errorText || "Ошибка создания списка")
       }
 
+      const result = await response.json()
+      console.log(`[TodoLists] Список создан:`, result)
+      
       setNewListTitle("")
       setShowCreateForm(false)
       await loadLists()
