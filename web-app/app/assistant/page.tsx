@@ -6,7 +6,6 @@ import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, L
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
-import Link from "next/link"
 import { useTelegramUser } from "../../lib/useTelegramUser"
 
 export default function AssistantPage() {
@@ -68,11 +67,12 @@ export default function AssistantPage() {
             </div>
             <span className="text-sm font-medium">TRACY</span>
           </div>
-          <Link href="/settings">
-            <button className="text-foreground hover:text-muted-foreground transition-colors">
-              <Settings className="h-5 w-5" />
-            </button>
-          </Link>
+          <button 
+            onClick={() => router.push("/settings")}
+            className="text-foreground hover:text-muted-foreground transition-colors"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
         </div>
       </header>
 
@@ -138,118 +138,124 @@ export default function AssistantPage() {
           {/* Main Features */}
           <div className="space-y-8">
             {/* Чат с Tracy */}
-            <Link href="/chat">
-              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <MessageCircle className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-1">Чат с Tracy</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Онлайн чат с AI-ассистентом для планирования дня
-                      </p>
-                    </div>
+            <Card 
+              className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
+              onClick={() => router.push("/chat")}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <MessageCircle className="h-6 w-6 text-primary" />
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-1">Чат с Tracy</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Онлайн чат с AI-ассистентом для планирования дня
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Calendar */}
-            <Link href="/calendar">
-              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Calendar className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-1">Календарь</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Просмотр и управление событиями
-                      </p>
-                    </div>
+            <Card 
+              className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
+              onClick={() => router.push("/calendar")}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Calendar className="h-6 w-6 text-primary" />
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-1">Календарь</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Просмотр и управление событиями
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* История расшифровок */}
-            <Link href="/meetings/history">
-              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <History className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-1">История расшифровок</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Просмотр всех расшифрованных встреч
-                      </p>
-                    </div>
+            <Card 
+              className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
+              onClick={() => router.push("/meetings/history")}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <History className="h-6 w-6 text-primary" />
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-1">История расшифровок</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Просмотр всех расшифрованных встреч
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Списки задач */}
-            <Link href="/todo-lists">
-              <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <ListTodo className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-1">Списки задач</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Создание и управление списками задач
-                      </p>
-                    </div>
+            <Card 
+              className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
+              onClick={() => router.push("/todo-lists")}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <ListTodo className="h-6 w-6 text-primary" />
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-1">Списки задач</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Создание и управление списками задач
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (
               <>
-                <Link href="/settings/feedback">
-                  <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                          <MessageSquare className="h-6 w-6 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold mb-1">Обратная связь</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Просмотр всех сообщений об ошибках и предложениях
-                          </p>
-                        </div>
+                <Card 
+                  className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
+                  onClick={() => router.push("/settings/feedback")}
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <MessageSquare className="h-6 w-6 text-primary" />
                       </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-                <Link href="/debug">
-                  <Card className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Settings className="h-6 w-6 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold mb-1">Debug: Network</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Мониторинг сетевых запросов и диагностика ошибок
-                          </p>
-                        </div>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold mb-1">Обратная связь</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Просмотр всех сообщений об ошибках и предложениях
+                        </p>
                       </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card 
+                  className="border-border hover:bg-accent/50 transition-colors cursor-pointer mb-2"
+                  onClick={() => router.push("/debug")}
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Settings className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold mb-1">Debug: Network</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Мониторинг сетевых запросов и диагностика ошибок
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </>
             )}
           </div>
