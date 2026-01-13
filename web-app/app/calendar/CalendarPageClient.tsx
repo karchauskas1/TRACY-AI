@@ -26,6 +26,7 @@ export function CalendarPageClient() {
   const [events, setEvents] = useState<Event[]>([])
   const [eventsByDate, setEventsByDate] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
@@ -352,32 +353,62 @@ export function CalendarPageClient() {
           // Если API недоступен, используем сохраненные события из localStorage
           if (storedEvents) {
             console.log(`[Calendar] ⚠️ API недоступен, используем сохраненные события из localStorage`)
+            setError(null) // Очищаем ошибку, если есть сохраненные события
             setLoading(false)
             return
           }
           
           // Если нет сохраненных событий, показываем ошибку
+          let errorMessage = `Ошибка загрузки событий: ${response.status} ${response.statusText}`
+          try {
+            const errorData = JSON.parse(errorText)
+            if (errorData.error) {
+              errorMessage = errorData.error
+            }
+          } catch (e) {
+            // Игнорируем ошибку парсинга
+          }
+          setError(errorMessage)
           setLoading(false)
           return
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error(`[Calendar] ❌ Ошибка при запросе к HTTP API:`, error)
         
         // Если ошибка сети, используем сохраненные события
         if (storedEvents) {
           console.log(`[Calendar] ⚠️ Ошибка сети, используем сохраненные события из localStorage`)
+          setError(null) // Очищаем ошибку, если есть сохраненные события
           setLoading(false)
           return
         }
+        
+        // Если нет сохраненных событий, показываем ошибку
+        let errorMessage = "Не удалось загрузить события"
+        if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
+          if (typeof window !== "undefined" && window.location.protocol === "https:") {
+            errorMessage = "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к календарю."
+          } else {
+            errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету."
+          }
+        } else if (error.message) {
+          errorMessage = error.message
+        }
+        setError(errorMessage)
       }
       
       // Если не удалось загрузить и нет сохраненных событий
       setLoading(false)
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load events:", error)
       setEvents([])
       setEventsByDate({})
+      let errorMessage = "Не удалось загрузить события"
+      if (error.message) {
+        errorMessage = error.message
+      }
+      setError(errorMessage)
       setLoading(false)
     }
   }
