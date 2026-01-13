@@ -254,18 +254,26 @@ export default function TodoListsPage() {
     } catch (e: any) {
       console.error("[TodoLists] Ошибка загрузки списков:", e)
       
+      let errorMessage = "Не удалось загрузить списки задач"
+      
       // Проверяем, является ли это ошибкой Mixed Content Policy
       if (e instanceof TypeError && e.message.includes("Failed to fetch")) {
         if (typeof window !== "undefined" && window.location.protocol === "https:") {
-          setError("Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к спискам задач.")
+          errorMessage = "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к спискам задач."
         } else {
-          setError("Не удалось подключиться к серверу. Проверьте подключение к интернету.")
+          errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету."
         }
-      } else if (e.message && e.message.includes("Invalid user_id")) {
-        setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
-      } else {
-        setError(e.message || "Не удалось загрузить списки задач")
+      } else if (e.message) {
+        if (e.message.includes("Invalid user_id") || e.message.includes("user_id required")) {
+          errorMessage = "Не удалось определить ID пользователя. Откройте приложение через Telegram."
+        } else if (e.message.includes("demo")) {
+          errorMessage = "Демо-режим не поддерживает загрузку списков задач. Откройте приложение через Telegram."
+        } else {
+          errorMessage = e.message
+        }
       }
+      
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
