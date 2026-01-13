@@ -24,29 +24,39 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <head>
-        <script 
-          src="https://telegram.org/js/telegram-web-app.js" 
-          strategy="beforeInteractive"
-        />
+        <script src="https://telegram.org/js/telegram-web-app.js" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
               window.__NEXT_PUBLIC_API_URL__ = ${JSON.stringify(apiUrl)};
               
-              // Ждем загрузки Telegram WebApp SDK
-              if (typeof window !== 'undefined') {
-                const checkTelegram = setInterval(() => {
+              // Инициализация Telegram WebApp после загрузки
+              (function() {
+                function initTelegram() {
                   if (window.Telegram && window.Telegram.WebApp) {
                     const tg = window.Telegram.WebApp;
                     tg.ready();
                     tg.expand();
-                    clearInterval(checkTelegram);
+                    tg.setHeaderColor("#1a1a20");
+                    tg.setBackgroundColor("#1a1a20");
+                    return true;
                   }
-                }, 50);
+                  return false;
+                }
                 
-                // Останавливаем проверку через 5 секунд
-                setTimeout(() => clearInterval(checkTelegram), 5000);
-              }
+                // Пробуем сразу
+                if (!initTelegram()) {
+                  // Если не загрузился, ждем
+                  const checkInterval = setInterval(() => {
+                    if (initTelegram()) {
+                      clearInterval(checkInterval);
+                    }
+                  }, 50);
+                  
+                  // Останавливаем через 5 секунд
+                  setTimeout(() => clearInterval(checkInterval), 5000);
+                }
+              })();
             `,
           }}
         />
