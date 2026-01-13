@@ -96,11 +96,39 @@ export default function AssistantPage() {
                       {avatarInitials}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
+                  <div className="flex-1">
                     <h2 className="text-xl font-semibold">{displayName}</h2>
                     {user?.username && (
                       <p className="text-sm text-muted-foreground">@{user.username}</p>
                     )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Demo Mode Warning */}
+          {userId === "demo" && (
+            <Card className="mb-6 border-amber-500/50 bg-amber-500/10">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                    <MessageCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-1 text-amber-900 dark:text-amber-100">
+                      Вы в демо-режиме
+                    </h3>
+                    <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
+                      Для полного доступа ко всем функциям и сохранения данных авторизуйтесь через Telegram
+                    </p>
+                    <Button
+                      onClick={() => router.push("/login")}
+                      className="bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      <MessageCircle className="mr-2 h-4 w-4" />
+                      Войти через Telegram
+                    </Button>
                   </div>
                 </div>
               </CardContent>
