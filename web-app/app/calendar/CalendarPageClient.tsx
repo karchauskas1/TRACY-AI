@@ -166,17 +166,46 @@ export function CalendarPageClient() {
         console.log(`[Calendar] Ответ API: status=${response.status}, ok=${response.ok}`)
         
         if (response.ok) {
-          const data = await response.json()
-          console.log(`[Calendar] Данные API:`, data)
+          let data
+          try {
+            const responseText = await response.text()
+            console.log(`[Calendar] Raw API Response:`, responseText.substring(0, 500))
+            data = JSON.parse(responseText)
+          } catch (e) {
+            console.error(`[Calendar] Ошибка парсинга JSON:`, e)
+            // Пробуем использовать сохраненные события
+            if (storedEvents) {
+              console.log(`[Calendar] Используем сохраненные события из localStorage`)
+              setLoading(false)
+              return
+            }
+            setLoading(false)
+            return
+          }
+          
+          console.log(`[Calendar] Parsed API Data:`, data)
           
           // Обрабатываем разные форматы ответа
           let eventsArray: Event[] = []
           if (data.success && Array.isArray(data.events)) {
             eventsArray = data.events
+            console.log(`[Calendar] ✅ Успешно загружено ${eventsArray.length} событий (формат: success + events)`)
           } else if (Array.isArray(data.events)) {
             eventsArray = data.events
+            console.log(`[Calendar] ✅ Загружено ${eventsArray.length} событий (формат: events)`)
           } else if (Array.isArray(data)) {
             eventsArray = data
+            console.log(`[Calendar] ✅ Загружено ${eventsArray.length} событий (формат: array)`)
+          } else if (data.error) {
+            console.error(`[Calendar] ❌ API вернул ошибку:`, data.error)
+            // Пробуем использовать сохраненные события
+            if (storedEvents) {
+              console.log(`[Calendar] Используем сохраненные события из localStorage`)
+              setLoading(false)
+              return
+            }
+            setLoading(false)
+            return
           } else {
             console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
             // Пробуем использовать сохраненные события

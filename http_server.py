@@ -918,22 +918,30 @@ def create_app():
     app = web.Application()
     
     # CORS middleware для разрешения запросов из веб-приложения
-    async def cors_middleware(app, handler):
-        async def middleware_handler(request):
-            # Разрешаем CORS для всех источников (в production можно ограничить)
-            if request.method == 'OPTIONS':
-                response = web.Response()
-                response.headers['Access-Control-Allow-Origin'] = '*'
-                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-                response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-                return response
-            
-            response = await handler(request)
+    @web.middleware
+    async def cors_middleware(request, handler):
+        # Разрешаем CORS для всех источников (в production можно ограничить)
+        if request.method == 'OPTIONS':
+            response = web.Response()
             response.headers['Access-Control-Allow-Origin'] = '*'
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Max-Age'] = '3600'
             return response
-        return middleware_handler
+        
+        try:
+            response = await handler(request)
+        except Exception as e:
+            logger.error(f"Ошибка в handler: {e}", exc_info=True)
+            response = json_response({'error': str(e)}, status=500)
+        
+        # Добавляем CORS заголовки ко всем ответам
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
     
     app.middlewares.append(cors_middleware)
     

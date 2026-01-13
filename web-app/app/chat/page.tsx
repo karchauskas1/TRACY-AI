@@ -91,15 +91,29 @@ export default function ChatPage() {
       console.log(`[Chat] Messages API Response: status=${messagesResponse.status}, ok=${messagesResponse.ok}`)
       
       if (messagesResponse.ok) {
-        const messagesData = await messagesResponse.json()
-        console.log(`[Chat] Messages API Data:`, messagesData)
+        let messagesData
+        try {
+          const responseText = await messagesResponse.text()
+          console.log(`[Chat] Raw Messages Response:`, responseText)
+          messagesData = JSON.parse(responseText)
+        } catch (e) {
+          console.error(`[Chat] Ошибка парсинга JSON:`, e)
+          throw new Error("Неверный формат ответа от сервера")
+        }
+        
+        console.log(`[Chat] Parsed Messages Data:`, messagesData)
         
         if (messagesData.success && Array.isArray(messagesData.messages)) {
+          console.log(`[Chat] ✅ Успешно загружено ${messagesData.messages.length} сообщений`)
           setMessages(messagesData.messages)
         } else if (Array.isArray(messagesData.messages)) {
+          console.log(`[Chat] ✅ Загружено ${messagesData.messages.length} сообщений (без success поля)`)
           setMessages(messagesData.messages)
+        } else if (messagesData.error) {
+          console.error(`[Chat] ❌ API вернул ошибку:`, messagesData.error)
+          throw new Error(messagesData.error || "Ошибка загрузки сообщений")
         } else {
-          console.warn(`[Chat] Неожиданный формат данных:`, messagesData)
+          console.warn(`[Chat] ⚠️ Неожиданный формат данных:`, messagesData)
           setMessages([])
         }
         
@@ -256,10 +270,20 @@ export default function ChatPage() {
         throw new Error(errorText || "Ошибка отправки сообщения")
       }
 
-      const data = await response.json()
-      console.log(`[Chat] Ответ API:`, data)
+      let data
+      try {
+        const responseText = await response.text()
+        console.log(`[Chat] Raw Send Response:`, responseText)
+        data = JSON.parse(responseText)
+      } catch (e) {
+        console.error(`[Chat] Ошибка парсинга JSON:`, e)
+        throw new Error("Неверный формат ответа от сервера")
+      }
+      
+      console.log(`[Chat] Parsed Send Data:`, data)
       
       if (data.success && data.message) {
+        console.log(`[Chat] ✅ Получен ответ от AI`)
         const assistantMessage: ChatMessage = {
           id: Date.now() + 1,
           role: "assistant",
@@ -268,6 +292,7 @@ export default function ChatPage() {
         }
         setMessages((prev) => [...prev, assistantMessage])
       } else if (data.message) {
+        console.log(`[Chat] ✅ Получен ответ от AI (без success поля)`)
         const assistantMessage: ChatMessage = {
           id: Date.now() + 1,
           role: "assistant",
@@ -275,8 +300,11 @@ export default function ChatPage() {
           created_at: new Date().toISOString(),
         }
         setMessages((prev) => [...prev, assistantMessage])
+      } else if (data.error) {
+        console.error(`[Chat] ❌ API вернул ошибку:`, data.error)
+        throw new Error(data.error || "Ошибка отправки сообщения")
       } else {
-        console.warn(`[Chat] Неожиданный формат ответа:`, data)
+        console.warn(`[Chat] ⚠️ Неожиданный формат ответа:`, data)
         throw new Error("Неожиданный формат ответа от сервера")
       }
     } catch (e: any) {

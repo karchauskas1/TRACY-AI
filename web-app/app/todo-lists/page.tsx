@@ -107,15 +107,29 @@ export default function TodoListsPage() {
         throw new Error(`Ошибка загрузки списков: ${response.status} ${response.statusText}`)
       }
 
-      const data = await response.json()
-      console.log(`[TodoLists] API Data:`, data)
+      let data
+      try {
+        const responseText = await response.text()
+        console.log(`[TodoLists] Raw API Response:`, responseText)
+        data = JSON.parse(responseText)
+      } catch (e) {
+        console.error(`[TodoLists] Ошибка парсинга JSON:`, e)
+        throw new Error("Неверный формат ответа от сервера")
+      }
+      
+      console.log(`[TodoLists] Parsed API Data:`, data)
       
       if (data.success && Array.isArray(data.lists)) {
+        console.log(`[TodoLists] ✅ Успешно загружено ${data.lists.length} списков`)
         setLists(data.lists)
       } else if (Array.isArray(data.lists)) {
+        console.log(`[TodoLists] ✅ Загружено ${data.lists.length} списков (без success поля)`)
         setLists(data.lists)
+      } else if (data.error) {
+        console.error(`[TodoLists] ❌ API вернул ошибку:`, data.error)
+        throw new Error(data.error || "Ошибка загрузки списков")
       } else {
-        console.warn(`[TodoLists] Неожиданный формат данных:`, data)
+        console.warn(`[TodoLists] ⚠️ Неожиданный формат данных:`, data)
         setLists([])
       }
     } catch (e: any) {
@@ -162,16 +176,27 @@ export default function TodoListsPage() {
       if (!response.ok) {
         let errorText = ""
         try {
-          const errorData = await response.json()
+          const responseText = await response.text()
+          console.error(`[TodoLists] Create Error Response:`, responseText)
+          const errorData = JSON.parse(responseText)
           errorText = errorData.error || response.statusText
         } catch (e) {
-          errorText = await response.text().catch(() => response.statusText)
+          errorText = response.statusText || "Ошибка создания списка"
         }
         throw new Error(errorText || "Ошибка создания списка")
       }
 
-      const result = await response.json()
-      console.log(`[TodoLists] Список создан:`, result)
+      let result
+      try {
+        const responseText = await response.text()
+        console.log(`[TodoLists] Create Success Response:`, responseText)
+        result = JSON.parse(responseText)
+      } catch (e) {
+        console.error(`[TodoLists] Ошибка парсинга ответа создания:`, e)
+        throw new Error("Неверный формат ответа от сервера")
+      }
+      
+      console.log(`[TodoLists] ✅ Список создан:`, result)
       
       setNewListTitle("")
       setShowCreateForm(false)
