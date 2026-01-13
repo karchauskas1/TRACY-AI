@@ -18,10 +18,18 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  // Инжектируем NEXT_PUBLIC_API_URL в window для runtime доступа
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.pasekaproduction.ru'
+  
   return (
     <html lang="ru">
       <head>
         <script src="https://telegram.org/js/telegram-web-app.js" async />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__NEXT_PUBLIC_API_URL__ = ${JSON.stringify(apiUrl)};`,
+          }}
+        />
       </head>
       <body className={inter.className}>
         <ApiDebugInit />
