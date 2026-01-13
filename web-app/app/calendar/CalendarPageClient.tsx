@@ -30,27 +30,52 @@ export function CalendarPageClient() {
 
   useEffect(() => {
     // Загружаем данные пользователя из Telegram Web App или localStorage
-    if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.ready()
-        const tgUser = tg.initDataUnsafe?.user
-        if (tgUser) {
-          setUser({
-            id: tgUser.id.toString(),
-            first_name: tgUser.first_name,
-            last_name: tgUser.last_name,
-            username: tgUser.username,
-            photo_url: tgUser.photo_url,
-          })
+    // Ждем немного, чтобы убедиться, что родительский компонент сохранил пользователя
+    const loadUser = () => {
+      if (typeof window !== "undefined") {
+        const tg = (window as any).Telegram?.WebApp
+        if (tg) {
+          tg.ready()
+          const tgUser = tg.initDataUnsafe?.user
+          if (tgUser) {
+            const userData = {
+              id: tgUser.id.toString(),
+              first_name: tgUser.first_name,
+              last_name: tgUser.last_name,
+              username: tgUser.username,
+              photo_url: tgUser.photo_url,
+            }
+            setUser(userData)
+            // Сохраняем в localStorage для надежности
+            localStorage.setItem("telegram_user", JSON.stringify(userData))
+            return
+          }
         }
-      } else {
+        // Пробуем получить из localStorage (может быть сохранен родительским компонентом)
         const savedUser = localStorage.getItem("telegram_user")
         if (savedUser) {
-          setUser(JSON.parse(savedUser))
+          try {
+            const parsed = JSON.parse(savedUser)
+            setUser(parsed)
+          } catch (e) {
+            console.error("[Calendar] Error parsing saved user:", e)
+          }
         }
       }
     }
+    
+    // Пробуем сразу
+    loadUser()
+    
+    // Если не получилось, пробуем еще раз через небольшую задержку
+    // (на случай, если родительский компонент еще не сохранил пользователя)
+    const timeoutId = setTimeout(() => {
+      if (!user) {
+        loadUser()
+      }
+    }, 100)
+    
+    return () => clearTimeout(timeoutId)
   }, [])
 
   const loadEvents = async (forceRefresh: boolean = false) => {
