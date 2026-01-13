@@ -171,9 +171,32 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
         console.log(`[Feedback] Ответ API: status=${response.status}, ok=${response.ok}`)
 
         if (response.ok) {
-          const data = await response.json()
-          console.log(`[Feedback] Получено данных:`, data)
-          setFeedback(data.feedback || [])
+          let data
+          try {
+            const responseText = await response.text()
+            console.log(`[Feedback] Raw API Response:`, responseText.substring(0, 500))
+            data = JSON.parse(responseText)
+          } catch (e) {
+            console.error(`[Feedback] Ошибка парсинга JSON:`, e)
+            throw new Error("Неверный формат ответа от сервера")
+          }
+          
+          console.log(`[Feedback] Parsed API Data:`, data)
+          
+          if (data.success && Array.isArray(data.feedback)) {
+            console.log(`[Feedback] ✅ Успешно загружено ${data.feedback.length} записей`)
+            setFeedback(data.feedback)
+          } else if (Array.isArray(data.feedback)) {
+            console.log(`[Feedback] ✅ Загружено ${data.feedback.length} записей (без success поля)`)
+            setFeedback(data.feedback)
+          } else if (data.error) {
+            console.error(`[Feedback] ❌ API вернул ошибку:`, data.error)
+            throw new Error(data.error || "Ошибка загрузки обратной связи")
+          } else {
+            console.warn(`[Feedback] ⚠️ Неожиданный формат данных:`, data)
+            setFeedback([])
+          }
+          
           setLoading(false)
           return
         } else {
@@ -182,12 +205,24 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
           if (response.status === 403) {
             errorMessage = "Доступ запрещен. Только супер-пользователь может просматривать обратную связь."
           } else if (response.status === 400) {
-            errorMessage = "Неверный запрос. Проверьте параметры."
+            let errorData
+            try {
+              const responseText = await response.text()
+              errorData = JSON.parse(responseText)
+              if (errorData.error && errorData.error.includes("Invalid user_id")) {
+                errorMessage = "Не удалось определить ID пользователя. Откройте приложение через Telegram."
+              } else {
+                errorMessage = errorData.error || "Неверный запрос. Проверьте параметры."
+              }
+            } catch {
+              errorMessage = "Неверный запрос. Проверьте параметры."
+            }
           } else if (response.status === 500) {
             errorMessage = "Ошибка сервера. Попробуйте позже."
           } else {
             try {
-              const errorData = await response.json()
+              const responseText = await response.text()
+              const errorData = JSON.parse(responseText)
               errorMessage = errorData.error || `Ошибка ${response.status}: ${response.statusText}`
             } catch {
               errorMessage = `Ошибка ${response.status}: ${response.statusText}`
