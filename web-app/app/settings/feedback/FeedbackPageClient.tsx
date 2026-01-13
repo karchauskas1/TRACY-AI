@@ -32,6 +32,7 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
   const [feedback, setFeedback] = useState<FeedbackItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
   const SUPER_USER_ID = "308477378" // ID супер-пользователя
 
   useEffect(() => {

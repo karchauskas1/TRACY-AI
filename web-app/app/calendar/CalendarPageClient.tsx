@@ -8,6 +8,7 @@ import Link from "next/link"
 import { CalendarGrid } from "../../components/calendar/CalendarGrid"
 import { Button } from "../../components/ui/button"
 import { formatTime } from "../../lib/utils"
+import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../lib/error-utils"
 
 interface Event {
   id: string
@@ -27,6 +28,7 @@ export function CalendarPageClient() {
   const [eventsByDate, setEventsByDate] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
@@ -304,6 +306,7 @@ export function CalendarPageClient() {
             // #endregion
             setEvents(eventsArray)
             setError(null) // Очищаем ошибку при успехе
+            setErrorDetails(null) // Очищаем детали ошибки
             
             // Сохраняем в localStorage
             localStorage.setItem("tracy_events", JSON.stringify(eventsArray))
@@ -334,6 +337,7 @@ export function CalendarPageClient() {
             setEvents([])
             setEventsByDate({})
             setError(null) // Очищаем ошибку, если событий нет (это нормально)
+            setErrorDetails(null) // Очищаем детали ошибки
           }
           
           setLoading(false)
@@ -359,16 +363,9 @@ export function CalendarPageClient() {
           }
           
           // Если нет сохраненных событий, показываем ошибку
-          let errorMessage = `Ошибка загрузки событий: ${response.status} ${response.statusText}`
-          try {
-            const errorData = JSON.parse(errorText)
-            if (errorData.error) {
-              errorMessage = errorData.error
-            }
-          } catch (e) {
-            // Игнорируем ошибку парсинга
-          }
-          setError(errorMessage)
+          const details = await getErrorDetails(null, response, "Загрузка событий календаря")
+          setErrorDetails(details)
+          setError(formatErrorForDisplay(details))
           setLoading(false)
           return
         }
@@ -384,17 +381,26 @@ export function CalendarPageClient() {
         }
         
         // Если нет сохраненных событий, показываем ошибку
-        let errorMessage = "Не удалось загрузить события"
+        let details: ErrorDetails
         if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
           if (typeof window !== "undefined" && window.location.protocol === "https:") {
-            errorMessage = "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к календарю."
+            details = {
+              code: "NETWORK_ERROR",
+              message: "Не удалось подключиться к серверу. Откройте приложение через Telegram для доступа к календарю.",
+              context: "Загрузка событий календаря",
+            }
           } else {
-            errorMessage = "Не удалось подключиться к серверу. Проверьте подключение к интернету."
+            details = {
+              code: "NETWORK_ERROR",
+              message: "Не удалось подключиться к серверу. Проверьте подключение к интернету.",
+              context: "Загрузка событий календаря",
+            }
           }
-        } else if (error.message) {
-          errorMessage = error.message
+        } else {
+          details = await getErrorDetails(error, undefined, "Загрузка событий календаря")
         }
-        setError(errorMessage)
+        setErrorDetails(details)
+        setError(formatErrorForDisplay(details))
       }
       
       // Если не удалось загрузить и нет сохраненных событий
@@ -404,11 +410,9 @@ export function CalendarPageClient() {
       console.error("Failed to load events:", error)
       setEvents([])
       setEventsByDate({})
-      let errorMessage = "Не удалось загрузить события"
-      if (error.message) {
-        errorMessage = error.message
-      }
-      setError(errorMessage)
+      const details = await getErrorDetails(error, undefined, "Загрузка событий календаря")
+      setErrorDetails(details)
+      setError(formatErrorForDisplay(details))
       setLoading(false)
     }
   }

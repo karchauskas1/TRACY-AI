@@ -30,6 +30,7 @@ export default function TodoListsPage() {
   const [lists, setLists] = useState<TodoList[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newListTitle, setNewListTitle] = useState("")
   const [creating, setCreating] = useState(false)
@@ -255,6 +256,7 @@ export default function TodoListsPage() {
         // #endregion
         setLists([])
         setError(null) // Очищаем ошибку
+        setErrorDetails(null) // Очищаем детали ошибки
         setLoading(false) // Убеждаемся, что loading выключен
       }
     } catch (e: any) {

@@ -22,6 +22,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [greetingLoaded, setGreetingLoaded] = useState(false)
 
@@ -234,6 +235,7 @@ export default function ChatPage() {
           // #endregion
           setMessages([])
           setError(null) // Очищаем ошибку
+          setErrorDetails(null) // Очищаем детали ошибки
         }
         
         // Если истории нет, загружаем приветственное сообщение
