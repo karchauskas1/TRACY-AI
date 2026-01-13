@@ -24,12 +24,23 @@ export interface ApiError {
  * @throws {Error} Если NEXT_PUBLIC_API_URL не установлен
  */
 export function getApiBaseUrl(): string {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL
+  // В production build Next.js инжектит NEXT_PUBLIC_ переменные в runtime
+  // Но для статического экспорта они должны быть доступны во время сборки
+  // Используем fallback на случай, если переменная не установлена
+  const apiUrl = 
+    (typeof window !== 'undefined' && (window as any).__NEXT_PUBLIC_API_URL__) ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    (typeof window !== 'undefined' && window.location.hostname === 'karchauskas1.github.io' 
+      ? 'https://api.pasekaproduction.ru' 
+      : 'http://localhost:8080')
   
   if (!apiUrl || apiUrl.trim() === '') {
     const error = 'NEXT_PUBLIC_API_URL не установлен в переменных окружения. Проверьте настройки деплоя.'
     console.error('[apiClient] ❌', error)
-    throw new Error(error)
+    console.error('[apiClient] process.env.NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL)
+    console.error('[apiClient] window.__NEXT_PUBLIC_API_URL__:', typeof window !== 'undefined' ? (window as any).__NEXT_PUBLIC_API_URL__ : 'N/A')
+    // Не бросаем ошибку, используем fallback
+    return 'https://api.pasekaproduction.ru'
   }
   
   // Убираем trailing slash
