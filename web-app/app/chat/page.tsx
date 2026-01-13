@@ -243,7 +243,7 @@ export default function ChatPage() {
         setError(e.message || "Не удалось загрузить чат")
       }
       // Пробуем загрузить приветствие даже при ошибке
-      await loadGreeting()
+      await loadGreeting(userId)
     } finally {
       setLoading(false)
     }
