@@ -1,16 +1,27 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 export default function HomePage() {
   const router = useRouter()
+  const [debug, setDebug] = useState<string[]>([])
 
   useEffect(() => {
+    const log = (msg: string) => {
+      console.log(`[HomePage] ${msg}`)
+      setDebug(prev => [...prev, msg])
+    }
+
+    log("Initializing...")
+    log(`URL: ${window.location.href}`)
+
     // Проверяем, открыто ли приложение через Telegram Web App
     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp
       tg.ready()
+      log("Telegram WebApp detected")
+      
       // Настраиваем тему Telegram Web App
       tg.setHeaderColor("#1a1a20") // Темный фон
       tg.setBackgroundColor("#1a1a20")
@@ -19,6 +30,7 @@ export default function HomePage() {
       // Сохраняем данные пользователя из Telegram Web App
       const user = tg.initDataUnsafe?.user
       if (user) {
+        log(`User found: ${user.first_name}`)
         localStorage.setItem("telegram_user", JSON.stringify({
           id: user.id.toString(),
           first_name: user.first_name,
@@ -27,41 +39,57 @@ export default function HomePage() {
           photo_url: user.photo_url,
         }))
         // Сразу переходим на главный экран "Личный ассистент"
-        router.push("/assistant")
+        log("Navigating to /assistant")
+        setTimeout(() => router.push("/assistant"), 100)
       } else {
         // Если нет пользователя в WebApp, проверяем localStorage
         const savedUser = localStorage.getItem("telegram_user")
         if (savedUser) {
-          router.push("/assistant")
+          log("Saved user found, navigating to /assistant")
+          setTimeout(() => router.push("/assistant"), 100)
         } else {
-          router.push("/login")
+          log("No user, navigating to /login")
+          setTimeout(() => router.push("/login"), 100)
         }
       }
     } else {
+      log("Regular browser detected")
       // Проверяем, есть ли сохраненный пользователь
       const savedUser = localStorage.getItem("telegram_user")
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser)
+          log(`Saved user: ${parsed.first_name || parsed.id}`)
           if (parsed.id && parsed.id !== "demo") {
-            router.push("/assistant")
+            log("Navigating to /assistant")
+            setTimeout(() => router.push("/assistant"), 100)
           } else {
-            router.push("/login")
+            log("Demo user, navigating to /login")
+            setTimeout(() => router.push("/login"), 100)
           }
         } catch (e) {
-          router.push("/login")
+          log("Error parsing user, navigating to /login")
+          setTimeout(() => router.push("/login"), 100)
         }
       } else {
-        router.push("/login")
+        log("No saved user, navigating to /login")
+        setTimeout(() => router.push("/login"), 100)
       }
     }
   }, [router])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="text-center max-w-md">
         <h1 className="text-2xl font-semibold text-foreground">TRACY</h1>
         <p className="mt-2 text-muted-foreground">Загрузка...</p>
+        {debug.length > 0 && (
+          <div className="mt-4 p-4 bg-muted rounded text-left text-xs">
+            {debug.map((msg, i) => (
+              <div key={i} className="text-muted-foreground">{msg}</div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

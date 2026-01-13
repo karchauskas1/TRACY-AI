@@ -15,8 +15,11 @@ export default function AssistantPage() {
   const [isSuperUser, setIsSuperUser] = useState(false)
 
   useEffect(() => {
+    console.log("[AssistantPage] userLoading:", userLoading, "userId:", userId)
+    
     // Если пользователь не загружен и не загружается, перенаправляем на логин
     if (!userLoading && !userId) {
+      console.log("[AssistantPage] No user, redirecting to login")
       router.push("/login")
       return
     }
@@ -24,6 +27,7 @@ export default function AssistantPage() {
     // Если пользователь загружен, обновляем состояние
     if (telegramUser && userId) {
       const fullName = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(" ")
+      console.log("[AssistantPage] User loaded:", fullName)
       setUser({
         id: userId,
         name: fullName || telegramUser.first_name || "Пользователь",
