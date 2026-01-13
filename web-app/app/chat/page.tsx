@@ -6,6 +6,7 @@ import { ArrowLeft, Send, Loader2, Bot, User } from "lucide-react"
 import { Card, CardContent } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { Textarea } from "../../components/ui/textarea"
+import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../lib/error-utils"
 
 interface ChatMessage {
   id: number

@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, X, MessageSquare, Bug, Lightbulb, Image as ImageIcon, Loader2 } from "lucide-react"
 import { Card, CardContent } from "../../../components/ui/card"
+import { Button } from "../../../components/ui/button"
+import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../../lib/error-utils"
 
 interface FeedbackItem {
   id: string
