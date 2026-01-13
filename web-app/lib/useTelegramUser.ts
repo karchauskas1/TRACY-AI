@@ -44,7 +44,22 @@ export function useTelegramUser(): UseTelegramUserResult {
       const tg = (window as any).Telegram?.WebApp
       if (tg) {
         tg.ready()
-        const tgUser = tg.initDataUnsafe?.user
+        
+        // Пробуем получить из initDataUnsafe (приоритет)
+        let tgUser = tg.initDataUnsafe?.user
+        
+        // Если нет в initDataUnsafe, пробуем парсить initData напрямую
+        if (!tgUser && tg.initData) {
+          try {
+            const params = new URLSearchParams(tg.initData)
+            const userStr = params.get('user')
+            if (userStr) {
+              tgUser = JSON.parse(decodeURIComponent(userStr))
+            }
+          } catch (e) {
+            console.error('[useTelegramUser] Error parsing initData:', e)
+          }
+        }
         
         if (tgUser && tgUser.id) {
           const userData: TelegramUser = {
@@ -60,6 +75,7 @@ export function useTelegramUser(): UseTelegramUserResult {
           // Сохраняем в localStorage для надежности
           localStorage.setItem('telegram_user', JSON.stringify(userData))
           
+          console.log('[useTelegramUser] ✅ User loaded from Telegram WebApp:', userData)
           setIsLoading(false)
           return
         }

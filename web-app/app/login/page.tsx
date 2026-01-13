@@ -24,28 +24,68 @@ export default function LoginPage() {
   const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
 
   useEffect(() => {
-    // Если открыто через Telegram Web App, сразу переходим
-    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-      const tg = (window as any).Telegram.WebApp
+    // Функция для проверки и авторизации через Telegram WebApp
+    const checkTelegramAuth = () => {
+      if (typeof window === "undefined") return false
+      
+      const tg = (window as any).Telegram?.WebApp
+      if (!tg) return false
+      
       tg.ready()
       tg.expand()
       setIsTelegramWebApp(true)
       
-      // Сохраняем данные пользователя из Telegram Web App
-      const user = tg.initDataUnsafe?.user
-      if (user) {
+      // Пробуем получить пользователя из initDataUnsafe
+      let user = tg.initDataUnsafe?.user
+      
+      // Если нет в initDataUnsafe, пробуем получить из initData
+      if (!user && tg.initData) {
+        try {
+          // Парсим initData (формат: key=value&key2=value2)
+          const params = new URLSearchParams(tg.initData)
+          const userStr = params.get('user')
+          if (userStr) {
+            user = JSON.parse(decodeURIComponent(userStr))
+          }
+        } catch (e) {
+          console.error('[Login] Error parsing initData:', e)
+        }
+      }
+      
+      if (user && user.id) {
         const userData = {
           id: user.id.toString(),
-          first_name: user.first_name,
-          last_name: user.last_name,
-          username: user.username,
-          photo_url: user.photo_url,
+          first_name: user.first_name || "",
+          last_name: user.last_name || "",
+          username: user.username || "",
+          photo_url: user.photo_url || "",
         }
         localStorage.setItem("telegram_user", JSON.stringify(userData))
+        console.log('[Login] ✅ User authenticated via Telegram WebApp:', userData)
         router.push("/assistant")
-        return
+        return true
       }
+      
+      return false
     }
+
+    // Пробуем сразу
+    if (checkTelegramAuth()) {
+      return
+    }
+
+    // Если Telegram SDK еще не загрузился, ждем
+    const checkInterval = setInterval(() => {
+      if (checkTelegramAuth()) {
+        clearInterval(checkInterval)
+      }
+    }, 100)
+
+    // Останавливаем проверку через 3 секунды
+    const timeout = setTimeout(() => {
+      clearInterval(checkInterval)
+      setIsLoading(false)
+    }, 3000)
 
     // Если уже есть сохраненный пользователь, переходим
     const savedUser = localStorage.getItem("telegram_user")
@@ -53,6 +93,8 @@ export default function LoginPage() {
       try {
         const parsed = JSON.parse(savedUser)
         if (parsed.id && parsed.id !== "demo") {
+          clearInterval(checkInterval)
+          clearTimeout(timeout)
           router.push("/assistant")
           return
         }
@@ -60,6 +102,11 @@ export default function LoginPage() {
         // Невалидные данные, удаляем
         localStorage.removeItem("telegram_user")
       }
+    }
+
+    return () => {
+      clearInterval(checkInterval)
+      clearTimeout(timeout)
     }
 
     // Настраиваем callback для Telegram Login Widget
