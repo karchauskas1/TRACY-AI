@@ -168,17 +168,38 @@ export function CalendarPageClient() {
         if (response.ok) {
           const data = await response.json()
           console.log(`[Calendar] Данные API:`, data)
+          
+          // Обрабатываем разные форматы ответа
+          let eventsArray: Event[] = []
           if (data.success && Array.isArray(data.events)) {
-            console.log(`[Calendar] ✅ Получено ${data.events.length} событий через HTTP API`)
-            setEvents(data.events)
+            eventsArray = data.events
+          } else if (Array.isArray(data.events)) {
+            eventsArray = data.events
+          } else if (Array.isArray(data)) {
+            eventsArray = data
+          } else {
+            console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
+            // Пробуем использовать сохраненные события
+            if (storedEvents) {
+              console.log(`[Calendar] Используем сохраненные события из localStorage`)
+              setLoading(false)
+              return
+            }
+            setLoading(false)
+            return
+          }
+          
+          if (eventsArray.length > 0) {
+            console.log(`[Calendar] ✅ Получено ${eventsArray.length} событий через HTTP API`)
+            setEvents(eventsArray)
             
             // Сохраняем в localStorage
-            localStorage.setItem("tracy_events", JSON.stringify(data.events))
-            localStorage.setItem("tracy_events_timestamp", data.timestamp)
+            localStorage.setItem("tracy_events", JSON.stringify(eventsArray))
+            localStorage.setItem("tracy_events_timestamp", data.timestamp || new Date().toISOString())
             
             // Обновляем counts по датам
             const counts: Record<string, number> = {}
-            data.events.forEach((event: Event) => {
+            eventsArray.forEach((event: Event) => {
               try {
                 const dateKey = format(new Date(event.startAt), "yyyy-MM-dd")
                 counts[dateKey] = (counts[dateKey] || 0) + 1
@@ -187,12 +208,14 @@ export function CalendarPageClient() {
               }
             })
             setEventsByDate(counts)
-            
-            setLoading(false)
-            return
           } else {
-            console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
+            console.log(`[Calendar] Нет событий для отображения`)
+            setEvents([])
+            setEventsByDate({})
           }
+          
+          setLoading(false)
+          return
         } else {
           let errorText = ""
           try {
