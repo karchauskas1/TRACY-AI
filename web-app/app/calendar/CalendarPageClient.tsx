@@ -93,7 +93,8 @@ export function CalendarPageClient() {
       
       console.log(`[Calendar] User ID: ${userId}, tg: ${!!tg}, user: ${!!user}`)
       
-      if (!userId) {
+      if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
+        console.error("[Calendar] ❌ User ID не найден или невалиден:", userId)
         console.warn("[Calendar] ⚠️ User ID не найден! Не могу загрузить события.")
         setLoading(false)
         return
