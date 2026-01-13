@@ -82,14 +82,60 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
   }, [user])
 
   const loadFeedback = async () => {
-    if (!user?.id) {
-      setError("Пользователь не найден")
+    // Получаем user_id из разных источников
+    let userId: string | null = null
+    
+    if (user?.id) {
+      userId = user.id.toString()
+    } else if (typeof window !== "undefined") {
+      const tg = (window as any).Telegram?.WebApp
+      if (tg?.initDataUnsafe?.user?.id) {
+        userId = tg.initDataUnsafe.user.id.toString()
+        // Сохраняем user для будущего использования
+        if (!user) {
+          const tgUser = tg.initDataUnsafe.user
+          const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")
+          setUser({
+            id: userId,
+            name: fullName || tgUser.first_name || "Пользователь",
+            avatarUrl: tgUser.photo_url,
+            first_name: tgUser.first_name,
+            last_name: tgUser.last_name,
+          })
+        }
+      } else {
+        // Пробуем получить из localStorage
+        const savedUser = localStorage.getItem("telegram_user")
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser)
+            userId = parsed.id?.toString() || null
+            if (userId && !user) {
+              const fullName = [parsed.first_name, parsed.last_name].filter(Boolean).join(" ")
+              setUser({
+                ...parsed,
+                id: userId,
+                name: fullName || parsed.first_name || "Пользователь",
+              })
+            }
+          } catch (e) {
+            console.error("[Feedback] Error parsing saved user:", e)
+          }
+        }
+      }
+    }
+    
+    if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
+      console.error("[Feedback] ❌ User ID не найден или невалиден:", userId)
+      setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
       setLoading(false)
       return
     }
+    
+    console.log(`[Feedback] User ID: ${userId}`)
 
     // Проверяем, является ли пользователь супер-пользователем
-    if (user.id !== SUPER_USER_ID) {
+    if (userId !== SUPER_USER_ID) {
       setError("Доступ запрещен. Только супер-пользователь может просматривать обратную связь.")
       setLoading(false)
       return
@@ -98,9 +144,6 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
     try {
       setLoading(true)
       setError(null)
-
-      // Проверяем, открыто ли через Telegram Web App
-      const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
 
       // ПРИОРИТЕТ 1: Прямой HTTP API запрос (работает для localhost и если нет Mixed Content блокировки)
       let apiBaseUrl = "https://api.pasekaproduction.ru"
@@ -114,10 +157,10 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
         }
       }
 
-      console.log(`[Feedback] Запрос к API: ${apiBaseUrl}/api/feedback?user_id=${user.id}&limit=100`)
+      console.log(`[Feedback] Запрос к API: ${apiBaseUrl}/api/feedback?user_id=${userId}&limit=100`)
       
       try {
-        const response = await fetch(`${apiBaseUrl}/api/feedback?user_id=${user.id}&limit=100`, {
+        const response = await fetch(`${apiBaseUrl}/api/feedback?user_id=${userId}&limit=100`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",

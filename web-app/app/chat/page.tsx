@@ -185,6 +185,8 @@ export default function ChatPage() {
         } else {
           setError("Не удалось подключиться к серверу. Проверьте подключение к интернету.")
         }
+      } else if (e.message && (e.message.includes("Invalid user_id") || e.message.includes("user_id required"))) {
+        setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
       } else {
         setError(e.message || "Не удалось загрузить чат")
       }
