@@ -64,10 +64,19 @@ export function CalendarPageClient() {
       
       // Получаем user_id из разных источников
       let userId: string | null = null
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:66',message:'loadEvents entry',data:{forceRefresh,hasUser:!!user,hasTg:!!tg,userFromState:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       if (user?.id) {
         userId = user.id.toString()
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:69',message:'userId from state',data:{userId,source:'user.id'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
       } else if (tg?.initDataUnsafe?.user?.id) {
         userId = tg.initDataUnsafe.user.id.toString()
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:72',message:'userId from Telegram WebApp',data:{userId,source:'tg.initDataUnsafe.user.id',tgUserExists:!!tg.initDataUnsafe?.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         // Сохраняем user для будущего использования
         if (!user) {
           setUser({
@@ -85,13 +94,26 @@ export function CalendarPageClient() {
           try {
             const parsedUser = JSON.parse(savedUser)
             userId = parsedUser.id?.toString() || null
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:89',message:'userId from localStorage',data:{userId,source:'localStorage',savedUserExists:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
           } catch (e) {
             console.error("[Calendar] Error parsing saved user:", e)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:92',message:'Error parsing localStorage user',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
           }
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:95',message:'No userId found',data:{userId:null,hasUser:!!user,hasTg:!!tg,hasSavedUser:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
         }
       }
       
       console.log(`[Calendar] User ID: ${userId}, tg: ${!!tg}, user: ${!!user}`)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:98',message:'userId validation check',data:{userId,isValid:userId&&userId!=='demo'&&userId!=='undefined'&&userId!=='null'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       
       if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
         console.error("[Calendar] ❌ User ID не найден или невалиден:", userId)
@@ -156,6 +178,9 @@ export function CalendarPageClient() {
       
       try {
         console.log(`[Calendar] Запрос к API: ${apiUrl}`)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:158',message:'API request before fetch',data:{apiUrl,userId,apiBaseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
@@ -165,15 +190,27 @@ export function CalendarPageClient() {
         })
         
         console.log(`[Calendar] Ответ API: status=${response.status}, ok=${response.ok}`)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:170',message:'API response received',data:{status:response.status,ok:response.ok,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
         
         if (response.ok) {
           let data
           try {
             const responseText = await response.text()
             console.log(`[Calendar] Raw API Response:`, responseText.substring(0, 500))
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:175',message:'Raw API response received',data:{responseLength:responseText.length,responsePreview:responseText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             data = JSON.parse(responseText)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:178',message:'JSON parsed successfully',data:{hasSuccess:!!data.success,hasEvents:!!data.events,eventsIsArray:Array.isArray(data.events),eventsCount:Array.isArray(data.events)?data.events.length:0,dataKeys:Object.keys(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
           } catch (e) {
             console.error(`[Calendar] Ошибка парсинга JSON:`, e)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:182',message:'JSON parse error',data:{error:String(e),hasStoredEvents:!!storedEvents},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             // Пробуем использовать сохраненные события
             if (storedEvents) {
               console.log(`[Calendar] Используем сохраненные события из localStorage`)
@@ -191,14 +228,26 @@ export function CalendarPageClient() {
           if (data.success && Array.isArray(data.events)) {
             eventsArray = data.events
             console.log(`[Calendar] ✅ Успешно загружено ${eventsArray.length} событий (формат: success + events)`)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:195',message:'Events extracted (format: success+events)',data:{eventsCount:eventsArray.length,firstEvent:eventsArray[0]||null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
           } else if (Array.isArray(data.events)) {
             eventsArray = data.events
             console.log(`[Calendar] ✅ Загружено ${eventsArray.length} событий (формат: events)`)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:200',message:'Events extracted (format: events)',data:{eventsCount:eventsArray.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
           } else if (Array.isArray(data)) {
             eventsArray = data
             console.log(`[Calendar] ✅ Загружено ${eventsArray.length} событий (формат: array)`)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:205',message:'Events extracted (format: array)',data:{eventsCount:eventsArray.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
           } else if (data.error) {
             console.error(`[Calendar] ❌ API вернул ошибку:`, data.error)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:210',message:'API returned error',data:{error:data.error,hasStoredEvents:!!storedEvents},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             // Пробуем использовать сохраненные события
             if (storedEvents) {
               console.log(`[Calendar] Используем сохраненные события из localStorage`)
@@ -209,6 +258,9 @@ export function CalendarPageClient() {
             return
           } else {
             console.warn(`[Calendar] ⚠️ API вернул неверный формат данных:`, data)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:222',message:'Unexpected data format',data:{dataKeys:Object.keys(data),hasStoredEvents:!!storedEvents},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             // Пробуем использовать сохраненные события
             if (storedEvents) {
               console.log(`[Calendar] Используем сохраненные события из localStorage`)
@@ -221,6 +273,9 @@ export function CalendarPageClient() {
           
           if (eventsArray.length > 0) {
             console.log(`[Calendar] ✅ Получено ${eventsArray.length} событий через HTTP API`)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:230',message:'Setting events to state',data:{eventsCount:eventsArray.length,firstEventTitle:eventsArray[0]?.title,firstEventStartAt:eventsArray[0]?.startAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
             setEvents(eventsArray)
             
             // Сохраняем в localStorage
@@ -235,16 +290,28 @@ export function CalendarPageClient() {
                 counts[dateKey] = (counts[dateKey] || 0) + 1
               } catch (e) {
                 console.error("Error parsing event date:", e, event)
+                // #region agent log
+                fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:242',message:'Error parsing event date',data:{error:String(e),eventStartAt:event.startAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                // #endregion
               }
             })
             setEventsByDate(counts)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:248',message:'EventsByDate set',data:{countsKeys:Object.keys(counts),countsValues:Object.values(counts)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
           } else {
             console.log(`[Calendar] Нет событий для отображения`)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:252',message:'No events to display',data:{eventsArrayLength:eventsArray.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             setEvents([])
             setEventsByDate({})
           }
           
           setLoading(false)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:258',message:'loadEvents completed successfully',data:{eventsCount:eventsArray.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           return
         } else {
           let errorText = ""

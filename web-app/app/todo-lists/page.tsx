@@ -75,13 +75,21 @@ export default function TodoListsPage() {
   const loadLists = async () => {
     // Получаем user_id из разных источников
     let userId: string | null = null
-    
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:75',message:'loadLists entry',data:{hasUser:!!user,userFromState:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     if (user?.id) {
       userId = user.id.toString()
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:80',message:'userId from state',data:{userId,source:'user.id'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
     } else if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
       if (tg?.initDataUnsafe?.user?.id) {
         userId = tg.initDataUnsafe.user.id.toString()
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:85',message:'userId from Telegram WebApp',data:{userId,source:'tg.initDataUnsafe.user.id',tgUserExists:!!tg.initDataUnsafe?.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         // Сохраняем user для будущего использования
         if (!user) {
           setUser({
@@ -97,21 +105,37 @@ export default function TodoListsPage() {
           try {
             const parsed = JSON.parse(savedUser)
             userId = parsed.id?.toString() || null
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:100',message:'userId from localStorage',data:{userId,source:'localStorage'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
           } catch (e) {
             console.error("[TodoLists] Error parsing saved user:", e)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:103',message:'Error parsing localStorage user',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
           }
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:107',message:'No userId found',data:{userId:null,hasUser:!!user,hasTg:!!tg,hasSavedUser:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
         }
       }
     }
     
     if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
       console.error("[TodoLists] ❌ User ID не найден или невалиден:", userId)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:111',message:'Invalid userId - returning early',data:{userId,isDemo:userId==='demo',isUndefined:userId==='undefined',isNull:userId==='null'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
       setLoading(false)
       return
     }
     
     console.log(`[TodoLists] User ID: ${userId}`)
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:118',message:'userId validated - proceeding to API call',data:{userId,isValid:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
 
     try {
       setLoading(true)
@@ -121,7 +145,11 @@ export default function TodoListsPage() {
         ? "http://localhost:8080"
         : "https://api.pasekaproduction.ru"
 
-      const response = await fetch(`${apiBaseUrl}/api/todo-lists?user_id=${userId}`, {
+      const apiUrl = `${apiBaseUrl}/api/todo-lists?user_id=${userId}`
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:124',message:'API request before fetch',data:{apiUrl,userId,apiBaseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      const response = await fetch(apiUrl, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -130,6 +158,9 @@ export default function TodoListsPage() {
       })
 
       console.log(`[TodoLists] API Response: status=${response.status}, ok=${response.ok}`)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:135',message:'API response received',data:{status:response.status,ok:response.ok,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       
       if (!response.ok) {
         let errorText = ""
@@ -139,6 +170,9 @@ export default function TodoListsPage() {
           errorText = response.statusText
         }
         console.error(`[TodoLists] API Error: ${response.status} ${response.statusText}`, errorText)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:143',message:'API error response',data:{status:response.status,statusText:response.statusText,errorText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         if (response.status === 404) {
           throw new Error("API endpoint не найден. Сервер не обновлен.")
         }
@@ -149,9 +183,18 @@ export default function TodoListsPage() {
       try {
         const responseText = await response.text()
         console.log(`[TodoLists] Raw API Response:`, responseText)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:153',message:'Raw API response received',data:{responseLength:responseText.length,responsePreview:responseText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         data = JSON.parse(responseText)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:156',message:'JSON parsed successfully',data:{hasSuccess:!!data.success,hasLists:!!data.lists,listsIsArray:Array.isArray(data.lists),listsCount:Array.isArray(data.lists)?data.lists.length:0,dataKeys:Object.keys(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
       } catch (e) {
         console.error(`[TodoLists] Ошибка парсинга JSON:`, e)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:160',message:'JSON parse error',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         throw new Error("Неверный формат ответа от сервера")
       }
       
@@ -159,15 +202,27 @@ export default function TodoListsPage() {
       
       if (data.success && Array.isArray(data.lists)) {
         console.log(`[TodoLists] ✅ Успешно загружено ${data.lists.length} списков`)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:168',message:'Lists extracted (format: success+lists)',data:{listsCount:data.lists.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         setLists(data.lists)
       } else if (Array.isArray(data.lists)) {
         console.log(`[TodoLists] ✅ Загружено ${data.lists.length} списков (без success поля)`)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:172',message:'Lists extracted (format: lists)',data:{listsCount:data.lists.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         setLists(data.lists)
       } else if (data.error) {
         console.error(`[TodoLists] ❌ API вернул ошибку:`, data.error)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:176',message:'API returned error in data',data:{error:data.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         throw new Error(data.error || "Ошибка загрузки списков")
       } else {
         console.warn(`[TodoLists] ⚠️ Неожиданный формат данных:`, data)
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:180',message:'Unexpected data format',data:{dataKeys:Object.keys(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
         setLists([])
       }
     } catch (e: any) {

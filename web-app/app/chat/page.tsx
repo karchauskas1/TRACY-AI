@@ -71,13 +71,21 @@ export default function ChatPage() {
   const loadChat = async () => {
     // Получаем user_id из разных источников
     let userId: string | null = null
-    
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:71',message:'loadChat entry',data:{hasUser:!!user,userFromState:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     if (user?.id) {
       userId = user.id.toString()
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:76',message:'userId from state',data:{userId,source:'user.id'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
     } else if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
       if (tg?.initDataUnsafe?.user?.id) {
         userId = tg.initDataUnsafe.user.id.toString()
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:81',message:'userId from Telegram WebApp',data:{userId,source:'tg.initDataUnsafe.user.id',tgUserExists:!!tg.initDataUnsafe?.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
         // Сохраняем user для будущего использования
         if (!user) {
           setUser({
@@ -93,21 +101,37 @@ export default function ChatPage() {
           try {
             const parsed = JSON.parse(savedUser)
             userId = parsed.id?.toString() || null
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:96',message:'userId from localStorage',data:{userId,source:'localStorage'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
           } catch (e) {
             console.error("[Chat] Error parsing saved user:", e)
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:99',message:'Error parsing localStorage user',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
           }
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:103',message:'No userId found',data:{userId:null,hasUser:!!user,hasTg:!!tg,hasSavedUser:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
         }
       }
     }
     
     if (!userId || userId === "demo" || userId === "undefined" || userId === "null") {
       console.error("[Chat] ❌ User ID не найден или невалиден:", userId)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:107',message:'Invalid userId - returning early',data:{userId,isDemo:userId==='demo',isUndefined:userId==='undefined',isNull:userId==='null'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
       setError("Не удалось определить ID пользователя. Откройте приложение через Telegram.")
       setLoading(false)
       return
     }
     
     console.log(`[Chat] User ID: ${userId}`)
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:113',message:'userId validated - proceeding to API call',data:{userId,isValid:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
 
     try {
       setLoading(true)
@@ -118,7 +142,11 @@ export default function ChatPage() {
         : "https://api.pasekaproduction.ru"
 
       // Загружаем историю сообщений
-      const messagesResponse = await fetch(`${apiBaseUrl}/api/chat/messages?user_id=${userId}&limit=50`, {
+      const messagesApiUrl = `${apiBaseUrl}/api/chat/messages?user_id=${userId}&limit=50`
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:121',message:'API request before fetch (messages)',data:{apiUrl:messagesApiUrl,userId,apiBaseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      const messagesResponse = await fetch(messagesApiUrl, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -127,15 +155,27 @@ export default function ChatPage() {
       })
 
       console.log(`[Chat] Messages API Response: status=${messagesResponse.status}, ok=${messagesResponse.ok}`)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:132',message:'Messages API response received',data:{status:messagesResponse.status,ok:messagesResponse.ok,statusText:messagesResponse.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
       
       if (messagesResponse.ok) {
         let messagesData
         try {
           const responseText = await messagesResponse.text()
           console.log(`[Chat] Raw Messages Response:`, responseText)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:136',message:'Raw messages response received',data:{responseLength:responseText.length,responsePreview:responseText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
           messagesData = JSON.parse(responseText)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:139',message:'Messages JSON parsed successfully',data:{hasSuccess:!!messagesData.success,hasMessages:!!messagesData.messages,messagesIsArray:Array.isArray(messagesData.messages),messagesCount:Array.isArray(messagesData.messages)?messagesData.messages.length:0,dataKeys:Object.keys(messagesData)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
         } catch (e) {
           console.error(`[Chat] Ошибка парсинга JSON:`, e)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:142',message:'Messages JSON parse error',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
           throw new Error("Неверный формат ответа от сервера")
         }
         
@@ -143,15 +183,27 @@ export default function ChatPage() {
         
         if (messagesData.success && Array.isArray(messagesData.messages)) {
           console.log(`[Chat] ✅ Успешно загружено ${messagesData.messages.length} сообщений`)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:150',message:'Messages extracted (format: success+messages)',data:{messagesCount:messagesData.messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
           setMessages(messagesData.messages)
         } else if (Array.isArray(messagesData.messages)) {
           console.log(`[Chat] ✅ Загружено ${messagesData.messages.length} сообщений (без success поля)`)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:154',message:'Messages extracted (format: messages)',data:{messagesCount:messagesData.messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
           setMessages(messagesData.messages)
         } else if (messagesData.error) {
           console.error(`[Chat] ❌ API вернул ошибку:`, messagesData.error)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:158',message:'API returned error in messagesData',data:{error:messagesData.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
           throw new Error(messagesData.error || "Ошибка загрузки сообщений")
         } else {
           console.warn(`[Chat] ⚠️ Неожиданный формат данных:`, messagesData)
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:162',message:'Unexpected messagesData format',data:{dataKeys:Object.keys(messagesData)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
           setMessages([])
         }
         
@@ -242,6 +294,9 @@ export default function ChatPage() {
       })
 
       console.log(`[Chat] Greeting API Response: status=${response.status}, ok=${response.ok}`)
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:245',message:'loadGreeting API response received',data:{status:response.status,ok:response.ok,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+      // #endregion
       
       if (response.ok) {
         const data = await response.json()
