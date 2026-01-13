@@ -232,12 +232,16 @@ export default function TodoListsPage() {
         fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:168',message:'Lists extracted (format: success+lists)',data:{listsCount:data.lists.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
         setLists(data.lists)
+        setError(null) // Очищаем ошибку при успехе
+        setLoading(false) // Убеждаемся, что loading выключен
       } else if (Array.isArray(data.lists)) {
         console.log(`[TodoLists] ✅ Загружено ${data.lists.length} списков (без success поля)`)
         // #region agent log
         fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:172',message:'Lists extracted (format: lists)',data:{listsCount:data.lists.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
         setLists(data.lists)
+        setError(null) // Очищаем ошибку при успехе
+        setLoading(false) // Убеждаемся, что loading выключен
       } else if (data.error) {
         console.error(`[TodoLists] ❌ API вернул ошибку:`, data.error)
         // #region agent log
@@ -250,6 +254,8 @@ export default function TodoListsPage() {
         fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TodoListsPage.tsx:180',message:'Unexpected data format',data:{dataKeys:Object.keys(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
         setLists([])
+        setError(null) // Очищаем ошибку
+        setLoading(false) // Убеждаемся, что loading выключен
       }
     } catch (e: any) {
       console.error("[TodoLists] Ошибка загрузки списков:", e)

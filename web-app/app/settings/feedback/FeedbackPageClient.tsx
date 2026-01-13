@@ -186,15 +186,18 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
           if (data.success && Array.isArray(data.feedback)) {
             console.log(`[Feedback] ✅ Успешно загружено ${data.feedback.length} записей`)
             setFeedback(data.feedback)
+            setError(null) // Очищаем ошибку при успехе
           } else if (Array.isArray(data.feedback)) {
             console.log(`[Feedback] ✅ Загружено ${data.feedback.length} записей (без success поля)`)
             setFeedback(data.feedback)
+            setError(null) // Очищаем ошибку при успехе
           } else if (data.error) {
             console.error(`[Feedback] ❌ API вернул ошибку:`, data.error)
             throw new Error(data.error || "Ошибка загрузки обратной связи")
           } else {
             console.warn(`[Feedback] ⚠️ Неожиданный формат данных:`, data)
             setFeedback([])
+            setError(null) // Очищаем ошибку
           }
           
           setLoading(false)

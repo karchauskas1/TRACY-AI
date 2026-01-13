@@ -213,12 +213,14 @@ export default function ChatPage() {
           fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:150',message:'Messages extracted (format: success+messages)',data:{messagesCount:messagesData.messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
           setMessages(messagesData.messages)
+          setError(null) // Очищаем ошибку при успехе
         } else if (Array.isArray(messagesData.messages)) {
           console.log(`[Chat] ✅ Загружено ${messagesData.messages.length} сообщений (без success поля)`)
           // #region agent log
           fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:154',message:'Messages extracted (format: messages)',data:{messagesCount:messagesData.messages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
           setMessages(messagesData.messages)
+          setError(null) // Очищаем ошибку при успехе
         } else if (messagesData.error) {
           console.error(`[Chat] ❌ API вернул ошибку:`, messagesData.error)
           // #region agent log
@@ -231,12 +233,15 @@ export default function ChatPage() {
           fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatPage.tsx:162',message:'Unexpected messagesData format',data:{dataKeys:Object.keys(messagesData)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
           setMessages([])
+          setError(null) // Очищаем ошибку
         }
         
         // Если истории нет, загружаем приветственное сообщение
         if (!messagesData.messages || messagesData.messages.length === 0) {
           await loadGreeting(userId)
         }
+        
+        setLoading(false) // Убеждаемся, что loading выключен после успешной загрузки
       } else {
         let errorText = ""
         try {

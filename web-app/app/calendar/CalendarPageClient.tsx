@@ -302,6 +302,7 @@ export function CalendarPageClient() {
             fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CalendarPageClient.tsx:230',message:'Setting events to state',data:{eventsCount:eventsArray.length,firstEventTitle:eventsArray[0]?.title,firstEventStartAt:eventsArray[0]?.startAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
             setEvents(eventsArray)
+            setError(null) // Очищаем ошибку при успехе
             
             // Сохраняем в localStorage
             localStorage.setItem("tracy_events", JSON.stringify(eventsArray))
@@ -331,6 +332,7 @@ export function CalendarPageClient() {
             // #endregion
             setEvents([])
             setEventsByDate({})
+            setError(null) // Очищаем ошибку, если событий нет (это нормально)
           }
           
           setLoading(false)
