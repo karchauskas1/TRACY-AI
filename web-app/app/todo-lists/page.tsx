@@ -6,6 +6,7 @@ import { ArrowLeft, Plus, ListTodo, CheckSquare2, Square, Trash2, Loader2 } from
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
+import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../lib/error-utils"
 
 interface TodoList {
   id: number
