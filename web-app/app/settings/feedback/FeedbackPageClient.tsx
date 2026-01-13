@@ -135,7 +135,7 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
     console.log(`[Feedback] User ID: ${userId}`)
 
     // Проверяем, является ли пользователь супер-пользователем
-    if (userId !== SUPER_USER_ID) {
+    if (!userId || userId !== SUPER_USER_ID) {
       setError("Доступ запрещен. Только супер-пользователь может просматривать обратную связь.")
       setLoading(false)
       return
