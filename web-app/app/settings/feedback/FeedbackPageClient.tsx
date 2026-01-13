@@ -92,7 +92,7 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
       if (tg?.initDataUnsafe?.user?.id) {
         userId = tg.initDataUnsafe.user.id.toString()
         // Сохраняем user для будущего использования
-        if (!user) {
+        if (!user && userId) {
           const tgUser = tg.initDataUnsafe.user
           const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")
           setUser({
