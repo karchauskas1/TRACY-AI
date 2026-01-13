@@ -24,10 +24,30 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <head>
-        <script src="https://telegram.org/js/telegram-web-app.js" async />
+        <script 
+          src="https://telegram.org/js/telegram-web-app.js" 
+          strategy="beforeInteractive"
+        />
         <script
           dangerouslySetInnerHTML={{
-            __html: `window.__NEXT_PUBLIC_API_URL__ = ${JSON.stringify(apiUrl)};`,
+            __html: `
+              window.__NEXT_PUBLIC_API_URL__ = ${JSON.stringify(apiUrl)};
+              
+              // Ждем загрузки Telegram WebApp SDK
+              if (typeof window !== 'undefined') {
+                const checkTelegram = setInterval(() => {
+                  if (window.Telegram && window.Telegram.WebApp) {
+                    const tg = window.Telegram.WebApp;
+                    tg.ready();
+                    tg.expand();
+                    clearInterval(checkTelegram);
+                  }
+                }, 50);
+                
+                // Останавливаем проверку через 5 секунд
+                setTimeout(() => clearInterval(checkTelegram), 5000);
+              }
+            `,
           }}
         />
       </head>
