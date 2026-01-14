@@ -174,12 +174,38 @@ function LoginPageContent() {
 
   // Автоматическая проверка авторизации при загрузке
   useEffect(() => {
+    // Настраиваем callback для Telegram Login Widget (для обычного браузера)
+    // Важно: должно быть определено ДО return cleanup, иначе виджет не сможет вызвать callback.
+    if (typeof window !== "undefined") {
+      window.onTelegramAuth = (user: any) => {
+        logger.info('LoginPage', 'Telegram auth callback (Login Widget)', { userId: user?.id })
+
+        const userData = {
+          id: user.id.toString(),
+          first_name: user.first_name || "",
+          last_name: user.last_name || "",
+          username: user.username || "",
+          photo_url: user.photo_url || "",
+          auth_date: user.auth_date,
+          hash: user.hash,
+        }
+
+        localStorage.setItem("telegram_user", JSON.stringify(userData))
+        router.push("/assistant")
+      }
+    }
+
     const checkTelegramAuth = () => {
       if (typeof window === "undefined") return false
       
       const tg = (window as any).Telegram?.WebApp
       if (!tg) return false
-      
+
+      // В некоторых контекстах (например, in-app browser) объект Telegram.WebApp может быть,
+      // но initData отсутствует. Это НЕ Mini App контекст, и нужно показывать Login Widget.
+      const hasMiniAppData = !!(tg.initData && String(tg.initData).length > 0) || !!tg.initDataUnsafe?.user?.id
+      if (!hasMiniAppData) return false
+
       setIsTelegramWebApp(true)
       
       // Пробуем получить пользователя из initDataUnsafe (быстрый путь)
@@ -256,24 +282,10 @@ function LoginPageContent() {
     return () => {
       clearInterval(checkInterval)
       clearTimeout(timeout)
-    }
-
-    // Настраиваем callback для Telegram Login Widget (для обычного браузера)
-    window.onTelegramAuth = (user: any) => {
-      logger.info('LoginPage', 'Telegram auth callback (Login Widget)', { userId: user.id })
-      
-      const userData = {
-        id: user.id.toString(),
-        first_name: user.first_name || "",
-        last_name: user.last_name || "",
-        username: user.username || "",
-        photo_url: user.photo_url || "",
-        auth_date: user.auth_date,
-        hash: user.hash,
+      // Cleanup виджет callback
+      if (typeof window !== "undefined") {
+        delete (window as any).onTelegramAuth
       }
-      
-      localStorage.setItem("telegram_user", JSON.stringify(userData))
-      router.push("/assistant")
     }
     
     setIsLoading(false)
@@ -425,8 +437,11 @@ function LoginPageContent() {
               
               {/* Telegram Login Widget */}
               <div className="flex justify-center">
-                <div
-                  id="telegram-login"
+                <Script
+                  id="telegram-login-widget"
+                  src="https://telegram.org/js/telegram-widget.js?22"
+                  strategy="afterInteractive"
+                  async
                   data-telegram-login={botUsername}
                   data-size="large"
                   data-onauth="onTelegramAuth(user)"
@@ -435,11 +450,6 @@ function LoginPageContent() {
                   data-radius="8"
                 />
               </div>
-
-              <Script
-                src="https://telegram.org/js/telegram-widget.js?22"
-                strategy="afterInteractive"
-              />
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
