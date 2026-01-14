@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { useRouter, usePathname } from "next/navigation"
+import { useEffect, useState, useRef, Suspense } from "react"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { logger } from "../../lib/logger"
 import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
@@ -9,15 +9,59 @@ import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
 import { useTelegramUser } from "../../lib/useTelegramUser"
 
-export default function AssistantPage() {
+function AssistantPageContent() {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { user: telegramUser, userId, isLoading: userLoading } = useTelegramUser()
   const [user, setUser] = useState<any>(null)
   const [isSuperUser, setIsSuperUser] = useState(false)
   const mountedRef = useRef(false)
   const lastPathnameRef = useRef<string | null>(null)
   const lastUserIdRef = useRef<string | null>(null)
+  const debugMode = searchParams.get('debug') === '1'
+  const eventCountsRef = useRef({ pointerdown: 0, click: 0, touchstart: 0 })
+  const lastClickRef = useRef<{ target: string; timestamp: number } | null>(null)
+  const lastNavAttemptRef = useRef<string | null>(null)
+
+  // Диагностика в debug=1 режиме
+  useEffect(() => {
+    if (!debugMode || typeof window === 'undefined') return
+
+    const handlePointerDown = (e: PointerEvent) => {
+      eventCountsRef.current.pointerdown++
+      lastClickRef.current = {
+        target: (e.target as HTMLElement)?.tagName || 'unknown',
+        timestamp: Date.now(),
+      }
+    }
+
+    const handleClick = (e: MouseEvent) => {
+      eventCountsRef.current.click++
+      lastClickRef.current = {
+        target: (e.target as HTMLElement)?.tagName || 'unknown',
+        timestamp: Date.now(),
+      }
+    }
+
+    const handleTouchStart = (e: TouchEvent) => {
+      eventCountsRef.current.touchstart++
+      lastClickRef.current = {
+        target: (e.target as HTMLElement)?.tagName || 'unknown',
+        timestamp: Date.now(),
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown, true)
+    window.addEventListener('click', handleClick, true)
+    window.addEventListener('touchstart', handleTouchStart, true)
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true)
+      window.removeEventListener('click', handleClick, true)
+      window.removeEventListener('touchstart', handleTouchStart, true)
+    }
+  }, [debugMode])
 
   // Логируем mounted ТОЛЬКО один раз при монтировании компонента
   useEffect(() => {
@@ -161,47 +205,15 @@ export default function AssistantPage() {
             {/* Чат с Tracy */}
             <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
-              onClick={(e) => {
-                logger.debug('AssistantPage', 'Click on Чат с Tracy', {
-                  target: e.target,
-                  currentTarget: e.currentTarget,
-                  targetTag: (e.target as HTMLElement)?.tagName,
-                  currentTargetTag: (e.currentTarget as HTMLElement)?.tagName,
-                  timestamp: Date.now(),
-                })
-                
-                e.preventDefault()
-                e.stopPropagation()
-                
-                logger.info('AssistantPage', 'Calling router.push(/chat)', {
-                  beforePathname: pathname,
-                  routerExists: !!router,
-                })
-                
-                try {
-                  router.push("/chat")
-                  logger.info('AssistantPage', 'router.push(/chat) called successfully')
-                  
-                  // Мониторинг навигации: проверяем через 500мс, изменился ли pathname
-                  setTimeout(() => {
-                    const newPathname = window.location.pathname
-                    if (newPathname !== "/chat") {
-                      logger.error('AssistantPage', 'Navigation failed - pathname did not change', {
-                        expected: '/chat',
-                        actual: newPathname,
-                        timestamp: Date.now(),
-                      })
-                      // Fallback: hard navigation
-                      window.location.href = "/chat"
-                    } else {
-                      logger.info('AssistantPage', 'Navigation successful - pathname changed to /chat')
-                    }
-                  }, 500)
-                } catch (error) {
-                  logger.error('AssistantPage', 'Error in router.push(/chat)', { error })
-                  // Fallback: hard navigation
-                  window.location.href = "/chat"
+              onClick={() => {
+                if (debugMode) {
+                  lastNavAttemptRef.current = '/chat'
+                  logger.debug('AssistantPage', 'Click on Чат с Tracy', {
+                    eventCounts: eventCountsRef.current,
+                    lastClick: lastClickRef.current,
+                  })
                 }
+                router.push("/chat")
               }}
               role="button"
               tabIndex={0}
@@ -228,47 +240,15 @@ export default function AssistantPage() {
             {/* Calendar */}
             <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
-              onClick={(e) => {
-                logger.debug('AssistantPage', 'Click on Календарь', {
-                  target: e.target,
-                  currentTarget: e.currentTarget,
-                  targetTag: (e.target as HTMLElement)?.tagName,
-                  currentTargetTag: (e.currentTarget as HTMLElement)?.tagName,
-                  timestamp: Date.now(),
-                })
-                
-                e.preventDefault()
-                e.stopPropagation()
-                
-                logger.info('AssistantPage', 'Calling router.push(/calendar)', {
-                  beforePathname: pathname,
-                  routerExists: !!router,
-                })
-                
-                try {
-                  router.push("/calendar")
-                  logger.info('AssistantPage', 'router.push(/calendar) called successfully')
-                  
-                  // Мониторинг навигации: проверяем через 500мс, изменился ли pathname
-                  setTimeout(() => {
-                    const newPathname = window.location.pathname
-                    if (newPathname !== "/calendar") {
-                      logger.error('AssistantPage', 'Navigation failed - pathname did not change', {
-                        expected: '/calendar',
-                        actual: newPathname,
-                        timestamp: Date.now(),
-                      })
-                      // Fallback: hard navigation
-                      window.location.href = "/calendar"
-                    } else {
-                      logger.info('AssistantPage', 'Navigation successful - pathname changed to /calendar')
-                    }
-                  }, 500)
-                } catch (error) {
-                  logger.error('AssistantPage', 'Error in router.push(/calendar)', { error })
-                  // Fallback: hard navigation
-                  window.location.href = "/calendar"
+              onClick={() => {
+                if (debugMode) {
+                  lastNavAttemptRef.current = '/calendar'
+                  logger.debug('AssistantPage', 'Click on Календарь', {
+                    eventCounts: eventCountsRef.current,
+                    lastClick: lastClickRef.current,
+                  })
                 }
+                router.push("/calendar")
               }}
               role="button"
               tabIndex={0}
@@ -295,10 +275,10 @@ export default function AssistantPage() {
             {/* История расшифровок */}
             <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                console.log("[AssistantPage] Navigate to /meetings/history via router.push")
+              onClick={() => {
+                if (debugMode) {
+                  lastNavAttemptRef.current = '/meetings/history'
+                }
                 router.push("/meetings/history")
               }}
               role="button"
@@ -326,47 +306,11 @@ export default function AssistantPage() {
             {/* Списки задач */}
             <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
-              onClick={(e) => {
-                logger.debug('AssistantPage', 'Click on Списки задач', {
-                  target: e.target,
-                  currentTarget: e.currentTarget,
-                  targetTag: (e.target as HTMLElement)?.tagName,
-                  currentTargetTag: (e.currentTarget as HTMLElement)?.tagName,
-                  timestamp: Date.now(),
-                })
-                
-                e.preventDefault()
-                e.stopPropagation()
-                
-                logger.info('AssistantPage', 'Calling router.push(/todo-lists)', {
-                  beforePathname: pathname,
-                  routerExists: !!router,
-                })
-                
-                try {
-                  router.push("/todo-lists")
-                  logger.info('AssistantPage', 'router.push(/todo-lists) called successfully')
-                  
-                  // Мониторинг навигации: проверяем через 500мс, изменился ли pathname
-                  setTimeout(() => {
-                    const newPathname = window.location.pathname
-                    if (newPathname !== "/todo-lists") {
-                      logger.error('AssistantPage', 'Navigation failed - pathname did not change', {
-                        expected: '/todo-lists',
-                        actual: newPathname,
-                        timestamp: Date.now(),
-                      })
-                      // Fallback: hard navigation
-                      window.location.href = "/todo-lists"
-                    } else {
-                      logger.info('AssistantPage', 'Navigation successful - pathname changed to /todo-lists')
-                    }
-                  }, 500)
-                } catch (error) {
-                  logger.error('AssistantPage', 'Error in router.push(/todo-lists)', { error })
-                  // Fallback: hard navigation
-                  window.location.href = "/todo-lists"
+              onClick={() => {
+                if (debugMode) {
+                  lastNavAttemptRef.current = '/todo-lists'
                 }
+                router.push("/todo-lists")
               }}
               role="button"
               tabIndex={0}
@@ -395,10 +339,10 @@ export default function AssistantPage() {
               <>
                 <div 
                   className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    console.log("[AssistantPage] Navigate to /settings/feedback via router.push")
+                  onClick={() => {
+                    if (debugMode) {
+                      lastNavAttemptRef.current = '/settings/feedback'
+                    }
                     router.push("/settings/feedback")
                   }}
                   role="button"
@@ -424,10 +368,10 @@ export default function AssistantPage() {
                 </div>
                 <div 
                   className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    console.log("[AssistantPage] Navigate to /debug via router.push")
+                  onClick={() => {
+                    if (debugMode) {
+                      lastNavAttemptRef.current = '/debug'
+                    }
                     router.push("/debug")
                   }}
                   role="button"
@@ -456,7 +400,38 @@ export default function AssistantPage() {
           </div>
         </div>
       </div>
+
+      {debugMode && (
+        <div className="fixed bottom-4 right-4 bg-black/90 text-white p-4 rounded-lg text-xs font-mono z-50 max-w-xs">
+          <div className="mb-2 font-bold">Debug (assistant)</div>
+          <div>Pathname: {pathname}</div>
+          <div>Mounted: {mountedRef.current ? 'YES' : 'NO'}</div>
+          <div>IsTelegram: {typeof window !== 'undefined' && (window as any).Telegram?.WebApp ? 'YES' : 'NO'}</div>
+          <div>Events: p={eventCountsRef.current.pointerdown} c={eventCountsRef.current.click} t={eventCountsRef.current.touchstart}</div>
+          {lastClickRef.current && (
+            <div>LastClick: {lastClickRef.current.target} @ {new Date(lastClickRef.current.timestamp).toLocaleTimeString()}</div>
+          )}
+          {lastNavAttemptRef.current && (
+            <div>LastNav: {lastNavAttemptRef.current}</div>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+export default function AssistantPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+          <p className="mt-4 text-muted-foreground">Загрузка...</p>
+        </div>
+      </div>
+    }>
+      <AssistantPageContent />
+    </Suspense>
   )
 }
 
