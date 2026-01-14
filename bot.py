@@ -162,7 +162,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /web - открывает веб-приложение."""
-    web_url = os.getenv("WEB_APP_URL", "http://localhost:3000")
+    # Используем только валидированный production URL
+    web_url = config.WEB_APP_URL
+    if not web_url or not config.is_valid_production_url(web_url):
+        await update.message.reply_text(
+            "⚠️ Веб-приложение временно недоступно.\n"
+            "Пожалуйста, попробуйте позже."
+        )
+        logger.error(f"❌ WEB_APP_URL не валиден для команды /web: {web_url}")
+        return
     
     message_text = (
         "🌐 Веб-приложение TRACY\n\n"
@@ -176,17 +184,15 @@ async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     # Используем WebApp кнопку для открытия в Telegram Mini App
-    if "localhost" not in web_url.lower() and web_url.startswith("https://"):
-        keyboard = [[InlineKeyboardButton(
-            "🚀 Открыть приложение",
-            web_app=WebAppInfo(url=web_url)  # WebApp - откроется в Telegram
-        )]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            message_text,
-            reply_markup=reply_markup
-        )
-        return
+    keyboard = [[InlineKeyboardButton(
+        "🚀 Открыть приложение",
+        web_app=WebAppInfo(url=web_url)  # WebApp - откроется в Telegram
+    )]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        message_text,
+        reply_markup=reply_markup
+    )
     
     # Для localhost или если кнопка не получилась - отправляем просто текст
     await update.message.reply_text(message_text, parse_mode="Markdown")
@@ -3676,17 +3682,26 @@ def main():
             logger.info("✅ Первая проверка напоминаний завершена")
             
             # Устанавливаем Menu Button для веб-приложения (глобально для всех чатов)
-            web_url = os.getenv("WEB_APP_URL")
-            if web_url and "localhost" not in web_url.lower() and web_url.startswith("https://"):
+            # Telegram Mini App ВСЕГДА использует production domain.
+            # Preview deployments ЗАПРЕЩЕНЫ.
+            web_url = config.WEB_APP_URL
+            if web_url and config.is_valid_production_url(web_url):
                 try:
                     menu_button = MenuButtonWebApp(text="TRACY", web_app=WebAppInfo(url=web_url))
                     # Устанавливаем глобально (chat_id=None означает глобальная настройка)
                     await app.bot.set_chat_menu_button(chat_id=None, menu_button=menu_button)
-                    logger.info(f"✅ Menu Button установлен: {web_url}")
+                    logger.info(f"✅ Menu Button установлен с production URL: {web_url}")
                 except Exception as e:
-                    logger.warning(f"⚠️ Не удалось установить Menu Button: {e}")
+                    logger.error(f"❌ Не удалось установить Menu Button: {e}")
+            elif web_url:
+                # URL указан, но не прошел валидацию
+                logger.error(
+                    f"❌ WEB_APP_URL не является production URL: {web_url}\n"
+                    f"   Preview deployments ЗАПРЕЩЕНЫ для Telegram Mini App.\n"
+                    f"   Используйте только production domain (например: https://tracy-ai.vercel.app)"
+                )
             else:
-                logger.info("⚠️ WEB_APP_URL не настроен или не HTTPS, Menu Button не установлен")
+                logger.warning("⚠️ WEB_APP_URL не настроен, Menu Button не установлен")
             
             # Устанавливаем команды бота (для меню команд)
             try:

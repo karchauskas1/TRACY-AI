@@ -43,7 +43,75 @@ TOKENS_DIR = "./tokens"
 os.makedirs(TOKENS_DIR, exist_ok=True)
 
 # Web App
-WEB_APP_URL = os.getenv("WEB_APP_URL")  # HTTPS URL веб-приложения (GitHub Pages)
+# Telegram Mini App ВСЕГДА использует production domain.
+# Preview deployments ЗАПРЕЩЕНЫ.
+# 
+# Production URL должен быть явно указан в .env:
+# WEB_APP_URL=https://tracy-ai.vercel.app
+#
+# НЕ используйте:
+# - preview URLs (содержат -projects.vercel.app или hash)
+# - branch deployments
+# - автоматическую генерацию URL
+WEB_APP_URL = os.getenv("WEB_APP_URL")  # HTTPS URL веб-приложения (только production)
+
+# Разрешенные production домены (allowlist)
+ALLOWED_PRODUCTION_DOMAINS = [
+    "tracy-ai.vercel.app",  # Основной production domain
+    # Добавьте другие production домены здесь, если нужно
+]
+
+def is_valid_production_url(url: str) -> bool:
+    """
+    Валидация production URL для Telegram Mini App.
+    
+    Запрещает:
+    - preview URLs (содержат -projects.vercel.app)
+    - URLs с hash/slug (например, tracy-abc123.vercel.app)
+    - localhost
+    - не-HTTPS URLs
+    
+    Разрешает только:
+    - Явные production домены из allowlist
+    """
+    if not url:
+        return False
+    
+    # Должен быть HTTPS
+    if not url.startswith("https://"):
+        return False
+    
+    # Запрещаем localhost
+    if "localhost" in url.lower():
+        return False
+    
+    # Запрещаем preview URLs (содержат -projects.vercel.app)
+    if "-projects.vercel.app" in url:
+        return False
+    
+    # Запрещаем URLs с hash/slug (например, tracy-abc123.vercel.app)
+    # Проверяем, что это не preview deployment
+    import re
+    # Preview deployments обычно имеют формат: project-hash-username.vercel.app
+    # Production: project.vercel.app или custom domain
+    if re.search(r'-[a-z0-9]{8,}-[a-z0-9-]+\.vercel\.app', url):
+        return False
+    
+    # Проверяем allowlist production доменов
+    for domain in ALLOWED_PRODUCTION_DOMAINS:
+        if domain in url:
+            return True
+    
+    # Если URL не в allowlist, но это явный production domain (без hash)
+    # Разрешаем только если это vercel.app без hash или custom domain
+    if ".vercel.app" in url:
+        # Проверяем, что это не preview (нет hash в поддомене)
+        parts = url.replace("https://", "").split(".")[0]
+        # Если поддомен содержит только буквы, цифры и дефисы (но не длинный hash)
+        if len(parts.split("-")) <= 2:  # project или project-username, но не project-hash-username
+            return True
+    
+    return False
 
 # Feedback Service (Google Sheets/Drive)
 FEEDBACK_SPREADSHEET_ID = os.getenv("FEEDBACK_SPREADSHEET_ID", "")
