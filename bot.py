@@ -172,6 +172,11 @@ async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"❌ WEB_APP_URL не валиден для команды /web: {web_url}")
         return
     
+    # Добавляем cache-busting для Telegram WebView
+    import datetime
+    app_version = datetime.datetime.now().strftime("%Y%m%d%H%M")  # YYYYMMDDHHMM
+    web_url_with_version = f"{web_url}?v={app_version}"
+    
     message_text = (
         "🌐 Веб-приложение TRACY\n\n"
         "Откройте веб-приложение для доступа ко всем функциям:\n"
@@ -186,7 +191,7 @@ async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Используем WebApp кнопку для открытия в Telegram Mini App
     keyboard = [[InlineKeyboardButton(
         "🚀 Открыть приложение",
-        web_app=WebAppInfo(url=web_url)  # WebApp - откроется в Telegram
+        web_app=WebAppInfo(url=web_url_with_version)  # WebApp - откроется в Telegram с cache-busting
     )]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
@@ -3687,10 +3692,16 @@ def main():
             web_url = config.WEB_APP_URL
             if web_url and config.is_valid_production_url(web_url):
                 try:
-                    menu_button = MenuButtonWebApp(text="TRACY", web_app=WebAppInfo(url=web_url))
+                    # Добавляем cache-busting для Telegram WebView
+                    # Telegram агрессивно кеширует HTML/JS, поэтому добавляем версию
+                    import datetime
+                    app_version = datetime.datetime.now().strftime("%Y%m%d%H%M")  # YYYYMMDDHHMM
+                    web_url_with_version = f"{web_url}?v={app_version}"
+                    
+                    menu_button = MenuButtonWebApp(text="TRACY", web_app=WebAppInfo(url=web_url_with_version))
                     # Устанавливаем глобально (chat_id=None означает глобальная настройка)
                     await app.bot.set_chat_menu_button(chat_id=None, menu_button=menu_button)
-                    logger.info(f"✅ Menu Button установлен с production URL: {web_url}")
+                    logger.info(f"✅ Menu Button установлен с production URL (cache-busting): {web_url_with_version}")
                 except Exception as e:
                     logger.error(f"❌ Не удалось установить Menu Button: {e}")
             elif web_url:

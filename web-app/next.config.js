@@ -28,6 +28,7 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // HTML страницы - no-store для предотвращения кеширования в Telegram WebView
         source: '/:path*',
         headers: [
           {
@@ -37,6 +38,16 @@ const nextConfig = {
           {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
+          },
+        ],
+      },
+      {
+        // HTML страницы (не статические файлы) - no-store
+        source: '/:path((?!_next|static|favicon|.*\\..*).*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
           },
         ],
       },

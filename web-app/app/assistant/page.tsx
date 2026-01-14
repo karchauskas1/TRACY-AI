@@ -181,8 +181,26 @@ export default function AssistantPage() {
                 try {
                   router.push("/chat")
                   logger.info('AssistantPage', 'router.push(/chat) called successfully')
+                  
+                  // Мониторинг навигации: проверяем через 500мс, изменился ли pathname
+                  setTimeout(() => {
+                    const newPathname = window.location.pathname
+                    if (newPathname !== "/chat") {
+                      logger.error('AssistantPage', 'Navigation failed - pathname did not change', {
+                        expected: '/chat',
+                        actual: newPathname,
+                        timestamp: Date.now(),
+                      })
+                      // Fallback: hard navigation
+                      window.location.href = "/chat"
+                    } else {
+                      logger.info('AssistantPage', 'Navigation successful - pathname changed to /chat')
+                    }
+                  }, 500)
                 } catch (error) {
                   logger.error('AssistantPage', 'Error in router.push(/chat)', { error })
+                  // Fallback: hard navigation
+                  window.location.href = "/chat"
                 }
               }}
               role="button"
@@ -230,8 +248,26 @@ export default function AssistantPage() {
                 try {
                   router.push("/calendar")
                   logger.info('AssistantPage', 'router.push(/calendar) called successfully')
+                  
+                  // Мониторинг навигации: проверяем через 500мс, изменился ли pathname
+                  setTimeout(() => {
+                    const newPathname = window.location.pathname
+                    if (newPathname !== "/calendar") {
+                      logger.error('AssistantPage', 'Navigation failed - pathname did not change', {
+                        expected: '/calendar',
+                        actual: newPathname,
+                        timestamp: Date.now(),
+                      })
+                      // Fallback: hard navigation
+                      window.location.href = "/calendar"
+                    } else {
+                      logger.info('AssistantPage', 'Navigation successful - pathname changed to /calendar')
+                    }
+                  }, 500)
                 } catch (error) {
                   logger.error('AssistantPage', 'Error in router.push(/calendar)', { error })
+                  // Fallback: hard navigation
+                  window.location.href = "/calendar"
                 }
               }}
               role="button"
@@ -310,8 +346,26 @@ export default function AssistantPage() {
                 try {
                   router.push("/todo-lists")
                   logger.info('AssistantPage', 'router.push(/todo-lists) called successfully')
+                  
+                  // Мониторинг навигации: проверяем через 500мс, изменился ли pathname
+                  setTimeout(() => {
+                    const newPathname = window.location.pathname
+                    if (newPathname !== "/todo-lists") {
+                      logger.error('AssistantPage', 'Navigation failed - pathname did not change', {
+                        expected: '/todo-lists',
+                        actual: newPathname,
+                        timestamp: Date.now(),
+                      })
+                      // Fallback: hard navigation
+                      window.location.href = "/todo-lists"
+                    } else {
+                      logger.info('AssistantPage', 'Navigation successful - pathname changed to /todo-lists')
+                    }
+                  }, 500)
                 } catch (error) {
                   logger.error('AssistantPage', 'Error in router.push(/todo-lists)', { error })
+                  // Fallback: hard navigation
+                  window.location.href = "/todo-lists"
                 }
               }}
               role="button"

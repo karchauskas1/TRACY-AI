@@ -7,6 +7,7 @@ import { ThemeProvider } from "../lib/theme-context"
 import { ApiDebugInit } from "../components/ApiDebugInit"
 import { TelegramBootstrap } from "../components/TelegramBootstrap"
 import { DebugOverlay } from "../components/DebugOverlay"
+import { ChunkErrorHandler } from "../components/ChunkErrorHandler"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -36,6 +37,7 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
+        <ChunkErrorHandler />
         <TelegramBootstrap />
         <ApiDebugInit />
         <DebugOverlay />
