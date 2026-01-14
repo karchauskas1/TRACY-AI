@@ -13,6 +13,17 @@ export default function HomePage() {
       setDebug(prev => [...prev, msg])
     }
 
+    const navigate = (path: string) => {
+      try {
+        log(`Navigating to ${path}`)
+        router.push(path)
+      } catch (error) {
+        log(`Navigation error: ${error}`)
+        // Fallback: используем window.location
+        window.location.href = path
+      }
+    }
+
     log("Initializing...")
     log(`URL: ${window.location.href}`)
 
@@ -39,17 +50,16 @@ export default function HomePage() {
           photo_url: user.photo_url,
         }))
         // Сразу переходим на главный экран "Личный ассистент"
-        log("Navigating to /assistant")
-        setTimeout(() => router.push("/assistant"), 100)
+        setTimeout(() => navigate("/assistant"), 100)
       } else {
         // Если нет пользователя в WebApp, проверяем localStorage
         const savedUser = localStorage.getItem("telegram_user")
         if (savedUser) {
           log("Saved user found, navigating to /assistant")
-          setTimeout(() => router.push("/assistant"), 100)
+          setTimeout(() => navigate("/assistant"), 100)
         } else {
           log("No user, navigating to /login")
-          setTimeout(() => router.push("/login"), 100)
+          setTimeout(() => navigate("/login"), 100)
         }
       }
     } else {
@@ -61,19 +71,18 @@ export default function HomePage() {
           const parsed = JSON.parse(savedUser)
           log(`Saved user: ${parsed.first_name || parsed.id}`)
           if (parsed.id && parsed.id !== "demo") {
-            log("Navigating to /assistant")
-            setTimeout(() => router.push("/assistant"), 100)
+            setTimeout(() => navigate("/assistant"), 100)
           } else {
             log("Demo user, navigating to /login")
-            setTimeout(() => router.push("/login"), 100)
+            setTimeout(() => navigate("/login"), 100)
           }
         } catch (e) {
           log("Error parsing user, navigating to /login")
-          setTimeout(() => router.push("/login"), 100)
+          setTimeout(() => navigate("/login"), 100)
         }
       } else {
         log("No saved user, navigating to /login")
-        setTimeout(() => router.push("/login"), 100)
+        setTimeout(() => navigate("/login"), 100)
       }
     }
   }, [router])

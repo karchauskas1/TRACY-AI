@@ -42,16 +42,6 @@ const nextConfig = {
       },
     ]
   },
-  
-  // Rewrites для правильной работы роутинга на Vercel
-  async rewrites() {
-    return [
-      {
-        source: '/:path*',
-        destination: '/:path*',
-      },
-    ]
-  },
 }
 
 module.exports = nextConfig
