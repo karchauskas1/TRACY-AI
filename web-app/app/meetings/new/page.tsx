@@ -6,9 +6,11 @@ import { ArrowLeft, Upload, FileAudio, Mic } from "lucide-react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
+import { useToast } from "../../../hooks/use-toast"
 
 export default function NewMeetingPage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [isDragging, setIsDragging] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -65,10 +67,11 @@ export default function NewMeetingPage() {
       const telegramLink = `https://t.me/${botUsername}?start=meeting_transcribe`
       window.open(telegramLink, '_blank')
       
-      alert(
-        "В открывшемся чате отправь аудиофайл боту.\n\n" +
-        "Бот автоматически создаст расшифровку с тайм-кодами и структурированное резюме."
-      )
+      // Используем toast вместо alert
+      toast({
+        title: "Чат с ботом открыт",
+        description: "В открывшемся чате отправь аудиофайл боту. Бот автоматически создаст расшифровку с тайм-кодами и структурированное резюме.",
+      })
     }
     
     setIsProcessing(false)

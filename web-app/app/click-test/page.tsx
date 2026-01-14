@@ -8,7 +8,7 @@ export default function ClickTestPage() {
   const addClick = (type: string) => {
     const timestamp = new Date().toLocaleTimeString()
     setClicks(prev => [`${timestamp}: ${type}`, ...prev].slice(0, 10))
-    alert(`✅ Клик работает! Тип: ${type}`)
+    // alert() ЗАПРЕЩЕН в Telegram Mini App - используем только визуальную обратную связь
   }
 
   return (
@@ -58,10 +58,10 @@ export default function ClickTestPage() {
         Тест 2: Div onClick
       </div>
 
-      {/* Тест 3: Div с onTouchStart */}
+      {/* Тест 3: Div с onClick (onTouchStart убран для совместимости с Desktop) */}
       <div
-        onTouchStart={() => {
-          addClick('div onTouchStart')
+        onClick={() => {
+          addClick('div onClick')
         }}
         style={{
           width: '100%',
@@ -78,12 +78,10 @@ export default function ClickTestPage() {
         Тест 3: Div onTouchStart
       </div>
 
-      {/* Тест 4: Ссылка с href */}
-      <a
-        href="#test"
-        onClick={(e) => {
-          e.preventDefault()
-          addClick('a tag onClick')
+      {/* Тест 4: Div с onClick (ссылка заменена для совместимости) */}
+      <div
+        onClick={() => {
+          addClick('div onClick (было a tag)')
         }}
         style={{
           display: 'block',
@@ -101,13 +99,20 @@ export default function ClickTestPage() {
         Тест 4: Ссылка onClick
       </a>
 
-      {/* Тест 5: Навигация */}
+      {/* Тест 5: Навигация (используем Next.js router) */}
       <button
         onClick={() => {
           addClick('navigation button')
+          // Используем Next.js навигацию вместо window.location.href
+          // В реальных компонентах используется useRouter из 'next/navigation'
+          // Здесь просто показываем, что навигация работает
           setTimeout(() => {
-            window.location.href = '/assistant'
-          }, 1000)
+            // Для тестовой страницы используем прямой переход
+            // В реальных компонентах: router.push('/assistant')
+            if (typeof window !== 'undefined') {
+              window.location.href = '/assistant'
+            }
+          }, 500)
         }}
         style={{
           width: '100%',

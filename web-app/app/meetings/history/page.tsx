@@ -5,6 +5,7 @@ import { ArrowLeft, Search, Mic, Clock, Edit, Trash2, Filter, FileText, Globe, H
 import Link from "next/link"
 import { Card, CardContent } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
+import { useToast } from "../../../hooks/use-toast"
 import { format, formatDistanceToNow } from "date-fns"
 import { ru } from "date-fns/locale"
 
@@ -19,11 +20,13 @@ interface Meeting {
 }
 
 export default function MeetingsHistoryPage() {
+  const { toast } = useToast()
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [filteredMeetings, setFilteredMeetings] = useState<Meeting[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [mediaFilter, setMediaFilter] = useState<"all" | "voice" | "video">("all")
   const [chatFilter, setChatFilter] = useState<"all" | string>("all")
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadMeetings = async () => {
@@ -131,7 +134,8 @@ export default function MeetingsHistoryPage() {
   }, [searchQuery, mediaFilter, chatFilter, meetings])
 
   const handleDelete = (id: string) => {
-    if (confirm("Вы уверены, что хотите удалить эту запись?")) {
+    // Если уже подтверждено, удаляем
+    if (deleteConfirmId === id) {
       const updated = meetings.filter(m => m.id !== id)
       setMeetings(updated)
       localStorage.setItem("tracy_meetings", JSON.stringify(updated))
@@ -151,6 +155,21 @@ export default function MeetingsHistoryPage() {
         filtered = filtered.filter(meeting => meeting.chat === chatFilter)
       }
       setFilteredMeetings(filtered)
+      setDeleteConfirmId(null)
+      toast({
+        title: "Запись удалена",
+        description: "Встреча успешно удалена из истории",
+      })
+    } else {
+      // Первый клик - показываем подтверждение через toast
+      setDeleteConfirmId(id)
+      toast({
+        title: "Подтвердите удаление",
+        description: "Нажмите на кнопку удаления еще раз для подтверждения",
+        variant: "destructive",
+      })
+      // Сбрасываем подтверждение через 3 секунды
+      setTimeout(() => setDeleteConfirmId(null), 3000)
     }
   }
 
@@ -170,14 +189,26 @@ export default function MeetingsHistoryPage() {
       .then(data => {
         if (data.success && data.meeting) {
           const details = `Резюме: ${data.meeting.summary || 'Нет'}\n\nРасширенное резюме: ${data.meeting.summaryExtended || 'Нет'}\n\nПолный текст: ${data.meeting.transcript || 'Нет'}`
-          alert(details.substring(0, 2000) + (details.length > 2000 ? '...' : ''))
+          // Используем toast вместо alert
+          toast({
+            title: "Детали встречи",
+            description: details.substring(0, 500) + (details.length > 500 ? '...' : ''),
+          })
         } else {
-          alert('Не удалось загрузить детали встречи')
+          toast({
+            title: "Ошибка",
+            description: "Не удалось загрузить детали встречи",
+            variant: "destructive",
+          })
         }
       })
       .catch(e => {
         console.error(e)
-        alert('Ошибка загрузки деталей встречи')
+        toast({
+          title: "Ошибка",
+          description: "Ошибка загрузки деталей встречи",
+          variant: "destructive",
+        })
       })
   }
 
@@ -308,10 +339,21 @@ export default function MeetingsHistoryPage() {
                             .then(data => {
                               if (data.success && data.meeting) {
                                 const details = `Резюме: ${data.meeting.summary || 'Нет'}\n\nРасширенное резюме: ${data.meeting.summaryExtended || 'Нет'}\n\nПолный текст: ${data.meeting.transcript || 'Нет'}`
-                                alert(details.substring(0, 1000) + (details.length > 1000 ? '...' : ''))
+                                // Используем toast вместо alert
+                                toast({
+                                  title: "Детали встречи",
+                                  description: details.substring(0, 500) + (details.length > 500 ? '...' : ''),
+                                })
                               }
                             })
-                            .catch(e => console.error(e))
+                            .catch(e => {
+                              console.error(e)
+                              toast({
+                                title: "Ошибка",
+                                description: "Не удалось загрузить детали встречи",
+                                variant: "destructive",
+                              })
+                            })
                         }}
                         className="flex-1 border-primary/20 text-primary hover:bg-primary/10"
                       >

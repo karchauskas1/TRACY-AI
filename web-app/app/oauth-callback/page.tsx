@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useToast } from '../../hooks/use-toast'
 
 export default function OAuthCallbackPage() {
+  const { toast } = useToast()
   const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'no-code'>('loading')
   const [url, setUrl] = useState('')
 
@@ -25,7 +27,11 @@ export default function OAuthCallbackPage() {
 
   const copyURL = () => {
     navigator.clipboard.writeText(url).then(() => {
-      alert('✅ URL скопирован! Теперь отправь его боту TRACY в Telegram.')
+      // Используем toast вместо alert
+      toast({
+        title: "URL скопирован",
+        description: "Теперь отправь его боту TRACY в Telegram.",
+      })
     }).catch(() => {
       // Fallback для старых браузеров
       const textarea = document.createElement('textarea')
@@ -34,7 +40,11 @@ export default function OAuthCallbackPage() {
       textarea.select()
       document.execCommand('copy')
       document.body.removeChild(textarea)
-      alert('✅ URL скопирован! Теперь отправь его боту TRACY в Telegram.')
+      // Используем toast вместо alert
+      toast({
+        title: "URL скопирован",
+        description: "Теперь отправь его боту TRACY в Telegram.",
+      })
     })
   }
 

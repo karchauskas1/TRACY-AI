@@ -19,8 +19,11 @@ export default function HomePage() {
         router.push(path)
       } catch (error) {
         log(`Navigation error: ${error}`)
-        // Fallback: используем window.location
-        window.location.href = path
+        // Fallback: используем window.location только в крайнем случае
+        // В Telegram Mini App это может вызвать проблемы, но это последний резерв
+        if (typeof window !== 'undefined') {
+          window.location.href = path
+        }
       }
     }
 
