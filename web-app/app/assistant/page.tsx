@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import Link from "next/link"
 import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
@@ -141,18 +140,20 @@ export default function AssistantPage() {
           {/* Main Features */}
           <div className="space-y-4">
             {/* Чат с Tracy */}
-            <Link 
-              href="/chat"
+            <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={(e) => {
-                console.log("[AssistantPage] Before navigate to /chat", {
-                  target: e.target,
-                  currentTarget: e.currentTarget,
-                  href: (e.currentTarget as HTMLAnchorElement)?.href,
-                })
-                // Проверяем, что это реально <a> тег
-                if (e.currentTarget.tagName !== "A") {
-                  console.warn("[AssistantPage] Link is not rendering as <a> tag!")
+                e.preventDefault()
+                e.stopPropagation()
+                console.log("[AssistantPage] Navigate to /chat via router.push")
+                router.push("/chat")
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  router.push("/chat")
                 }
               }}
             >
@@ -167,18 +168,24 @@ export default function AssistantPage() {
                   </p>
                 </div>
               </div>
-            </Link>
+            </div>
 
             {/* Calendar */}
-            <Link 
-              href="/calendar"
+            <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={(e) => {
-                console.log("[AssistantPage] Before navigate to /calendar", {
-                  target: e.target,
-                  currentTarget: e.currentTarget,
-                  href: (e.currentTarget as HTMLAnchorElement)?.href,
-                })
+                e.preventDefault()
+                e.stopPropagation()
+                console.log("[AssistantPage] Navigate to /calendar via router.push")
+                router.push("/calendar")
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  router.push("/calendar")
+                }
               }}
             >
               <div className="flex items-center gap-4">
@@ -192,18 +199,24 @@ export default function AssistantPage() {
                   </p>
                 </div>
               </div>
-            </Link>
+            </div>
 
             {/* История расшифровок */}
-            <Link 
-              href="/meetings/history"
+            <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={(e) => {
-                console.log("[AssistantPage] Before navigate to /meetings/history", {
-                  target: e.target,
-                  currentTarget: e.currentTarget,
-                  href: (e.currentTarget as HTMLAnchorElement)?.href,
-                })
+                e.preventDefault()
+                e.stopPropagation()
+                console.log("[AssistantPage] Navigate to /meetings/history via router.push")
+                router.push("/meetings/history")
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  router.push("/meetings/history")
+                }
               }}
             >
               <div className="flex items-center gap-4">
@@ -217,18 +230,24 @@ export default function AssistantPage() {
                   </p>
                 </div>
               </div>
-            </Link>
+            </div>
 
             {/* Списки задач */}
-            <Link 
-              href="/todo-lists"
+            <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={(e) => {
-                console.log("[AssistantPage] Before navigate to /todo-lists", {
-                  target: e.target,
-                  currentTarget: e.currentTarget,
-                  href: (e.currentTarget as HTMLAnchorElement)?.href,
-                })
+                e.preventDefault()
+                e.stopPropagation()
+                console.log("[AssistantPage] Navigate to /todo-lists via router.push")
+                router.push("/todo-lists")
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  router.push("/todo-lists")
+                }
               }}
             >
               <div className="flex items-center gap-4">
@@ -242,20 +261,26 @@ export default function AssistantPage() {
                   </p>
                 </div>
               </div>
-            </Link>
+            </div>
 
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (
               <>
-                <Link 
-                  href="/settings/feedback"
+                <div 
                   className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
                   onClick={(e) => {
-                    console.log("[AssistantPage] Before navigate to /settings/feedback", {
-                      target: e.target,
-                      currentTarget: e.currentTarget,
-                      href: (e.currentTarget as HTMLAnchorElement)?.href,
-                    })
+                    e.preventDefault()
+                    e.stopPropagation()
+                    console.log("[AssistantPage] Navigate to /settings/feedback via router.push")
+                    router.push("/settings/feedback")
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      router.push("/settings/feedback")
+                    }
                   }}
                 >
                   <div className="flex items-center gap-4">
@@ -269,16 +294,22 @@ export default function AssistantPage() {
                       </p>
                     </div>
                   </div>
-                </Link>
-                <Link 
-                  href="/debug"
+                </div>
+                <div 
                   className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
                   onClick={(e) => {
-                    console.log("[AssistantPage] Before navigate to /debug", {
-                      target: e.target,
-                      currentTarget: e.currentTarget,
-                      href: (e.currentTarget as HTMLAnchorElement)?.href,
-                    })
+                    e.preventDefault()
+                    e.stopPropagation()
+                    console.log("[AssistantPage] Navigate to /debug via router.push")
+                    router.push("/debug")
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      router.push("/debug")
+                    }
                   }}
                 >
                   <div className="flex items-center gap-4">
@@ -292,7 +323,7 @@ export default function AssistantPage() {
                       </p>
                     </div>
                   </div>
-                </Link>
+                </div>
               </>
             )}
           </div>
