@@ -147,7 +147,9 @@ function AssistantPageContent() {
             </div>
             <span className="text-sm font-medium">TRACY</span>
           </div>
-          <button 
+          <button
+            type="button"
+            aria-label="Settings"
             onClick={() => router.push('/settings')}
             className="text-foreground hover:text-muted-foreground transition-colors"
           >

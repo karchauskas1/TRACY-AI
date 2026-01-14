@@ -4,15 +4,19 @@
 
 /* Отключение pinch/zoom в Telegram WebView */
 @layer base {
-  html {
+  html,
+  body {
     touch-action: manipulation; /* Позволяет клики, но отключает двойной тап для зума */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  html {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
   }
-  
+
   body {
-    touch-action: manipulation; /* Позволяет клики, но отключает двойной тап для зума */
     -webkit-overflow-scrolling: touch;
   }
   

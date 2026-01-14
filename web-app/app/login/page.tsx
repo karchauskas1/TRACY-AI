@@ -44,6 +44,42 @@ function LoginPageContent() {
   useEffect(() => {
     if (!debugMode || typeof window === 'undefined') return
 
+    // Проверяем, применился ли touch-action на реальный DOM
+    const root = document.documentElement
+    const body = document.body
+    console.log('[CSS]', getComputedStyle(root).touchAction, getComputedStyle(body).touchAction)
+
+    const logTouchActionAtPoint = (label: string, x: number, y: number) => {
+      const el = document.elementFromPoint(x, y) as HTMLElement | null
+      if (!el) {
+        console.log('[CSS][point]', label, { x, y, el: null })
+        return
+      }
+      const styles = getComputedStyle(el)
+      console.log('[CSS][point]', label, {
+        x,
+        y,
+        tag: el.tagName,
+        id: el.id,
+        className: el.className,
+        touchAction: styles.touchAction,
+        pointerEvents: styles.pointerEvents,
+      })
+    }
+
+    const logTargetTouchAction = (label: string, target: EventTarget | null) => {
+      const el = target as HTMLElement | null
+      if (!el || !el.tagName) return
+      const styles = getComputedStyle(el)
+      console.log('[CSS][target]', label, {
+        tag: el.tagName,
+        id: el.id,
+        className: el.className,
+        touchAction: styles.touchAction,
+        pointerEvents: styles.pointerEvents,
+      })
+    }
+
     const handlePointerDown = (e: PointerEvent) => {
       clickLogRef.current.push({
         type: 'pointerdown',
@@ -51,10 +87,54 @@ function LoginPageContent() {
         timestamp: Date.now(),
       })
       if (clickLogRef.current.length > 50) clickLogRef.current.shift()
+      logTargetTouchAction('pointerdown', e.target)
+      logTouchActionAtPoint('pointerdown', e.clientX, e.clientY)
       logger.debug('LoginPage', 'PointerDown captured', {
         target: (e.target as HTMLElement)?.tagName,
         className: (e.target as HTMLElement)?.className,
       })
+    }
+
+    const handlePointerUp = (e: PointerEvent) => {
+      clickLogRef.current.push({
+        type: 'pointerup',
+        target: (e.target as HTMLElement)?.tagName || 'unknown',
+        timestamp: Date.now(),
+      })
+      if (clickLogRef.current.length > 50) clickLogRef.current.shift()
+      logTargetTouchAction('pointerup', e.target)
+      logTouchActionAtPoint('pointerup', e.clientX, e.clientY)
+      console.log('[LoginPage][Event] pointerup', { target: (e.target as HTMLElement)?.tagName })
+    }
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const t = e.touches?.[0]
+      if (t) {
+        logTargetTouchAction('touchstart', e.target)
+        logTouchActionAtPoint('touchstart', t.clientX, t.clientY)
+      }
+      console.log('[LoginPage][Event] touchstart', { touches: e.touches?.length || 0 })
+    }
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const t = e.changedTouches?.[0]
+      if (t) {
+        logTargetTouchAction('touchend', e.target)
+        logTouchActionAtPoint('touchend', t.clientX, t.clientY)
+      }
+      console.log('[LoginPage][Event] touchend', { changedTouches: e.changedTouches?.length || 0 })
+    }
+
+    const handleMouseDown = (e: MouseEvent) => {
+      logTargetTouchAction('mousedown', e.target)
+      logTouchActionAtPoint('mousedown', e.clientX, e.clientY)
+      console.log('[LoginPage][Event] mousedown', { target: (e.target as HTMLElement)?.tagName })
+    }
+
+    const handleMouseUp = (e: MouseEvent) => {
+      logTargetTouchAction('mouseup', e.target)
+      logTouchActionAtPoint('mouseup', e.clientX, e.clientY)
+      console.log('[LoginPage][Event] mouseup', { target: (e.target as HTMLElement)?.tagName })
     }
 
     const handleClick = (e: MouseEvent) => {
@@ -64,6 +144,9 @@ function LoginPageContent() {
         timestamp: Date.now(),
       })
       if (clickLogRef.current.length > 50) clickLogRef.current.shift()
+      logTargetTouchAction('click', e.target)
+      logTouchActionAtPoint('click', e.clientX, e.clientY)
+      console.log('[LoginPage][Event] click', { target: (e.target as HTMLElement)?.tagName })
       logger.debug('LoginPage', 'Click captured', {
         target: (e.target as HTMLElement)?.tagName,
         className: (e.target as HTMLElement)?.className,
@@ -71,10 +154,20 @@ function LoginPageContent() {
     }
 
     window.addEventListener('pointerdown', handlePointerDown, true)
+    window.addEventListener('pointerup', handlePointerUp, true)
+    window.addEventListener('touchstart', handleTouchStart, true)
+    window.addEventListener('touchend', handleTouchEnd, true)
+    window.addEventListener('mousedown', handleMouseDown, true)
+    window.addEventListener('mouseup', handleMouseUp, true)
     window.addEventListener('click', handleClick, true)
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown, true)
+      window.removeEventListener('pointerup', handlePointerUp, true)
+      window.removeEventListener('touchstart', handleTouchStart, true)
+      window.removeEventListener('touchend', handleTouchEnd, true)
+      window.removeEventListener('mousedown', handleMouseDown, true)
+      window.removeEventListener('mouseup', handleMouseUp, true)
       window.removeEventListener('click', handleClick, true)
     }
   }, [debugMode])

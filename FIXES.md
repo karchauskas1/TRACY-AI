@@ -1,57 +1,36 @@
 # FIXES
 
-## Click Events Not Working
+## Click Handlers Not Working
 
-Problem: No click logs in production, buttons/cards not clickable
+Problem: pointerdown events logged but onClick handlers not firing
 
 Root Cause:
-- Client components verified (use client present)
-- No global click probe was installed
-- No ClientAlive markers to verify hydration
+- In Telegram Mini App WebView click не приходил после tap (видели pointerdown без click → навигация/кнопки не срабатывали)
+- Дополнительно диагностику путал общий throttle в ClickProbe (в non-debug мог скрывать pointerup/click как будто их нет)
 
 Fix:
-- Created GlobalClickProbe component with throttled window listeners (1 log/sec max)
-- Added ClientAlive markers in assistant/login components
-- Added Find blocker button in debug=1 mode
-- All global listeners have cleanup in useEffect return
+- Ensured `touch-action: manipulation` реально применяется на `html, body` (+ `-webkit-text-size-adjust: 100%`)
+- Extended GlobalClickProbe: separate per-event-type logging in capture phase (debug=1 без фильтрации), плюс расширенные поля (defaultPrevented/cancelBubble/pointerType/coords)
+- Added Telegram-only fallback: synth `click` on tap завершении (pointerup/touchend), если реальный click не пришёл за короткое окно
+- Added debug CSS diagnostics on `/login?debug=1` (computed `touchAction` для html/body и элемента под пальцем через `elementFromPoint`)
+- Minor semantics: Settings icon is a proper `<button type="button" aria-label="Settings">`
 
 Files:
-- web-app/components/GlobalClickProbe.tsx (new)
-- web-app/app/layout.tsx
-- web-app/app/assistant/page.tsx
-- web-app/app/login/page.tsx
-- web-app/components/DebugOverlay.tsx
+- `web-app/app/globals.css`
+- `web-app/components/GlobalClickProbe.tsx`
+- `web-app/app/login/page.tsx`
+- `web-app/app/assistant/page.tsx`
 
 Test:
-- Check console for [ClickProbe] logs on any tap
-- Check [ClientAlive] logs on page mount
-- Use Find blocker button to detect overlay elements
+- In Telegram with `debug=1`: one tap should log `pointerdown` + (`pointerup`/`touchend`) + `click`
+- Navigation via cards/Settings should work
 
-## Session Management
+## Removed Old MD Reports
 
-Problem: Session stored only in localStorage
-
-Root Cause:
-- No httpOnly cookie for secure session storage
-
-Fix:
-- /api/auth/telegram now sets httpOnly cookie tracy_session
-- Cookie expires in 7 days, secure in production
-- Created /api/me endpoint for session verification
-- localStorage kept for backward compatibility
-
-Files:
-- web-app/app/api/auth/telegram/route.ts
-- web-app/app/api/me/route.ts (new)
-- web-app/app/login/page.tsx
-
-Session Storage:
-- httpOnly cookie: tracy_session (server-side)
-- localStorage: telegram_user (client-side, for compatibility)
-
-Verification:
-- GET /api/me checks tracy_session cookie
-- TODO: Store sessionId -> userData mapping in DB/Redis
+Deleted all old fix reports except:
+- README.md
+- SYSTEM_ARCHITECTURE.md
+- FIXES.md (this file)
 
 Post-fix:
 - Bot restarted: systemctl restart tracy-bot.service
