@@ -22,8 +22,9 @@ export function useNavigation() {
         history.back()
         setTimeout(() => {
           if (window.location.pathname === currentPath) {
-            history.pushState(null, "", "/assistant")
-            window.dispatchEvent(new PopStateEvent("popstate"))
+            // Hard fallback: гарантированно возвращаемся на главный экран.
+            // Это предотвращает "полу-состояния" после back, когда клики перестают работать.
+            window.location.assign("/assistant")
           }
         }, 150)
         return
