@@ -16,6 +16,8 @@ interface ChatMessage {
   role: "user" | "assistant"
   content: string
   created_at: string
+  clientId?: string
+  pending?: boolean
 }
 
 export default function ChatPage() {
@@ -31,6 +33,10 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [keyboardInset, setKeyboardInset] = useState(0)
   const [greetingLoaded, setGreetingLoaded] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const [isNearBottom, setIsNearBottom] = useState(true)
+  const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null)
 
   useEffect(() => {
     // Если пользователь не авторизован, перенаправляем на логин
@@ -45,10 +51,9 @@ export default function ChatPage() {
     }
   }, [userId, userLoading, router])
 
-  useEffect(() => {
-    // Прокрутка к последнему сообщению
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior })
+  }
 
   // Keep input above the on-screen keyboard (iOS/Telegram WebView)
   useEffect(() => {
@@ -73,11 +78,16 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (keyboardInset <= 0) return
-    // When keyboard opens, keep latest message visible
-    requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-    })
-  }, [keyboardInset])
+    // When keyboard opens, keep latest message visible only if user is already near bottom
+    if (!isNearBottom) return
+    requestAnimationFrame(() => scrollToBottom("smooth"))
+  }, [keyboardInset, isNearBottom])
+
+  useEffect(() => {
+    // Auto-scroll only when user is pinned to bottom
+    if (!isNearBottom) return
+    requestAnimationFrame(() => scrollToBottom("smooth"))
+  }, [messages.length, isNearBottom])
 
   const loadChat = async () => {
     // Ждем, пока user_id будет получен
@@ -194,15 +204,26 @@ export default function ChatPage() {
   const sendMessage = async () => {
     if (!inputMessage.trim() || sending || !userId) return
 
+    const clientId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     const userMessage: ChatMessage = {
       id: Date.now(),
       role: "user",
       content: inputMessage.trim(),
       created_at: new Date().toISOString(),
+      clientId,
     }
 
-    // Добавляем сообщение пользователя сразу
-    setMessages((prev) => [...prev, userMessage])
+    const pendingAssistant: ChatMessage = {
+      id: Date.now() + 1,
+      role: "assistant",
+      content: "",
+      created_at: new Date().toISOString(),
+      clientId,
+      pending: true,
+    }
+
+    // Добавляем сообщение пользователя и placeholder ответа ассистента сразу
+    setMessages((prev) => [...prev, userMessage, pendingAssistant])
     const messageText = inputMessage.trim()
     setInputMessage("")
     setSending(true)
@@ -220,13 +241,29 @@ export default function ChatPage() {
       )
 
       if (result.success && result.message) {
-        const assistantMessage: ChatMessage = {
-          id: Date.now() + 1,
-          role: "assistant",
-          content: result.message,
-          created_at: new Date().toISOString(),
-        }
-        setMessages((prev) => [...prev, assistantMessage])
+        // Replace placeholder for this send (if present)
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.role === "assistant" && m.clientId === clientId && m.pending)
+          if (idx === -1) {
+            return [
+              ...prev,
+              {
+                id: Date.now() + 2,
+                role: "assistant",
+                content: result.message as string,
+                created_at: new Date().toISOString(),
+                clientId,
+              },
+            ]
+          }
+          const next = [...prev]
+          next[idx] = {
+            ...next[idx],
+            content: result.message as string,
+            pending: false,
+          }
+          return next
+        })
         setError(null)
         setErrorDetails(null)
       } else if (result.error) {
@@ -243,8 +280,18 @@ export default function ChatPage() {
         message: e.message || errorMessage,
         context: "Отправка сообщения",
       })
+      // Mark placeholder as failed
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.role === "assistant" && m.clientId === clientId && m.pending
+            ? { ...m, content: `❌ ${errorMessage}`, pending: false }
+            : m
+        )
+      )
     } finally {
       setSending(false)
+      // If user didn't scroll away, keep bottom pinned
+      if (isNearBottom) requestAnimationFrame(() => scrollToBottom("smooth"))
     }
   }
 
@@ -279,10 +326,17 @@ export default function ChatPage() {
 
       {/* Messages */}
       <div
+        ref={messagesContainerRef}
         className="flex-1 overflow-y-auto px-4 py-6"
         style={{
           // Extra space for fixed input + keyboard
           paddingBottom: 120 + keyboardInset,
+        }}
+        onScroll={() => {
+          const el = messagesContainerRef.current
+          if (!el) return
+          const distance = el.scrollHeight - (el.scrollTop + el.clientHeight)
+          setIsNearBottom(distance < 120)
         }}
       >
           {loading ? (
@@ -333,7 +387,15 @@ export default function ChatPage() {
                       : "bg-muted"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+                  {message.role === "assistant" && message.pending ? (
+                    <div className="flex items-center gap-1 py-1">
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: "120ms" }} />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: "240ms" }} />
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+                  )}
                   <p className={`text-xs mt-2 ${
                     message.role === "user" ? "text-primary-foreground/70" : "text-muted-foreground"
                   }`}>
@@ -347,16 +409,6 @@ export default function ChatPage() {
                 )}
               </div>
             ))}
-            {sending && (
-              <div className="flex gap-3 justify-start">
-                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Bot className="h-4 w-4 text-primary" />
-                </div>
-                <div className="bg-muted rounded-lg p-4">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              </div>
-            )}
             <div ref={messagesEndRef} />
           </div>
         )}
@@ -366,6 +418,24 @@ export default function ChatPage() {
       <div
         className="fixed left-0 right-0 border-t border-border bg-background p-4"
         style={{ bottom: keyboardInset }}
+        onTouchStart={(e) => {
+          if (e.touches.length !== 1) return
+          touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() }
+        }}
+        onTouchEnd={(e) => {
+          const start = touchStartRef.current
+          touchStartRef.current = null
+          if (!start) return
+          const touch = e.changedTouches[0]
+          const dx = touch.clientX - start.x
+          const dy = touch.clientY - start.y
+          const dt = Date.now() - start.t
+          // Down swipe to dismiss keyboard (like messengers)
+          const isFocused = typeof document !== "undefined" && document.activeElement === textareaRef.current
+          if (keyboardInset > 0 && isFocused && dy > 40 && Math.abs(dx) < 24 && dt < 600) {
+            textareaRef.current?.blur()
+          }
+        }}
       >
         <div className="max-w-2xl mx-auto">
           {error && (
@@ -373,6 +443,7 @@ export default function ChatPage() {
           )}
           <div className="flex gap-2">
             <Textarea
+              ref={textareaRef}
               placeholder="Напишите сообщение..."
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}

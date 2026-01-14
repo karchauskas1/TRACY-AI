@@ -1065,6 +1065,9 @@ async def send_chat_message_handler(request: web_request.Request):
         locale = user.get('locale', 'ru_RU') if isinstance(user, dict) else 'ru_RU'
         interpretation_mode = user.get('interpretation_mode', 'soft') if isinstance(user, dict) else 'soft'
 
+        # История чата для контекста (в т.ч. для follow-up команд вроде "перенеси на 16:00")
+        chat_history = db.get_chat_messages(user_id, limit=50)
+
         # 1) Пытаемся обработать через decision_engine (создание/изменение событий, задач и т.д.)
         try:
             nlp, engine = _get_nlp_and_engine(db)
@@ -1077,6 +1080,7 @@ async def send_chat_message_handler(request: web_request.Request):
                 last_event=last_event,
                 is_reply=False,
                 interpretation_mode=interpretation_mode,
+                chat_history=chat_history,
             )
 
             result = await engine.process_intent(
@@ -1102,8 +1106,6 @@ async def send_chat_message_handler(request: web_request.Request):
             logger.error(f"⚠️ Web chat: decision_engine failed, fallback to LLM-only: {e}", exc_info=True)
 
         # 2) Fallback: обычный LLM-ответ (без действий), как было раньше
-        # Получаем историю чата (последние 50 сообщений для контекста)
-        chat_history = db.get_chat_messages(user_id, limit=50)
 
         # Получаем события для контекста
         tz = pytz.timezone(timezone)

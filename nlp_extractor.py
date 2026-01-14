@@ -1,7 +1,7 @@
 """Модуль для извлечения intent и контекста из текста через OpenRouter."""
 import json
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 from datetime import datetime, timedelta
 import dateparser
 import pytz
@@ -20,10 +20,53 @@ class NLPExtractor:
             base_url=config.OPENROUTER_BASE_URL
         )
         self.model = config.OPENROUTER_MODEL
+
+    def _format_chat_history(self, chat_history: Optional[List[Dict[str, Any]]], current_text: str) -> str:
+        """
+        Formats recent chat history into a short string for LLM context.
+        Expects items like: { role: 'user'|'assistant', content: '...', ... }.
+        """
+        if not chat_history:
+            return ""
+
+        # Use only a short tail to keep prompt compact.
+        tail = chat_history[-12:]
+
+        lines: List[str] = []
+        for msg in tail:
+            role = (msg.get("role") or "").strip().lower()
+            if role not in ("user", "assistant"):
+                continue
+            content = (msg.get("content") or "").strip()
+            if not content:
+                continue
+
+            # Avoid duplicating the current user message if it's already in history.
+            if role == "user" and content == current_text.strip():
+                continue
+
+            # Trim long messages to avoid prompt bloat.
+            if len(content) > 200:
+                content = content[:200] + "…"
+
+            prefix = "USER" if role == "user" else "ASSISTANT"
+            lines.append(f"{prefix}: {content}")
+
+        if not lines:
+            return ""
+
+        return "\n\nКонтекст диалога (последние сообщения):\n" + "\n".join(lines)
     
-    async def extract_intent_and_context(self, text: str, user_timezone: str = "Europe/Moscow",
-                                        user_locale: str = "ru_RU", last_event: Optional[Dict] = None,
-                                        is_reply: bool = False, interpretation_mode: str = "soft") -> Dict:
+    async def extract_intent_and_context(
+        self,
+        text: str,
+        user_timezone: str = "Europe/Moscow",
+        user_locale: str = "ru_RU",
+        last_event: Optional[Dict] = None,
+        is_reply: bool = False,
+        interpretation_mode: str = "soft",
+        chat_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict:
         """
         Извлечь intent и контекст из текста пользователя.
         
@@ -42,6 +85,8 @@ class NLPExtractor:
         try:
             tz = pytz.timezone(user_timezone)
             now = datetime.now(tz)
+
+            chat_history_info = self._format_chat_history(chat_history, text)
             
             # Формируем информацию о последнем событии для контекста
             last_event_info = ""
@@ -134,9 +179,10 @@ Intent (проверяй в порядке):
 Отвечай только JSON.
 
 Текущая дата и время: {current_time}
-Часовой пояс: {timezone}{last_event_info}{interpretation_note}""".format(
+Часовой пояс: {timezone}{chat_history_info}{last_event_info}{interpretation_note}""".format(
                 current_time=now.strftime("%Y-%m-%d %H:%M:%S %Z"),
                 timezone=user_timezone,
+                chat_history_info=chat_history_info,
                 last_event_info=last_event_info,
                 interpretation_note=interpretation_note
             )
