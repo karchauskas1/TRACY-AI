@@ -6,8 +6,10 @@ import { ArrowLeft, Plus, ListTodo, CheckSquare2, Square, Trash2, Loader2 } from
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
-import { apiGet, apiPost, formatApiError, type ApiError } from "../../lib/apiClient"
+import { apiGet, apiPost, apiDelete, formatApiError, type ApiError } from "../../lib/apiClient"
 import { useTelegramUser } from "../../lib/useTelegramUser"
+import { useNavigation } from "../../lib/useNavigation"
+import { useToast } from "../../hooks/use-toast"
 
 interface TodoList {
   id: number
@@ -28,6 +30,8 @@ interface TodoItem {
 
 export default function TodoListsPage() {
   const router = useRouter()
+  const { handleBack } = useNavigation()
+  const { toast } = useToast()
   const { user, userId, isLoading: userLoading, error: userError } = useTelegramUser()
   const [lists, setLists] = useState<TodoList[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,6 +39,8 @@ export default function TodoListsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newListTitle, setNewListTitle] = useState("")
   const [creating, setCreating] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState<number | null>(null)
 
   useEffect(() => {
     // Если пользователь не авторизован, перенаправляем на логин
@@ -147,8 +153,47 @@ export default function TodoListsPage() {
     }
   }
 
-  const handleBack = () => {
-    router.push("/assistant")
+  const deleteList = async (listId: number) => {
+    if (deleteConfirmId === listId) {
+      // Подтверждено, удаляем
+      try {
+        setDeleting(listId)
+        setError(null)
+
+        await apiDelete(`/api/todo-lists/${listId}?user_id=${parseInt(userId!)}`, { timeout: 15000 })
+        
+        // Обновляем список
+        await loadLists()
+        setDeleteConfirmId(null)
+        toast({
+          title: "Список удален",
+          description: "Список задач успешно удален",
+        })
+      } catch (e: any) {
+        console.error("Ошибка удаления списка:", e)
+        const errorMessage = e.type 
+          ? formatApiError(e)
+          : (e.message || "Не удалось удалить список")
+        setError(errorMessage)
+        toast({
+          title: "Ошибка",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } finally {
+        setDeleting(null)
+      }
+    } else {
+      // Первый клик - показываем подтверждение
+      setDeleteConfirmId(listId)
+      toast({
+        title: "Подтвердите удаление",
+        description: "Нажмите на кнопку удаления еще раз для подтверждения",
+        variant: "destructive",
+      })
+      // Сбрасываем подтверждение через 3 секунды
+      setTimeout(() => setDeleteConfirmId(null), 3000)
+    }
   }
 
   return (
@@ -266,18 +311,34 @@ export default function TodoListsPage() {
               {lists.map((list) => (
                 <Card
                   key={list.id}
-                  className="border-border hover:bg-accent/50 transition-colors cursor-pointer"
-                  onClick={() => router.push(`/todo-lists/detail?id=${list.id}`)}
+                  className="border-border hover:bg-accent/50 transition-colors"
                 >
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
-                      <div className="flex-1">
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => router.push(`/todo-lists/detail?id=${list.id}`)}
+                      >
                         <h3 className="text-lg font-semibold mb-1">{list.title}</h3>
                         <p className="text-sm text-muted-foreground">
                           {new Date(list.updated_at).toLocaleDateString("ru-RU")}
                         </p>
                       </div>
-                      <ListTodo className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => deleteList(list.id)}
+                          disabled={deleting === list.id}
+                          className="text-destructive hover:text-destructive/80 transition-colors p-1"
+                          title="Удалить список"
+                        >
+                          {deleting === list.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                        <ListTodo className="h-5 w-5 text-muted-foreground" />
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

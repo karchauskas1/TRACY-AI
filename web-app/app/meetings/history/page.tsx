@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { ArrowLeft, Search, Mic, Clock, Edit, Trash2, Filter, FileText, Globe, History } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useNavigation } from "../../../lib/useNavigation"
 import { Card, CardContent } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
 import { useToast } from "../../../hooks/use-toast"
@@ -20,6 +22,8 @@ interface Meeting {
 }
 
 export default function MeetingsHistoryPage() {
+  const router = useRouter()
+  const { handleBack } = useNavigation()
   const { toast } = useToast()
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [filteredMeetings, setFilteredMeetings] = useState<Meeting[]>([])
@@ -218,11 +222,12 @@ export default function MeetingsHistoryPage() {
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex h-14 items-center justify-between px-4">
-          <Link href="/assistant">
-            <button className="text-foreground hover:text-muted-foreground transition-colors">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-          </Link>
+          <button 
+            onClick={handleBack}
+            className="text-foreground hover:text-muted-foreground transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
           <h1 className="text-lg font-semibold">Все записи</h1>
           <div className="w-5" />
         </div>
@@ -326,35 +331,7 @@ export default function MeetingsHistoryPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          // Открываем детали встречи в модальном окне или через API
-                          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 
-                            (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-                              ? 'http://localhost:8080' 
-                              : 'https://api.pasekaproduction.ru')
-                          const apiUrl = `${apiBaseUrl}/api/meetings/${meeting.id}?user_id=${typeof window !== 'undefined' ? (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || localStorage.getItem('telegram_user')?.match(/"id":"(\d+)"/)?.[1] : ''}`
-                          
-                          fetch(apiUrl)
-                            .then(res => res.json())
-                            .then(data => {
-                              if (data.success && data.meeting) {
-                                const details = `Резюме: ${data.meeting.summary || 'Нет'}\n\nРасширенное резюме: ${data.meeting.summaryExtended || 'Нет'}\n\nПолный текст: ${data.meeting.transcript || 'Нет'}`
-                                // Используем toast вместо alert
-                                toast({
-                                  title: "Детали встречи",
-                                  description: details.substring(0, 500) + (details.length > 500 ? '...' : ''),
-                                })
-                              }
-                            })
-                            .catch(e => {
-                              console.error(e)
-                              toast({
-                                title: "Ошибка",
-                                description: "Не удалось загрузить детали встречи",
-                                variant: "destructive",
-                              })
-                            })
-                        }}
+                        onClick={() => router.push(`/meetings/${meeting.id}`)}
                         className="flex-1 border-primary/20 text-primary hover:bg-primary/10"
                       >
                         <Edit className="h-3 w-3 mr-1" />

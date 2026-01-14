@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { format, isSameDay } from "date-fns"
 import { ru } from "date-fns/locale"
-import { Settings, X, MessageCircle, Send, Calendar as CalendarIcon } from "lucide-react"
+import { Settings, X, MessageCircle, Send, Calendar as CalendarIcon, Clock } from "lucide-react"
+import { Card, CardContent } from "../../components/ui/card"
 import Link from "next/link"
 import { CalendarGrid } from "../../components/calendar/CalendarGrid"
 import { Button } from "../../components/ui/button"
@@ -11,6 +12,8 @@ import { formatTime } from "../../lib/utils"
 import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../lib/error-utils"
 import { apiGet, formatApiError, type ApiError } from "../../lib/apiClient"
 import { useTelegramUser } from "../../lib/useTelegramUser"
+import { useNavigation } from "../../lib/useNavigation"
+import { useRouter } from "next/navigation"
 
 interface Event {
   id: string
@@ -25,12 +28,15 @@ interface Event {
 }
 
 export function CalendarPageClient() {
+  const router = useRouter()
+  const { handleBack } = useNavigation()
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [events, setEvents] = useState<Event[]>([])
   const [eventsByDate, setEventsByDate] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(false) // Начинаем с false, ждем user_id
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   
   // Используем хук для получения user_id
   const { user, userId, isLoading: userLoading, error: userError } = useTelegramUser()
@@ -264,12 +270,6 @@ export function CalendarPageClient() {
   const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
   const telegramLink = `https://t.me/${botUsername}`
 
-  const handleClose = () => {
-    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-      (window as any).Telegram.WebApp.close()
-    }
-  }
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Top Header - как на скриншоте */}
@@ -277,11 +277,12 @@ export function CalendarPageClient() {
         <div className="flex h-14 items-center justify-between px-4">
           {/* Left: Back button and profile */}
           <div className="flex items-center gap-3">
-            <Link href="/assistant">
-              <button className="text-foreground hover:text-muted-foreground transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </Link>
+            <button 
+              onClick={handleBack}
+              className="text-foreground hover:text-muted-foreground transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
             {user?.photo_url && (
               <img
                 src={user.photo_url}
@@ -350,7 +351,8 @@ export function CalendarPageClient() {
                 {dayEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors"
+                    onClick={() => setSelectedEvent(event)}
+                    className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors cursor-pointer"
                   >
                     <div
                       className="mt-1.5 h-2 w-2 rounded-full flex-shrink-0"
@@ -370,6 +372,61 @@ export function CalendarPageClient() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Event Detail Modal */}
+      {selectedEvent && (
+        <div 
+          className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setSelectedEvent(null)}
+        >
+          <Card 
+            className="w-full max-w-md border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <h3 className="text-lg font-semibold">{selectedEvent.title}</h3>
+                  <button
+                    onClick={() => setSelectedEvent(null)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {format(new Date(selectedEvent.startAt), "d MMMM yyyy", { locale: ru })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {selectedEvent.allDay
+                        ? "Весь день"
+                        : `${formatTime(new Date(selectedEvent.startAt))}${selectedEvent.endAt ? ` - ${formatTime(new Date(selectedEvent.endAt))}` : ""}`}
+                    </span>
+                  </div>
+                  {selectedEvent.calendarSource && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: selectedEvent.calendarSource.color }}
+                      />
+                      <span className="text-muted-foreground">{selectedEvent.calendarSource.name}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
           </div>
         </div>
       </div>

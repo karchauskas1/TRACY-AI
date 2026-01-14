@@ -6,7 +6,8 @@ import { ArrowLeft, X, MessageSquare, Bug, Lightbulb, Image as ImageIcon, Loader
 import { Card, CardContent } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
 import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../../lib/error-utils"
-import { apiGet, formatApiError, type ApiError } from "../../../lib/apiClient"
+import { apiGet, apiPost, formatApiError, type ApiError } from "../../../lib/apiClient"
+import { useNavigation } from "../../../lib/useNavigation"
 
 interface FeedbackItem {
   id: string
@@ -31,6 +32,7 @@ interface FeedbackPageClientProps {
 
 export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProps) {
   const router = useRouter()
+  const { handleBack } = useNavigation()
   const [user, setUser] = useState(initialUser)
   const [feedback, setFeedback] = useState<FeedbackItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -194,17 +196,6 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
     }
   }
 
-  const handleBack = () => {
-    router.push("/settings")
-  }
-
-  const handleClose = () => {
-    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-      (window as any).Telegram.WebApp.close()
-    } else {
-      router.push("/settings")
-    }
-  }
 
   const formatDate = (dateStr: string) => {
     try {
@@ -244,12 +235,7 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
             <MessageSquare className="h-5 w-5 text-primary" />
             <span className="text-sm font-medium">Обратная связь</span>
           </div>
-          <button
-            onClick={handleClose}
-            className="text-foreground hover:text-muted-foreground transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="w-5" /> {/* Spacer */}
         </div>
       </header>
 

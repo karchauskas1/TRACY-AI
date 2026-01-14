@@ -9,6 +9,7 @@ import { Textarea } from "../../components/ui/textarea"
 import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../lib/error-utils"
 import { apiGet, apiPost, formatApiError, type ApiError } from "../../lib/apiClient"
 import { useTelegramUser } from "../../lib/useTelegramUser"
+import { useNavigation } from "../../lib/useNavigation"
 
 interface ChatMessage {
   id: number
@@ -20,6 +21,7 @@ interface ChatMessage {
 export default function ChatPage() {
   const router = useRouter()
   const { user, userId, isLoading: userLoading, error: userError } = useTelegramUser()
+  const { handleBack } = useNavigation()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputMessage, setInputMessage] = useState("")
   const [loading, setLoading] = useState(true)
@@ -216,9 +218,6 @@ export default function ChatPage() {
     }
   }
 
-  const handleBack = () => {
-    router.push("/assistant")
-  }
 
   const formatTime = (dateStr: string) => {
     try {

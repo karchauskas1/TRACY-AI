@@ -2,6 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Отключение pinch/zoom в Telegram WebView */
+@layer base {
+  html {
+    touch-action: pan-x pan-y;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  
+  body {
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Разрешаем выделение текста в инпутах и текстовых областях */
+  input,
+  textarea,
+  [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
 @layer base {
   :root {
     /* Light theme */

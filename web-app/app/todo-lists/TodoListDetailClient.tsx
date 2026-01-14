@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useNavigation } from "../../lib/useNavigation"
 import { ArrowLeft, Plus, Trash2, CheckSquare2, Square, Loader2 } from "lucide-react"
 import { Card, CardContent } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
@@ -30,6 +31,7 @@ interface TodoListDetailClientProps {
 
 export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
   const router = useRouter()
+  const { handleBack } = useNavigation()
 
   const [user, setUser] = useState<any>(null)
   const [list, setList] = useState<TodoList | null>(null)
@@ -215,9 +217,6 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
     }
   }
 
-  const handleBack = () => {
-    router.push("/todo-lists")
-  }
 
   if (loading) {
     return (

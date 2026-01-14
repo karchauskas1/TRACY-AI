@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { useNavigation } from "../../lib/useNavigation"
 import { ArrowLeft, RefreshCw, Trash2, AlertCircle, CheckCircle, Clock, XCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
@@ -23,18 +24,34 @@ interface ApiDebugLog {
 
 export default function DebugPage() {
   const router = useRouter()
+  const { handleBack } = useNavigation()
   const [logs, setLogs] = useState<ApiDebugLog[]>([])
   const [stats, setStats] = useState<any>(null)
   const [apiUrl, setApiUrl] = useState<string>("")
   const [apiUrlValid, setApiUrlValid] = useState<boolean>(false)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const lastLogsLengthRef = useRef<number>(0)
 
   useEffect(() => {
     loadLogs()
     checkApiUrl()
     
-    // Обновляем логи каждые 2 секунды
-    const interval = setInterval(loadLogs, 2000)
-    return () => clearInterval(interval)
+    // Обновляем логи каждые 5 секунд (не 2, чтобы не спамить)
+    // И только если количество логов изменилось
+    intervalRef.current = setInterval(() => {
+      const apiDebug = getApiDebugger()
+      const currentLogs = apiDebug.getLogs()
+      if (currentLogs.length !== lastLogsLengthRef.current) {
+        lastLogsLengthRef.current = currentLogs.length
+        loadLogs()
+      }
+    }, 5000)
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
   }, [])
 
   const loadLogs = () => {
@@ -106,7 +123,7 @@ export default function DebugPage() {
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex h-14 items-center justify-between px-4">
           <button
-            onClick={() => router.push("/assistant")}
+            onClick={handleBack}
             className="text-foreground hover:text-muted-foreground transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
