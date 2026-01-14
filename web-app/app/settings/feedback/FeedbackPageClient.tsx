@@ -38,6 +38,7 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
+  const [selected, setSelected] = useState<FeedbackItem | null>(null)
   const SUPER_USER_ID = "308477378" // ID супер-пользователя
 
   useEffect(() => {
@@ -213,11 +214,24 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
   }
 
   const getFeedbackTypeLabel = (type: string) => {
-    return type === "баг" || type === "Баг" ? "Баг" : "Предложение"
+    const t = String(type || "").toLowerCase()
+    if (t.includes("баг")) return "Баг"
+    if (t.includes("предлож")) return "Предложение"
+    if (t.includes("коммент") || t.includes("comment")) return "Комментарий"
+    return type || "Сообщение"
   }
 
   const getFeedbackTypeIcon = (type: string) => {
-    return type === "баг" || type === "Баг" ? Bug : Lightbulb
+    const t = String(type || "").toLowerCase()
+    if (t.includes("баг")) return Bug
+    if (t.includes("предлож")) return Lightbulb
+    return MessageSquare
+  }
+
+  const truncate = (text: string, max = 180) => {
+    const s = String(text || "")
+    if (s.length <= max) return s
+    return s.slice(0, max).trimEnd() + "…"
   }
 
   return (
@@ -297,23 +311,26 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
 
                         {/* Comment */}
                         <div className="text-sm">
-                          <p className="whitespace-pre-wrap">{item.comment}</p>
+                          <p className="whitespace-pre-wrap">{truncate(item.comment)}</p>
                         </div>
 
                         {/* Screenshot */}
                         {item.screenshotUrl && (
-                          <div>
-                            <a
-                              href={item.screenshotUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-                            >
-                              <ImageIcon className="h-4 w-4" />
-                              <span>Просмотреть скриншот</span>
-                            </a>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelected(item)}
+                            className="flex items-center gap-2 text-sm text-primary hover:underline"
+                          >
+                            <ImageIcon className="h-4 w-4" />
+                            <span>Скриншот (открыть)</span>
+                          </button>
                         )}
+
+                        <div className="pt-2">
+                          <Button variant="outline" size="sm" onClick={() => setSelected(item)}>
+                            Подробнее
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -323,6 +340,68 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
           )}
         </div>
       </div>
+
+      {/* Details modal */}
+      {selected && (
+        <div className="fixed inset-0 z-[100000] bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-background border border-border shadow-lg">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const Icon = getFeedbackTypeIcon(selected.type)
+                  return <Icon className="h-5 w-5 text-muted-foreground" />
+                })()}
+                <div className="font-semibold">#{selected.id} • {getFeedbackTypeLabel(selected.type)}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4 max-h-[80vh] overflow-auto">
+              <div className="text-sm text-muted-foreground">
+                <div><span className="font-medium">User ID:</span> {selected.userId}</div>
+                <div><span className="font-medium">Created:</span> {formatDate(selected.createdAt)}</div>
+                {selected.sheetName && (
+                  <div><span className="font-medium">Sheet:</span> {selected.sheetName}{selected.sheetRowNumber ? ` #${selected.sheetRowNumber}` : ""}</div>
+                )}
+              </div>
+
+              <div className="text-sm">
+                <div className="font-medium mb-2">Текст</div>
+                <p className="whitespace-pre-wrap">{selected.comment}</p>
+              </div>
+
+              {selected.screenshotUrl && (
+                <div className="space-y-2">
+                  <div className="font-medium text-sm">Скриншот</div>
+                  <a
+                    href={selected.screenshotUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    <span>Открыть в новой вкладке</span>
+                  </a>
+                  <div className="rounded-md border border-border overflow-hidden bg-muted">
+                    <img
+                      src={selected.screenshotUrl}
+                      alt="Screenshot"
+                      loading="lazy"
+                      className="w-full h-auto object-contain"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

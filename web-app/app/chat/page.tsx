@@ -29,6 +29,7 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [keyboardInset, setKeyboardInset] = useState(0)
   const [greetingLoaded, setGreetingLoaded] = useState(false)
 
   useEffect(() => {
@@ -48,6 +49,35 @@ export default function ChatPage() {
     // Прокрутка к последнему сообщению
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  // Keep input above the on-screen keyboard (iOS/Telegram WebView)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const vv = (window as any).visualViewport as VisualViewport | undefined
+    if (!vv) return
+
+    const computeInset = () => {
+      // How much of the layout viewport is covered by the visual viewport (keyboard)
+      const inset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop))
+      setKeyboardInset(Math.round(inset))
+    }
+
+    computeInset()
+    vv.addEventListener("resize", computeInset)
+    vv.addEventListener("scroll", computeInset)
+    return () => {
+      vv.removeEventListener("resize", computeInset)
+      vv.removeEventListener("scroll", computeInset)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (keyboardInset <= 0) return
+    // When keyboard opens, keep latest message visible
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    })
+  }, [keyboardInset])
 
   const loadChat = async () => {
     // Ждем, пока user_id будет получен
@@ -248,7 +278,13 @@ export default function ChatPage() {
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div
+        className="flex-1 overflow-y-auto px-4 py-6"
+        style={{
+          // Extra space for fixed input + keyboard
+          paddingBottom: 120 + keyboardInset,
+        }}
+      >
           {loading ? (
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -327,7 +363,10 @@ export default function ChatPage() {
       </div>
 
       {/* Input */}
-      <div className="sticky bottom-0 border-t border-border bg-background p-4">
+      <div
+        className="fixed left-0 right-0 border-t border-border bg-background p-4"
+        style={{ bottom: keyboardInset }}
+      >
         <div className="max-w-2xl mx-auto">
           {error && (
             <p className="text-sm text-destructive mb-2">{error}</p>
@@ -343,7 +382,8 @@ export default function ChatPage() {
                   sendMessage()
                 }
               }}
-              className="flex-1 min-h-[60px] max-h-[120px] resize-none"
+              // text-base prevents iOS focus zoom
+              className="flex-1 min-h-[60px] max-h-[120px] resize-none text-base"
               disabled={sending}
             />
             <Button
