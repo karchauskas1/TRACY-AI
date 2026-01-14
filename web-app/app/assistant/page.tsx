@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
+import { logger } from "../../lib/logger"
 import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
@@ -17,15 +18,15 @@ export default function AssistantPage() {
 
   // Мониторинг изменений pathname
   useEffect(() => {
-    console.log("[AssistantPage] Pathname changed:", pathname)
+    logger.info('AssistantPage', 'Pathname changed', { pathname, windowPathname: typeof window !== 'undefined' ? window.location.pathname : 'N/A' })
   }, [pathname])
 
   useEffect(() => {
-    console.log("[AssistantPage] userLoading:", userLoading, "userId:", userId)
+    logger.info('AssistantPage', 'Component mounted', { userLoading, userId })
     
     // Если пользователь не загружен и не загружается, перенаправляем на логин
     if (!userLoading && !userId) {
-      console.log("[AssistantPage] No user, redirecting to login")
+      logger.warn('AssistantPage', 'No user, redirecting to login')
       router.push("/login")
       return
     }
@@ -33,7 +34,7 @@ export default function AssistantPage() {
     // Если пользователь загружен, обновляем состояние
     if (telegramUser && userId) {
       const fullName = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(" ")
-      console.log("[AssistantPage] User loaded:", fullName)
+      logger.info('AssistantPage', 'User loaded', { userId, fullName })
       setUser({
         id: userId,
         name: fullName || telegramUser.first_name || "Пользователь",
@@ -143,10 +144,28 @@ export default function AssistantPage() {
             <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={(e) => {
+                logger.debug('AssistantPage', 'Click on Чат с Tracy', {
+                  target: e.target,
+                  currentTarget: e.currentTarget,
+                  targetTag: (e.target as HTMLElement)?.tagName,
+                  currentTargetTag: (e.currentTarget as HTMLElement)?.tagName,
+                  timestamp: Date.now(),
+                })
+                
                 e.preventDefault()
                 e.stopPropagation()
-                console.log("[AssistantPage] Navigate to /chat via router.push")
-                router.push("/chat")
+                
+                logger.info('AssistantPage', 'Calling router.push(/chat)', {
+                  beforePathname: pathname,
+                  routerExists: !!router,
+                })
+                
+                try {
+                  router.push("/chat")
+                  logger.info('AssistantPage', 'router.push(/chat) called successfully')
+                } catch (error) {
+                  logger.error('AssistantPage', 'Error in router.push(/chat)', { error })
+                }
               }}
               role="button"
               tabIndex={0}
@@ -174,10 +193,28 @@ export default function AssistantPage() {
             <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={(e) => {
+                logger.debug('AssistantPage', 'Click on Календарь', {
+                  target: e.target,
+                  currentTarget: e.currentTarget,
+                  targetTag: (e.target as HTMLElement)?.tagName,
+                  currentTargetTag: (e.currentTarget as HTMLElement)?.tagName,
+                  timestamp: Date.now(),
+                })
+                
                 e.preventDefault()
                 e.stopPropagation()
-                console.log("[AssistantPage] Navigate to /calendar via router.push")
-                router.push("/calendar")
+                
+                logger.info('AssistantPage', 'Calling router.push(/calendar)', {
+                  beforePathname: pathname,
+                  routerExists: !!router,
+                })
+                
+                try {
+                  router.push("/calendar")
+                  logger.info('AssistantPage', 'router.push(/calendar) called successfully')
+                } catch (error) {
+                  logger.error('AssistantPage', 'Error in router.push(/calendar)', { error })
+                }
               }}
               role="button"
               tabIndex={0}
@@ -236,10 +273,28 @@ export default function AssistantPage() {
             <div 
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={(e) => {
+                logger.debug('AssistantPage', 'Click on Списки задач', {
+                  target: e.target,
+                  currentTarget: e.currentTarget,
+                  targetTag: (e.target as HTMLElement)?.tagName,
+                  currentTargetTag: (e.currentTarget as HTMLElement)?.tagName,
+                  timestamp: Date.now(),
+                })
+                
                 e.preventDefault()
                 e.stopPropagation()
-                console.log("[AssistantPage] Navigate to /todo-lists via router.push")
-                router.push("/todo-lists")
+                
+                logger.info('AssistantPage', 'Calling router.push(/todo-lists)', {
+                  beforePathname: pathname,
+                  routerExists: !!router,
+                })
+                
+                try {
+                  router.push("/todo-lists")
+                  logger.info('AssistantPage', 'router.push(/todo-lists) called successfully')
+                } catch (error) {
+                  logger.error('AssistantPage', 'Error in router.push(/todo-lists)', { error })
+                }
               }}
               role="button"
               tabIndex={0}
