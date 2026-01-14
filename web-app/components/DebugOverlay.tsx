@@ -61,9 +61,9 @@ export function DebugOverlay() {
   useEffect(() => {
     // Проверяем query параметр ?debug=1
     const params = new URLSearchParams(window.location.search)
-    if (params.get("debug") === "1") {
-      setIsVisible(true)
-    }
+    const debugMode = params.get("debug") === "1"
+    if (!debugMode) return
+    setIsVisible(true)
 
     // Проверяем mounted state (один раз)
     mountedRef.current = true
@@ -217,6 +217,7 @@ export function DebugOverlay() {
 
   // Отдельный useEffect для отслеживания изменений pathname (только при реальных изменениях)
   useEffect(() => {
+    if (!isVisible) return
     setDebugInfo((prev) => {
       const newPathname = window.location.pathname
       const newRouterPathname = pathname
