@@ -372,6 +372,67 @@ export function DebugOverlay() {
       </div>
 
       <div style={{ marginBottom: "16px" }}>
+        <h2 style={{ marginBottom: "8px", color: "#4CAF50" }}>Logs Export</h2>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+          <button
+            onClick={() => {
+              const logger = (window as any).__TRACY_LOGGER
+              if (logger) {
+                const logsText = logger.getLogsAsText()
+                navigator.clipboard.writeText(logsText).then(() => {
+                  alert("Logs copied to clipboard!")
+                }).catch(() => {
+                  console.log("Logs:", logsText)
+                  alert("Logs printed to console (check DevTools)")
+                })
+              } else {
+                alert("Logger not available. Make sure page is loaded.")
+              }
+            }}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#4CAF50",
+              color: "#fff",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Copy Logs (Text)
+          </button>
+          <button
+            onClick={() => {
+              const logger = (window as any).__TRACY_LOGGER
+              if (logger) {
+                const logsJson = logger.exportLogs()
+                navigator.clipboard.writeText(logsJson).then(() => {
+                  alert("Logs JSON copied to clipboard!")
+                }).catch(() => {
+                  console.log("Logs JSON:", logsJson)
+                  alert("Logs JSON printed to console")
+                })
+              } else {
+                alert("Logger not available")
+              }
+            }}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#2196F3",
+              color: "#fff",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Copy Logs (JSON)
+          </button>
+        </div>
+        <div style={{ fontSize: "10px", color: "#999" }}>
+          Total logs: {(window as any).__TRACY_LOGGER?.getLogs()?.length || 0}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: "16px" }}>
         <h2 style={{ marginBottom: "8px", color: "#00BCD4" }}>Manual Navigation</h2>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           <button
