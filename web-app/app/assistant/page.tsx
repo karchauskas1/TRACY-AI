@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
@@ -134,124 +135,112 @@ export default function AssistantPage() {
           {/* Main Features */}
           <div className="space-y-4">
             {/* Чат с Tracy */}
-            <div 
-              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-              onClick={() => router.push('/chat')}
+            <Link 
+              href="/chat"
+              className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
             >
-              <div className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <MessageCircle className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold mb-1">Чат с Tracy</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Онлайн чат с AI-ассистентом для планирования дня
-                    </p>
-                  </div>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <MessageCircle className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold mb-1">Чат с Tracy</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Онлайн чат с AI-ассистентом для планирования дня
+                  </p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             {/* Calendar */}
-            <div 
-              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-              onClick={() => router.push('/calendar')}
+            <Link 
+              href="/calendar"
+              className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
             >
-              <div className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Calendar className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold mb-1">Календарь</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Просмотр и управление событиями
-                    </p>
-                  </div>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Calendar className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold mb-1">Календарь</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Просмотр и управление событиями
+                  </p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             {/* История расшифровок */}
-            <div 
-              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-              onClick={() => router.push('/meetings/history')}
+            <Link 
+              href="/meetings/history"
+              className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
             >
-              <div className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <History className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold mb-1">История расшифровок</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Просмотр всех расшифрованных встреч
-                    </p>
-                  </div>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <History className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold mb-1">История расшифровок</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Просмотр всех расшифрованных встреч
+                  </p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             {/* Списки задач */}
-            <div 
-              className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-              onClick={() => router.push('/todo-lists')}
+            <Link 
+              href="/todo-lists"
+              className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
             >
-              <div className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <ListTodo className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold mb-1">Списки задач</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Создание и управление списками задач
-                    </p>
-                  </div>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <ListTodo className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold mb-1">Списки задач</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Создание и управление списками задач
+                  </p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (
               <>
-                <div 
-                  className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                  onClick={() => router.push('/settings/feedback')}
+                <Link 
+                  href="/settings/feedback"
+                  className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
                 >
-                  <div className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <MessageSquare className="h-6 w-6 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-1">Обратная связь</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Просмотр всех сообщений об ошибках и предложениях
-                        </p>
-                      </div>
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <MessageSquare className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold mb-1">Обратная связь</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Просмотр всех сообщений об ошибках и предложениях
+                      </p>
                     </div>
                   </div>
-                </div>
-                <div 
-                  className="border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                  onClick={() => router.push('/debug')}
+                </Link>
+                <Link 
+                  href="/debug"
+                  className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
                 >
-                  <div className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Settings className="h-6 w-6 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-1">Debug: Network</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Мониторинг сетевых запросов и диагностика ошибок
-                        </p>
-                      </div>
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Settings className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold mb-1">Debug: Network</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Мониторинг сетевых запросов и диагностика ошибок
+                      </p>
                     </div>
                   </div>
-                </div>
+                </Link>
               </>
             )}
           </div>
