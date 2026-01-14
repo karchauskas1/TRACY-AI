@@ -203,7 +203,14 @@ class ReminderScheduler:
                 event_start_time = event_start_time_str
             
             # Формируем сообщение в зависимости от типа напоминания
-            if reminder_type == 'before':
+            if reminder_type == 'interval':
+                # Интервальные напоминания в заданном окне
+                message = (
+                    f"🔔 Напоминание\n\n"
+                    f"📅 {event_title}\n"
+                    f"🕐 {self._format_datetime(event_start_time)}"
+                )
+            elif reminder_type == 'before':
                 # Напоминание за X времени до события
                 if minutes_before:
                     if minutes_before >= 60:

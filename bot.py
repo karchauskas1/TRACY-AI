@@ -2,7 +2,7 @@
 import logging
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Union
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp, BotCommand, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.constants import ChatAction
@@ -2619,10 +2619,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         elif feedback_step == 'screenshot':
             # Ожидаем скриншот или пропуск
+            # Telegram может прислать скриншот как photo или как document (image/*)
+            photo_file = None
             if update.message.photo:
-                # Получаем фото
                 photo = update.message.photo[-1]  # Берем самое большое фото
                 photo_file = await context.bot.get_file(photo.file_id)
+            elif update.message.document and (update.message.document.mime_type or "").startswith("image/"):
+                photo_file = await context.bot.get_file(update.message.document.file_id)
                 
                 try:
                     from io import BytesIO
@@ -2686,7 +2689,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
             else:
                 await update.message.reply_text(
-                    "📸 Пришли скриншот (как фото) или нажми «Пропустить».",
+                    "📸 Пришли скриншот (как фото или файлом) или нажми «Пропустить».",
                 )
                 return
     
@@ -2968,7 +2971,90 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if confirmation_type:
             # Пользователь отвечает на запрос подтверждения
             confirmation_text = text.lower().strip()
-            if confirmation_text in ['да', 'подтверждаю', 'подтвердить', 'yes', 'y', 'конечно', 'удали', 'удалить все', 'удалить']:
+            # Специальный кейс: интервальные напоминания (нужен выбор режима)
+            if confirmation_type == 'interval_reminders':
+                pending = context.user_data.get('pending_interval_reminders') or {}
+                choice = confirmation_text
+                if choice in ['отмена', 'нет', 'cancel', 'no', 'n']:
+                    context.user_data.pop('pending_confirmation', None)
+                    context.user_data.pop('pending_interval_reminders', None)
+                    result = {
+                        'action': 'cancelled',
+                        'message': '❌ Ок, отменил.',
+                        'needs_confirmation': False
+                    }
+                elif choice in ['видно', 'видимый', 'покажи', 'показывать', 'visible', 'show']:
+                    mode = 'visible'
+                elif choice in ['скрыто', 'скрытый', 'не показывать', 'hidden', 'hide']:
+                    mode = 'hidden'
+                else:
+                    await update.message.reply_text("Ответь «видно», «скрыто» или «отмена».")
+                    return
+
+                if 'mode' in locals():
+                    try:
+                        import pytz
+                        from datetime import datetime as dt_module
+
+                        interval_minutes = int(pending.get('interval_minutes'))
+                        start_time = dt_module.fromisoformat(str(pending.get('start_time')))
+                        end_time = dt_module.fromisoformat(str(pending.get('end_time')))
+                        tz = pytz.timezone(pending.get('timezone') or timezone or 'Europe/Moscow')
+                        if start_time.tzinfo is None:
+                            start_time = tz.localize(start_time)
+                        if end_time.tzinfo is None:
+                            end_time = tz.localize(end_time)
+
+                        title = f"Напоминания каждые {interval_minutes} минут"
+                        if mode == 'hidden':
+                            title = f"[SERVICE] {title}"
+
+                        event_id = db.save_event(
+                            user_id=user_id,
+                            title=title,
+                            description=f"Интервальные напоминания: каждые {interval_minutes} минут",
+                            start_time=start_time,
+                            end_time=end_time,
+                            location=None,
+                            priority=0,
+                            status='confirmed',
+                        )
+
+                        if not event_id:
+                            raise RuntimeError("Не удалось создать событие для напоминаний")
+
+                        created = 0
+                        t = start_time
+                        while t <= end_time:
+                            rid = db.save_reminder(
+                                user_id=user_id,
+                                event_id=event_id,
+                                reminder_time=t,
+                                event_start_time=t,
+                                reminder_type='interval',
+                                minutes_before=None
+                            )
+                            if rid:
+                                created += 1
+                            t = t + timedelta(minutes=interval_minutes)
+
+                        context.user_data.pop('pending_confirmation', None)
+                        context.user_data.pop('pending_interval_reminders', None)
+                        result = {
+                            'action': 'created',
+                            'message': f"✅ Готово! Создал {created} напоминаний на сегодня.",
+                            'needs_confirmation': False
+                        }
+                    except Exception as e:
+                        logger.error(f"Ошибка создания интервальных напоминаний: {e}", exc_info=True)
+                        context.user_data.pop('pending_confirmation', None)
+                        context.user_data.pop('pending_interval_reminders', None)
+                        result = {
+                            'action': 'error',
+                            'message': f"❌ Не удалось создать интервальные напоминания: {str(e)[:200]}",
+                            'needs_confirmation': False
+                        }
+            elif confirmation_text in ['да', 'подтверждаю', 'подтвердить', 'yes', 'y', 'конечно', 'удали', 'удалить все', 'удалить']:
                 # Подтверждение получено
                 context.user_data.pop('pending_confirmation', None)
                 
@@ -2993,7 +3079,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     last_event = db.get_last_event(user_id)
                     reply_to_event = None
                     if update.message.reply_to_message:
-                        reply_to_event = last_event
+                        # Пытаемся привязать к событию из reply
+                        try:
+                            reply_text = (update.message.reply_to_message.text or update.message.reply_to_message.caption or "").strip()
+                            if reply_text:
+                                first_line = reply_text.splitlines()[0].strip()
+                                import re as re_module
+                                title_hint = re_module.sub(r"^[^\\wа-яА-Я0-9]+", "", first_line).strip()
+                                if title_hint:
+                                    candidates = db.find_similar_events(user_id, title_hint)
+                                    if candidates:
+                                        reply_to_event = candidates[0]
+                                        last_event = reply_to_event
+                        except Exception as e:
+                            logger.debug(f"Не удалось извлечь событие из reply: {e}")
                     
                     # Получаем режим интерпретации из user_data (по умолчанию 'soft')
                     ai_mode = context.user_data.get('ai_mode', 'soft')
@@ -3018,9 +3117,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Проверяем, является ли это reply к сообщению (для привязки заметок к событиям)
             reply_to_event = None
             if update.message.reply_to_message:
-                # Если это reply, пытаемся найти событие из предыдущего сообщения
-                # Можно расширить логику для поиска события по тексту reply_to_message
-                reply_to_event = last_event  # Пока используем последнее событие
+                # Если это reply, пытаемся найти событие из предыдущего сообщения (по заголовку)
+                try:
+                    reply_text = (update.message.reply_to_message.text or update.message.reply_to_message.caption or "").strip()
+                    if reply_text:
+                        first_line = reply_text.splitlines()[0].strip()
+                        import re as re_module
+                        title_hint = re_module.sub(r"^[^\\wа-яА-Я0-9]+", "", first_line).strip()
+                        if title_hint:
+                            candidates = db.find_similar_events(user_id, title_hint)
+                            if candidates:
+                                reply_to_event = candidates[0]
+                                last_event = reply_to_event
+                except Exception as e:
+                    logger.debug(f"Не удалось извлечь событие из reply: {e}")
             
             # Проверяем, что компоненты инициализированы
             if not nlp_extractor:
@@ -3057,6 +3167,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Если требуется подтверждение, сохраняем тип подтверждения в user_data
         if result.get('needs_confirmation') and result.get('confirmation_type'):
             context.user_data['pending_confirmation'] = result['confirmation_type']
+            if result.get('confirmation_type') == 'interval_reminders':
+                context.user_data['pending_interval_reminders'] = result.get('interval_reminders') or {}
         
         # Отправляем результат пользователю с постоянной клавиатурой
         await update.message.reply_text(formatted_message, reply_markup=reply_keyboard)

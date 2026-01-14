@@ -470,9 +470,27 @@ def _public_base_url(request: web_request.Request) -> str:
     Best-effort base URL for building absolute links behind reverse proxies.
     Uses X-Forwarded-* if present.
     """
+    # Prefer explicit public base URL for cases when internal requests hit localhost.
+    # Example: TRACY_PUBLIC_BASE_URL=https://api.pasekaproduction.ru
+    explicit = (os.getenv("TRACY_PUBLIC_BASE_URL") or os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    if explicit:
+        return explicit
+
+    # If config has a non-localhost API base, it is likely the public base.
+    try:
+        cfg = (getattr(config, "TRACY_API_BASE_URL", "") or "").strip().rstrip("/")
+        if cfg and ("localhost" not in cfg) and ("127.0.0.1" not in cfg):
+            return cfg
+    except Exception:
+        pass
+
     proto = request.headers.get("X-Forwarded-Proto", request.scheme)
     host = request.headers.get("X-Forwarded-Host", request.host)
-    return f"{proto}://{host}"
+    base = f"{proto}://{host}".rstrip("/")
+    # Fallback: if we still ended up with localhost, use known production API domain.
+    if "localhost" in base or "127.0.0.1" in base:
+        return "https://api.pasekaproduction.ru"
+    return base
 
 
 def _decode_base64_payload(payload: str) -> bytes:

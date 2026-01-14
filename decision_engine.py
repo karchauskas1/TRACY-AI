@@ -285,6 +285,54 @@ class DecisionEngine:
         # Получить настройки пользователя
         user = self.db.get_or_create_user(user_id)
         timezone = user.get('timezone', 'Europe/Moscow')
+
+        # --- Interval reminders (every N minutes from HH:MM to HH:MM) ---
+        # We intentionally parse this deterministically (no LLM) because it is an execution command.
+        try:
+            import re
+            import pytz
+            text_lower = (original_text or "").lower()
+            m_every = re.search(r"кажд\\w*\\s+(\\d{1,3})\\s*(?:мин|минут|минуты|минуту)\\b", text_lower)
+            m_window = re.search(r"с\\s+(\\d{1,2})(?::(\\d{2}))?\\s*(?:до|-)\\s*(\\d{1,2})(?::(\\d{2}))?\\b", text_lower)
+            if m_every and m_window:
+                interval_minutes = int(m_every.group(1))
+                h1 = int(m_window.group(1))
+                m1 = int(m_window.group(2) or "0")
+                h2 = int(m_window.group(3))
+                m2 = int(m_window.group(4) or "0")
+                if 1 <= interval_minutes <= 180 and 0 <= h1 < 24 and 0 <= h2 < 24 and 0 <= m1 < 60 and 0 <= m2 < 60:
+                    tz = pytz.timezone(timezone)
+                    now = datetime.now(tz)
+                    start_dt = tz.localize(datetime.combine(now.date(), datetime.min.time().replace(hour=h1, minute=m1)))
+                    end_dt = tz.localize(datetime.combine(now.date(), datetime.min.time().replace(hour=h2, minute=m2)))
+                    if end_dt <= start_dt:
+                        # If user provided inverted window, treat it as invalid for "today" flow.
+                        return {
+                            "action": "error",
+                            "message": "Я понял интервал, но время указано некорректно (конец раньше начала). Пример: «каждые 10 минут с 10:00 до 18:00».",
+                            "needs_confirmation": False,
+                        }
+
+                    return {
+                        "action": "interval_reminders_proposed",
+                        "message": (
+                            f"Хорошо. Напоминать каждые {interval_minutes} минут сегодня с {h1:02d}:{m1:02d} до {h2:02d}:{m2:02d}.\n\n"
+                            "Выбери режим:\n"
+                            "• напиши «видно» — создать видимое событие в календаре\n"
+                            "• напиши «скрыто» — создать служебную серию (может отображаться в списке)\n"
+                            "• напиши «отмена» — ничего не делать"
+                        ),
+                        "needs_confirmation": True,
+                        "confirmation_type": "interval_reminders",
+                        "interval_reminders": {
+                            "interval_minutes": interval_minutes,
+                            "start_time": start_dt.isoformat(),
+                            "end_time": end_dt.isoformat(),
+                            "timezone": timezone,
+                        },
+                    }
+        except Exception as e:
+            logger.warning(f"Interval reminders parse failed: {e}")
         
         # Получить подключенные календари
         calendar_connections = self.db.get_calendar_connections(user_id)
@@ -359,6 +407,28 @@ class DecisionEngine:
                 
                 # Используем regex для извлечения времени из русского текста
                 text_lower = original_text.lower()
+
+                def _detect_weekday_idx(t: str) -> Optional[int]:
+                    # Monday=0 ... Sunday=6
+                    full_cases = {
+                        "понедельник": 0, "понедельника": 0,
+                        "вторник": 1, "вторника": 1,
+                        "среда": 2, "среду": 2,
+                        "четверг": 3, "четверга": 3,
+                        "пятница": 4, "пятницу": 4,
+                        "суббота": 5, "субботу": 5,
+                        "воскресенье": 6, "воскресенья": 6,
+                    }
+                    abbr = {"пн": 0, "вт": 1, "ср": 2, "чт": 3, "пт": 4, "сб": 5, "вс": 6}
+                    for key, idx in full_cases.items():
+                        if re_module.search(rf"(?<![\\wа-яё]){re_module.escape(key)}(?![\\wа-яё])", t):
+                            return idx
+                    for key, idx in abbr.items():
+                        if re_module.search(rf"(?<![\\wа-яё]){key}(?![\\wа-яё])", t):
+                            return idx
+                    return None
+
+                mentioned_weekday = _detect_weekday_idx(text_lower)
                 hour = None
                 minute = None
                 
@@ -425,6 +495,12 @@ class DecisionEngine:
                         date = date + timedelta(days=1)
                     elif 'послезавтра' in text_lower:
                         date = date + timedelta(days=2)
+
+                    # Если указан день недели ("в четверг"), сдвигаем дату на ближайшее соответствие
+                    if mentioned_weekday is not None:
+                        days_ahead = (mentioned_weekday - date.weekday()) % 7
+                        if days_ahead != 0:
+                            date = date + timedelta(days=days_ahead)
                     
                     # Создаем datetime
                     start_time = datetime.combine(date, datetime.min.time().replace(hour=hour, minute=minute))
@@ -432,7 +508,11 @@ class DecisionEngine:
                     
                     # Если время уже прошло сегодня и не указано "завтра" или дата, считаем что это завтра
                     if start_time < now and 'завтра' not in text_lower and 'послезавтра' not in text_lower and not date_match:
-                        start_time = start_time + timedelta(days=1)
+                        # Если пользователь указал день недели, переносим на следующую неделю этого дня
+                        if mentioned_weekday is not None:
+                            start_time = start_time + timedelta(days=7)
+                        else:
+                            start_time = start_time + timedelta(days=1)
                     
                     has_explicit_time = True
                     extracted_data['start_time'] = start_time
@@ -454,6 +534,45 @@ class DecisionEngine:
                     start_time = tz.localize(start_time)
                 else:
                     start_time = start_time.astimezone(tz)
+
+        # Если в тексте явно указан день недели, но start_time попал на другой день — сдвигаем вперед до нужного дня
+        if start_time and original_text:
+            try:
+                import re as re_module
+                text_lower = original_text.lower()
+                full_cases = {
+                    "понедельник": 0, "понедельника": 0,
+                    "вторник": 1, "вторника": 1,
+                    "среда": 2, "среду": 2,
+                    "четверг": 3, "четверга": 3,
+                    "пятница": 4, "пятницу": 4,
+                    "суббота": 5, "субботу": 5,
+                    "воскресенье": 6, "воскресенья": 6,
+                }
+                abbr = {"пн": 0, "вт": 1, "ср": 2, "чт": 3, "пт": 4, "сб": 5, "вс": 6}
+                mentioned_weekday = None
+                for key, idx in full_cases.items():
+                    if re_module.search(rf"(?<![\\wа-яё]){re_module.escape(key)}(?![\\wа-яё])", text_lower):
+                        mentioned_weekday = idx
+                        break
+                if mentioned_weekday is None:
+                    for key, idx in abbr.items():
+                        if re_module.search(rf"(?<![\\wа-яё]){key}(?![\\wа-яё])", text_lower):
+                            mentioned_weekday = idx
+                            break
+                if mentioned_weekday is not None and start_time.weekday() != mentioned_weekday:
+                    shift = (mentioned_weekday - start_time.weekday()) % 7
+                    if shift == 0:
+                        shift = 7
+                    start_time = start_time + timedelta(days=shift)
+                    extracted_data['start_time'] = start_time
+                    logger.info(f"✅ Weekday align: сдвинул start_time на {shift} дней → {start_time}")
+            except Exception as e:
+                logger.warning(f"Ошибка при выравнивании start_time по дню недели: {e}")
+
+        # Дефолтная длительность: если указано время, но конец не указан — +1 час
+        if start_time and has_explicit_time and not extracted_data.get('end_time'):
+            extracted_data['end_time'] = start_time + timedelta(hours=1)
         
         # Дедупликация: проверяем похожие события
         # ВАЖНО: Проверяем только если start_time указан, и только для очень похожих событий (точное совпадение названия и близкое время)

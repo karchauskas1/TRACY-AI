@@ -7,6 +7,8 @@ import { ArrowLeft, Plus, Trash2, CheckSquare2, Square, Loader2 } from "lucide-r
 import { Card, CardContent } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
+import { apiDelete, apiGet, apiPost, apiPut, formatApiError } from "../../lib/apiClient"
+import { useTelegramUser } from "../../lib/useTelegramUser"
 
 interface TodoList {
   id: number
@@ -32,8 +34,8 @@ interface TodoListDetailClientProps {
 export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
   const router = useRouter()
   const { handleBack } = useNavigation()
+  const { userId, isLoading: userLoading } = useTelegramUser()
 
-  const [user, setUser] = useState<any>(null)
   const [list, setList] = useState<TodoList | null>(null)
   const [items, setItems] = useState<TodoItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,75 +46,51 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
   const [deleting, setDeleting] = useState<number | null>(null)
 
   useEffect(() => {
-    // Загружаем данные пользователя
-    if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        // Telegram WebApp уже инициализирован через TelegramBootstrap
-        const tgUser = tg.initDataUnsafe?.user
-        if (tgUser) {
-          setUser({
-            id: tgUser.id.toString(),
-            first_name: tgUser.first_name,
-            last_name: tgUser.last_name,
-          })
-        }
-      } else {
-        const savedUser = localStorage.getItem("telegram_user")
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser)
-            setUser({
-              id: parsed.id?.toString(),
-              first_name: parsed.first_name,
-              last_name: parsed.last_name,
-            })
-          } catch (e) {
-            console.error("Failed to parse user:", e)
-          }
-        }
-      }
+    // Если пользователь не авторизован, перенаправляем на логин
+    if (!userLoading && !userId) {
+      router.push("/login")
+    }
+  }, [userLoading, userId, router])
+
+  useEffect(() => {
+    if (!userLoading && userId && listId) {
+      loadList(true)
     }
   }, [])
 
   useEffect(() => {
-    if (user?.id && listId) {
+    if (!userLoading && userId && listId) {
       loadList()
     }
-  }, [user, listId])
+  }, [userLoading, userId, listId])
 
-  const loadList = async () => {
-    if (!user?.id || !listId) return
+  const loadList = async (forceFresh: boolean = false) => {
+    if (!userId || !listId) return
 
     try {
       setLoading(true)
       setError(null)
+      const data = await apiGet<{ success?: boolean; list?: TodoList; items?: TodoItem[]; error?: string }>(
+        `/api/todo-lists/${listId}`,
+        { user_id: parseInt(userId) },
+        { timeout: 15000, noCache: forceFresh }
+      )
 
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      const response = await fetch(`${apiBaseUrl}/api/todo-lists/${listId}?user_id=${user.id}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-      })
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("Список задач не найден")
-        }
-        throw new Error("Ошибка загрузки списка")
+      if (data.success && data.list) {
+        setList(data.list)
+        setItems(data.items || [])
+      } else if (data.error) {
+        throw new Error(data.error)
+      } else if (data.list) {
+        setList(data.list)
+        setItems(data.items || [])
+      } else {
+        throw new Error("Список задач не найден")
       }
-
-      const data = await response.json()
-      setList(data.list)
-      setItems(data.items || [])
     } catch (e: any) {
       console.error("Ошибка загрузки списка:", e)
-      setError(e.message || "Не удалось загрузить список задач")
+      const msg = e.type ? formatApiError(e) : (e.message || "Не удалось загрузить список задач")
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -124,31 +102,19 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
     try {
       setCreating(true)
       setError(null)
-
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      const response = await fetch(`${apiBaseUrl}/api/todo-lists/${listId}/items`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-        body: JSON.stringify({
-          text: newItemText.trim(),
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Ошибка создания задачи")
-      }
+      const res = await apiPost<{ success?: boolean; item_id?: number; error?: string }>(
+        `/api/todo-lists/${listId}/items`,
+        { text: newItemText.trim() },
+        { timeout: 15000 }
+      )
+      if (res.success === false && res.error) throw new Error(res.error)
 
       setNewItemText("")
-      await loadList()
+      await loadList(true)
     } catch (e: any) {
       console.error("Ошибка создания задачи:", e)
-      setError(e.message || "Не удалось создать задачу")
+      const msg = e.type ? formatApiError(e) : (e.message || "Не удалось создать задачу")
+      setError(msg)
     } finally {
       setCreating(false)
     }
@@ -158,30 +124,17 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
     try {
       setUpdating(itemId)
       setError(null)
-
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      const response = await fetch(`${apiBaseUrl}/api/todo-items/${itemId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-        body: JSON.stringify({
-          completed: !currentCompleted,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Ошибка обновления задачи")
-      }
-
-      await loadList()
+      const res = await apiPut<{ success?: boolean; error?: string }>(
+        `/api/todo-items/${itemId}`,
+        { completed: !currentCompleted },
+        { timeout: 15000 }
+      )
+      if (res.success === false && res.error) throw new Error(res.error)
+      await loadList(true)
     } catch (e: any) {
       console.error("Ошибка обновления задачи:", e)
-      setError(e.message || "Не удалось обновить задачу")
+      const msg = e.type ? formatApiError(e) : (e.message || "Не удалось обновить задачу")
+      setError(msg)
     } finally {
       setUpdating(null)
     }
@@ -191,27 +144,12 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
     try {
       setDeleting(itemId)
       setError(null)
-
-      const apiBaseUrl = typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8080"
-        : "https://api.pasekaproduction.ru"
-
-      const response = await fetch(`${apiBaseUrl}/api/todo-items/${itemId}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-      })
-
-      if (!response.ok) {
-        throw new Error("Ошибка удаления задачи")
-      }
-
-      await loadList()
+      await apiDelete(`/api/todo-items/${itemId}`, { timeout: 15000 })
+      await loadList(true)
     } catch (e: any) {
       console.error("Ошибка удаления задачи:", e)
-      setError(e.message || "Не удалось удалить задачу")
+      const msg = e.type ? formatApiError(e) : (e.message || "Не удалось удалить задачу")
+      setError(msg)
     } finally {
       setDeleting(null)
     }

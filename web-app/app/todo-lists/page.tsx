@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Plus, ListTodo, CheckSquare2, Square, Trash2, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
@@ -55,7 +56,7 @@ export default function TodoListsPage() {
     }
   }, [userId, userLoading, router])
 
-  const loadLists = async () => {
+  const loadLists = async (forceFresh: boolean = false) => {
     // Ждем, пока user_id будет получен
     if (userLoading) {
       console.log("[TodoLists] Ожидание user_id...")
@@ -83,7 +84,7 @@ export default function TodoListsPage() {
       const data = await apiGet<{ success?: boolean; lists?: TodoList[]; error?: string }>(
         `/api/todo-lists`,
         { user_id: parseInt(userId) },
-        { timeout: 15000 }
+        { timeout: 15000, noCache: forceFresh }
       )
       
       // Обрабатываем разные форматы ответа
@@ -133,14 +134,14 @@ export default function TodoListsPage() {
       if (result.success && result.list) {
         setNewListTitle("")
         setShowCreateForm(false)
-        await loadLists()
+        await loadLists(true)
       } else if (result.error) {
         setError(result.error)
       } else {
         // Если нет ошибки, но и нет success, все равно обновляем список
         setNewListTitle("")
         setShowCreateForm(false)
-        await loadLists()
+        await loadLists(true)
       }
     } catch (e: any) {
       console.error("Ошибка создания списка:", e)
@@ -154,46 +155,8 @@ export default function TodoListsPage() {
   }
 
   const deleteList = async (listId: number) => {
-    if (deleteConfirmId === listId) {
-      // Подтверждено, удаляем
-      try {
-        setDeleting(listId)
-        setError(null)
-
-        await apiDelete(`/api/todo-lists/${listId}?user_id=${parseInt(userId!)}`, { timeout: 15000 })
-        
-        // Обновляем список
-        await loadLists()
-        setDeleteConfirmId(null)
-        toast({
-          title: "Список удален",
-          description: "Список задач успешно удален",
-        })
-      } catch (e: any) {
-        console.error("Ошибка удаления списка:", e)
-        const errorMessage = e.type 
-          ? formatApiError(e)
-          : (e.message || "Не удалось удалить список")
-        setError(errorMessage)
-        toast({
-          title: "Ошибка",
-          description: errorMessage,
-          variant: "destructive",
-        })
-      } finally {
-        setDeleting(null)
-      }
-    } else {
-      // Первый клик - показываем подтверждение
-      setDeleteConfirmId(listId)
-      toast({
-        title: "Подтвердите удаление",
-        description: "Нажмите на кнопку удаления еще раз для подтверждения",
-        variant: "destructive",
-      })
-      // Сбрасываем подтверждение через 3 секунды
-      setTimeout(() => setDeleteConfirmId(null), 3000)
-    }
+    // Открываем нижнюю панель подтверждения
+    setDeleteConfirmId(listId)
   }
 
   return (
@@ -287,7 +250,7 @@ export default function TodoListsPage() {
                     <div className="text-center space-y-4">
                       <p className="text-destructive font-semibold">Ошибка загрузки</p>
                       <p className="text-sm text-muted-foreground">{error}</p>
-                      <Button onClick={loadLists} variant="outline">
+                      <Button onClick={() => loadLists(true)} variant="outline">
                         Попробовать снова
                       </Button>
                     </div>
@@ -315,18 +278,22 @@ export default function TodoListsPage() {
                 >
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
-                      <div 
-                        className="flex-1 cursor-pointer"
-                        onClick={() => router.push(`/todo-lists/detail?id=${list.id}`)}
+                      <Link
+                        href={`/todo-lists/detail?id=${list.id}`}
+                        className="flex-1"
                       >
                         <h3 className="text-lg font-semibold mb-1">{list.title}</h3>
                         <p className="text-sm text-muted-foreground">
                           {new Date(list.updated_at).toLocaleDateString("ru-RU")}
                         </p>
-                      </div>
+                      </Link>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => deleteList(list.id)}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            deleteList(list.id)
+                          }}
                           disabled={deleting === list.id}
                           className="text-destructive hover:text-destructive/80 transition-colors p-1"
                           title="Удалить список"
@@ -347,6 +314,59 @@ export default function TodoListsPage() {
           )}
         </div>
       </div>
+
+      {/* Bottom delete confirmation */}
+      {deleteConfirmId !== null && (
+        <div className="fixed left-0 right-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur">
+          <div className="container mx-auto max-w-2xl px-4 py-3 flex items-center justify-between gap-3">
+            <div className="text-sm">
+              <div className="font-medium">Удалить список?</div>
+              <div className="text-muted-foreground">Это действие нельзя отменить.</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteConfirmId(null)}
+                disabled={deleting !== null}
+              >
+                Отмена
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  const listId = deleteConfirmId
+                  if (listId === null) return
+                  try {
+                    setDeleting(listId)
+                    setError(null)
+                    await apiDelete(`/api/todo-lists/${listId}?user_id=${parseInt(userId!)}`, { timeout: 15000 })
+                    await loadLists(true)
+                    setDeleteConfirmId(null)
+                    toast({
+                      title: "Список удален",
+                      description: "Список задач успешно удален",
+                    })
+                  } catch (e: any) {
+                    console.error("Ошибка удаления списка:", e)
+                    const errorMessage = e.type ? formatApiError(e) : (e.message || "Не удалось удалить список")
+                    setError(errorMessage)
+                    toast({
+                      title: "Ошибка",
+                      description: errorMessage,
+                      variant: "destructive",
+                    })
+                  } finally {
+                    setDeleting(null)
+                  }
+                }}
+                disabled={deleting !== null}
+              >
+                Удалить
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
