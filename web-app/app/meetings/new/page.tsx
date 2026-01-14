@@ -51,7 +51,7 @@ export default function NewMeetingPage() {
     // Если открыто через Telegram Web App, открываем чат с ботом
     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp
-      tg.ready()
+      // Telegram WebApp уже инициализирован через TelegramBootstrap
       
       // Открываем чат с ботом через deep link для расшифровки встречи
       tg.openTelegramLink(`https://t.me/${botUsername}?start=meeting_transcribe`)
@@ -204,7 +204,7 @@ export default function NewMeetingPage() {
                     const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
                     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
                       const tg = (window as any).Telegram.WebApp
-                      tg.ready()
+                      // Telegram WebApp уже инициализирован через TelegramBootstrap
                       tg.openTelegramLink(`https://t.me/${botUsername}`)
                     } else {
                       window.open(`https://t.me/${botUsername}`, '_blank')

@@ -40,16 +40,8 @@ export default function AssistantPage() {
       setIsSuperUser(userId === "308477378" || userId === "332023536")
     }
 
-    // Настраиваем Telegram Web App, если доступен
-    if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.ready()
-        tg.expand()
-        tg.setHeaderColor("#1a1a20")
-        tg.setBackgroundColor("#1a1a20")
-      }
-    }
+    // Telegram Web App уже инициализирован через TelegramBootstrap
+    // Дополнительная настройка не требуется
   }, [telegramUser, userId, userLoading, router])
 
   const displayName = user?.name || [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Пользователь"

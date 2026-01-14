@@ -43,7 +43,7 @@ export function useTelegramUser(): UseTelegramUserResult {
       // Пробуем получить из Telegram WebApp
       const tg = (window as any).Telegram?.WebApp
       if (tg) {
-        tg.ready()
+        // Telegram WebApp уже инициализирован через TelegramBootstrap
         
         // Пробуем получить из initDataUnsafe (приоритет)
         let tgUser = tg.initDataUnsafe?.user

@@ -60,8 +60,7 @@ export default function ClickTestPage() {
 
       {/* Тест 3: Div с onTouchStart */}
       <div
-        onTouchStart={(e) => {
-          e.preventDefault()
+        onTouchStart={() => {
           addClick('div onTouchStart')
         }}
         style={{
@@ -106,9 +105,8 @@ export default function ClickTestPage() {
       <button
         onClick={() => {
           addClick('navigation button')
-          const basePath = process.env.NODE_ENV === 'production' ? '/TRACY-AI' : ''
           setTimeout(() => {
-            window.location.href = `${basePath}/assistant/`
+            window.location.href = '/assistant'
           }, 1000)
         }}
         style={{

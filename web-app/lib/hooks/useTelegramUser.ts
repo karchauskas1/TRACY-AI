@@ -45,7 +45,7 @@ export function useTelegramUser(): UseTelegramUserResult {
     const tg = (window as any).Telegram?.WebApp
     if (tg) {
       try {
-        tg.ready()
+        // Telegram WebApp уже инициализирован через TelegramBootstrap
         const tgUser = tg.initDataUnsafe?.user
         if (tgUser && tgUser.id) {
           const userData: TelegramUser = {

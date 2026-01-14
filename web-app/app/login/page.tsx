@@ -31,8 +31,7 @@ export default function LoginPage() {
       const tg = (window as any).Telegram?.WebApp
       if (!tg) return false
       
-      tg.ready()
-      tg.expand()
+      // Telegram WebApp уже инициализирован через TelegramBootstrap
       setIsTelegramWebApp(true)
       
       // Пробуем получить пользователя из initDataUnsafe

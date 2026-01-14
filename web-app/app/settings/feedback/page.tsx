@@ -11,7 +11,7 @@ export default function FeedbackPage() {
     if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
       if (tg) {
-        tg.ready()
+        // Telegram WebApp уже инициализирован через TelegramBootstrap
         const tgUser = tg.initDataUnsafe?.user
         if (tgUser) {
           const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ")

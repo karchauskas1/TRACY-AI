@@ -46,7 +46,7 @@ export function TodoListDetailClient({ listId }: TodoListDetailClientProps) {
     if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
       if (tg) {
-        tg.ready()
+        // Telegram WebApp уже инициализирован через TelegramBootstrap
         const tgUser = tg.initDataUnsafe?.user
         if (tgUser) {
           setUser({

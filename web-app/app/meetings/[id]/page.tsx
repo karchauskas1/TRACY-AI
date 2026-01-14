@@ -17,16 +17,8 @@ export default function MeetingDetailPage() {
       return
     }
 
-    // Настраиваем Telegram Web App, если доступен
-    if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.ready()
-        tg.expand()
-        tg.setHeaderColor("#1a1a20")
-        tg.setBackgroundColor("#1a1a20")
-      }
-    }
+    // Telegram Web App уже инициализирован через TelegramBootstrap
+    // Дополнительная настройка не требуется
   }, [userId, isLoading, router])
 
   if (isLoading) {

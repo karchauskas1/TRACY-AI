@@ -33,7 +33,7 @@ export default function EventsListPage() {
     if (typeof window !== "undefined") {
       const tg = (window as any).Telegram?.WebApp
       if (tg) {
-        tg.ready()
+        // Telegram WebApp уже инициализирован через TelegramBootstrap
         const tgUser = tg.initDataUnsafe?.user
         if (tgUser) {
           setUser({
@@ -68,7 +68,7 @@ export default function EventsListPage() {
       
       // Используем Telegram Web App API для получения событий
       if (tg) {
-        tg.ready()
+        // Telegram WebApp уже инициализирован через TelegramBootstrap
         const requestData = JSON.stringify({ action: "get_events", user_id: user.id })
         tg.sendData(requestData)
         

@@ -41,7 +41,7 @@ export default function TestNavigationPage() {
               Current URL: {typeof window !== "undefined" ? window.location.href : ""}
             </p>
             <p className="text-sm text-muted-foreground mt-2">
-              basePath: {process.env.NEXT_PUBLIC_BASE_PATH || "/TRACY-AI"}
+              basePath: (none - root domain)
             </p>
           </div>
         </CardContent>

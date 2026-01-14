@@ -16,14 +16,8 @@ export default function CalendarPage() {
       return
     }
 
-    // Настраиваем Telegram Web App, если доступен
-    if (typeof window !== "undefined") {
-      const tg = (window as any).Telegram?.WebApp
-      if (tg) {
-        tg.ready()
-        tg.expand()
-      }
-    }
+    // Telegram Web App уже инициализирован через TelegramBootstrap
+    // Дополнительная настройка не требуется
   }, [userId, isLoading, router])
 
   if (isLoading) {

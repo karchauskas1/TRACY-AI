@@ -54,7 +54,7 @@ export function MeetingsPageClient() {
                       const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "tracy_aibot"
                       if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
                         const tg = (window as any).Telegram.WebApp
-                        tg.ready()
+                        // Telegram WebApp уже инициализирован через TelegramBootstrap
                         // Открываем чат с ботом через deep link
                         tg.openTelegramLink(`https://t.me/${botUsername}?start=meeting_transcribe`)
                         // Закрываем веб-приложение после небольшой задержки

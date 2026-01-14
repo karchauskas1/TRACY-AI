@@ -28,14 +28,12 @@ export default function HomePage() {
     log(`URL: ${window.location.href}`)
 
     // Проверяем, открыто ли приложение через Telegram Web App
+    // Примечание: Telegram WebApp уже инициализирован через TelegramBootstrap
     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp
-      tg.ready()
       log("Telegram WebApp detected")
       
-      // Настраиваем тему Telegram Web App
-      tg.setHeaderColor("#1a1a20") // Темный фон
-      tg.setBackgroundColor("#1a1a20")
+      // Дополнительные настройки (если нужно)
       tg.enableClosingConfirmation()
       
       // Сохраняем данные пользователя из Telegram Web App

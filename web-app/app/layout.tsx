@@ -5,6 +5,7 @@ import { Toaster } from "../components/ui/toaster"
 import { LocaleProvider } from "../lib/locale-context"
 import { ThemeProvider } from "../lib/theme-context"
 import { ApiDebugInit } from "../components/ApiDebugInit"
+import { TelegramBootstrap } from "../components/TelegramBootstrap"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -29,39 +30,12 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               window.__NEXT_PUBLIC_API_URL__ = ${JSON.stringify(apiUrl)};
-              
-              // Инициализация Telegram WebApp после загрузки
-              (function() {
-                function initTelegram() {
-                  if (window.Telegram && window.Telegram.WebApp) {
-                    const tg = window.Telegram.WebApp;
-                    tg.ready();
-                    tg.expand();
-                    tg.setHeaderColor("#1a1a20");
-                    tg.setBackgroundColor("#1a1a20");
-                    return true;
-                  }
-                  return false;
-                }
-                
-                // Пробуем сразу
-                if (!initTelegram()) {
-                  // Если не загрузился, ждем
-                  const checkInterval = setInterval(() => {
-                    if (initTelegram()) {
-                      clearInterval(checkInterval);
-                    }
-                  }, 50);
-                  
-                  // Останавливаем через 5 секунд
-                  setTimeout(() => clearInterval(checkInterval), 5000);
-                }
-              })();
             `,
           }}
         />
       </head>
       <body className={inter.className}>
+        <TelegramBootstrap />
         <ApiDebugInit />
         <ThemeProvider>
           <LocaleProvider>

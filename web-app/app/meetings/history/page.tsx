@@ -32,7 +32,7 @@ export default function MeetingsHistoryPage() {
       if (typeof window !== "undefined") {
         const tg = (window as any).Telegram?.WebApp
         if (tg) {
-          tg.ready()
+          // Telegram WebApp уже инициализирован через TelegramBootstrap
           userId = tg.initDataUnsafe?.user?.id?.toString() || null
         } else {
           const savedUser = localStorage.getItem("telegram_user")

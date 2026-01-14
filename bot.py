@@ -3349,8 +3349,14 @@ async def sync_events_to_web_app(user_id: int, context: ContextTypes.DEFAULT_TYP
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
             
             # Создаем URL веб-приложения с событиями в параметрах
-            web_app_url = config.WEB_APP_URL or "https://karchauskas1.github.io/TRACY-AI/"
-            web_app_url_with_events = f"{web_app_url}calendar?events={encoded_data}"
+            # Используем WEB_APP_URL из переменных окружения (должен быть Vercel URL)
+            web_app_url = config.WEB_APP_URL
+            if not web_app_url:
+                logger.warning("⚠️ WEB_APP_URL не настроен, не могу отправить события в веб-приложение")
+                return
+            # Убираем trailing slash если есть
+            web_app_url = web_app_url.rstrip('/')
+            web_app_url_with_events = f"{web_app_url}/calendar?events={encoded_data}"
             
             # Отправляем кнопку WebApp с событиями в URL параметрах
             # Пользователь может нажать на кнопку, чтобы обновить события в веб-приложении

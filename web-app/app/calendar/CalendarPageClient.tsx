@@ -60,12 +60,8 @@ export function CalendarPageClient() {
       setLoading(true)
     }
     
-    // Проверяем, открыто ли через Telegram Web App
-    const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null
-    if (tg) {
-      tg.ready()
-      tg.expand()
-    }
+    // Telegram Web App уже инициализирован через TelegramBootstrap
+    // Дополнительная настройка не требуется
     
     // Сначала загружаем из localStorage для быстрого отображения
     const storedEvents = localStorage.getItem("tracy_events")
