@@ -33,18 +33,22 @@ export function TelegramBootstrap() {
       if (initializedRef.current) return true
 
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TelegramBootstrap.tsx:35',message:'Before tg.ready()',data:{hasTelegram:!!window.Telegram,hasWebApp:!!window.Telegram?.WebApp},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
+        // Инициализируем window.__tg_bootstrap для DebugOverlay
+        if (!(window as any).__tg_bootstrap) {
+          (window as any).__tg_bootstrap = {
+            readyCalledAt: null,
+            expandCalledAt: null,
+          }
+        }
+
         // Обязательные вызовы для корректной работы
+        const readyCalledAt = Date.now()
         tg.ready()
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TelegramBootstrap.tsx:38',message:'After tg.ready()',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
+        ;(window as any).__tg_bootstrap.readyCalledAt = readyCalledAt
+
+        const expandCalledAt = Date.now()
         tg.expand()
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TelegramBootstrap.tsx:41',message:'After tg.expand()',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
+        ;(window as any).__tg_bootstrap.expandCalledAt = expandCalledAt
 
         // Настройка темы (опционально, но лучше задать сразу)
         tg.setHeaderColor("#1a1a20")
@@ -53,15 +57,9 @@ export function TelegramBootstrap() {
         // Помечаем как инициализированное
         initializedRef.current = true
 
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TelegramBootstrap.tsx:50',message:'Telegram WebApp initialized',data:{initialized:initializedRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         console.log("[TelegramBootstrap] ✅ Telegram WebApp initialized")
         return true
       } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/5297ce20-cdd6-4734-9a97-89b776b10890',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TelegramBootstrap.tsx:53',message:'Error initializing',data:{error:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         console.error("[TelegramBootstrap] ❌ Error initializing Telegram WebApp:", error)
         return false
       }

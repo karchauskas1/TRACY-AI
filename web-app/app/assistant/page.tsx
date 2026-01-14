@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
@@ -11,9 +11,15 @@ import { useTelegramUser } from "../../lib/useTelegramUser"
 
 export default function AssistantPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const { user: telegramUser, userId, isLoading: userLoading } = useTelegramUser()
   const [user, setUser] = useState<any>(null)
   const [isSuperUser, setIsSuperUser] = useState(false)
+
+  // Мониторинг изменений pathname
+  useEffect(() => {
+    console.log("[AssistantPage] Pathname changed:", pathname)
+  }, [pathname])
 
   useEffect(() => {
     console.log("[AssistantPage] userLoading:", userLoading, "userId:", userId)
@@ -138,6 +144,17 @@ export default function AssistantPage() {
             <Link 
               href="/chat"
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+              onClick={(e) => {
+                console.log("[AssistantPage] Before navigate to /chat", {
+                  target: e.target,
+                  currentTarget: e.currentTarget,
+                  href: (e.currentTarget as HTMLAnchorElement)?.href,
+                })
+                // Проверяем, что это реально <a> тег
+                if (e.currentTarget.tagName !== "A") {
+                  console.warn("[AssistantPage] Link is not rendering as <a> tag!")
+                }
+              }}
             >
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -156,6 +173,13 @@ export default function AssistantPage() {
             <Link 
               href="/calendar"
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+              onClick={(e) => {
+                console.log("[AssistantPage] Before navigate to /calendar", {
+                  target: e.target,
+                  currentTarget: e.currentTarget,
+                  href: (e.currentTarget as HTMLAnchorElement)?.href,
+                })
+              }}
             >
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -174,6 +198,13 @@ export default function AssistantPage() {
             <Link 
               href="/meetings/history"
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+              onClick={(e) => {
+                console.log("[AssistantPage] Before navigate to /meetings/history", {
+                  target: e.target,
+                  currentTarget: e.currentTarget,
+                  href: (e.currentTarget as HTMLAnchorElement)?.href,
+                })
+              }}
             >
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -192,6 +223,13 @@ export default function AssistantPage() {
             <Link 
               href="/todo-lists"
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+              onClick={(e) => {
+                console.log("[AssistantPage] Before navigate to /todo-lists", {
+                  target: e.target,
+                  currentTarget: e.currentTarget,
+                  href: (e.currentTarget as HTMLAnchorElement)?.href,
+                })
+              }}
             >
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -212,6 +250,13 @@ export default function AssistantPage() {
                 <Link 
                   href="/settings/feedback"
                   className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+                  onClick={(e) => {
+                    console.log("[AssistantPage] Before navigate to /settings/feedback", {
+                      target: e.target,
+                      currentTarget: e.currentTarget,
+                      href: (e.currentTarget as HTMLAnchorElement)?.href,
+                    })
+                  }}
                 >
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -228,6 +273,13 @@ export default function AssistantPage() {
                 <Link 
                   href="/debug"
                   className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+                  onClick={(e) => {
+                    console.log("[AssistantPage] Before navigate to /debug", {
+                      target: e.target,
+                      currentTarget: e.currentTarget,
+                      href: (e.currentTarget as HTMLAnchorElement)?.href,
+                    })
+                  }}
                 >
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">

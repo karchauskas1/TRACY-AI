@@ -6,6 +6,7 @@ import { LocaleProvider } from "../lib/locale-context"
 import { ThemeProvider } from "../lib/theme-context"
 import { ApiDebugInit } from "../components/ApiDebugInit"
 import { TelegramBootstrap } from "../components/TelegramBootstrap"
+import { DebugOverlay } from "../components/DebugOverlay"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -37,6 +38,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <TelegramBootstrap />
         <ApiDebugInit />
+        <DebugOverlay />
         <ThemeProvider>
           <LocaleProvider>
             {children}
