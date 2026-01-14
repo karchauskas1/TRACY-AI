@@ -16,6 +16,7 @@ declare global {
       WebApp: any
     }
     onTelegramAuth?: (user: any) => void
+    __clientAlive?: boolean
   }
 }
 

@@ -1,48 +1,57 @@
 # FIXES
 
-## Telegram Login Button
+## Click Events Not Working
 
-Problem: Button "Войти через Telegram" not working in demo mode
-
-Root Cause:
-- Button rendered correctly (Button component)
-- No overlay/z-index issues
-- Auth endpoint exists
-
-Fix:
-- Button handler calls handleTelegramLogin
-- Endpoint /api/auth/telegram verifies initData via HMAC SHA256
-- Session stored in localStorage as telegram_user
-- Wrapped useSearchParams in Suspense
-
-Files:
-- web-app/app/login/page.tsx
-- web-app/app/api/auth/telegram/route.ts
-
-Test:
-- Click button in Telegram Mini App → handleTelegramLogin → verify initData → redirect to /assistant
-
-## Card Clicks After Return
-
-Problem: Cards on /assistant stop working after returning from other pages
+Problem: No click logs in production, buttons/cards not clickable
 
 Root Cause:
-- preventDefault() and stopPropagation() on card onClick handlers blocked events
-- setTimeout fallback navigation violated requirements
+- Client components verified (use client present)
+- No global click probe was installed
+- No ClientAlive markers to verify hydration
 
 Fix:
-- Removed preventDefault/stopPropagation from all card onClick handlers
-- Removed setTimeout fallback navigation
-- Simplified handlers to direct router.push() calls
-- Added debug diagnostics (debug=1): event counters, lastClick, lastNavAttempt
-- Wrapped useSearchParams in Suspense
+- Created GlobalClickProbe component with throttled window listeners (1 log/sec max)
+- Added ClientAlive markers in assistant/login components
+- Added Find blocker button in debug=1 mode
+- All global listeners have cleanup in useEffect return
 
 Files:
+- web-app/components/GlobalClickProbe.tsx (new)
+- web-app/app/layout.tsx
 - web-app/app/assistant/page.tsx
+- web-app/app/login/page.tsx
+- web-app/components/DebugOverlay.tsx
 
 Test:
-- Navigate /assistant → /chat → back → /assistant → click cards → should navigate
-- Check debug=1 overlay for event counts and navigation attempts
+- Check console for [ClickProbe] logs on any tap
+- Check [ClientAlive] logs on page mount
+- Use Find blocker button to detect overlay elements
+
+## Session Management
+
+Problem: Session stored only in localStorage
+
+Root Cause:
+- No httpOnly cookie for secure session storage
+
+Fix:
+- /api/auth/telegram now sets httpOnly cookie tracy_session
+- Cookie expires in 7 days, secure in production
+- Created /api/me endpoint for session verification
+- localStorage kept for backward compatibility
+
+Files:
+- web-app/app/api/auth/telegram/route.ts
+- web-app/app/api/me/route.ts (new)
+- web-app/app/login/page.tsx
+
+Session Storage:
+- httpOnly cookie: tracy_session (server-side)
+- localStorage: telegram_user (client-side, for compatibility)
+
+Verification:
+- GET /api/me checks tracy_session cookie
+- TODO: Store sessionId -> userData mapping in DB/Redis
 
 Post-fix:
 - Bot restarted: systemctl restart tracy-bot.service
