@@ -35,6 +35,15 @@ try:
 except ValueError:
     PORT = 8080
 
+# API server (used by the Telegram bot to call our backend HTTP API)
+# In production where bot and http_server run together, keep default as localhost.
+# For external deployments, set TRACY_API_BASE_URL=https://api.pasekaproduction.ru
+TRACY_API_BASE_URL = (
+    os.getenv("TRACY_API_BASE_URL")
+    or os.getenv("API_BASE_URL")
+    or "http://localhost:8080"
+).strip().rstrip("/")
+
 # Defaults
 DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "Europe/Moscow")
 

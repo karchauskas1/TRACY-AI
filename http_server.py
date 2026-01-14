@@ -3,20 +3,33 @@
 Позволяет веб-приложению получать события напрямую из БД через HTTP API.
 """
 import asyncio
+import base64
 import json
 import logging
+import os
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 from aiohttp import web, web_request
 from aiohttp.web_response import json_response
 import pytz
 from database import Database
+from nlp_extractor import NLPExtractor
+from decision_engine import DecisionEngine
 import config
 
 logger = logging.getLogger(__name__)
 
 # Глобальная ссылка на БД
 db_instance: Optional[Database] = None
+
+# Lazy-initialized NLP/DecisionEngine for web chat
+nlp_extractor_instance: Optional[NLPExtractor] = None
+decision_engine_instance: Optional[DecisionEngine] = None
+
+# Feedback screenshots storage (server disk)
+FEEDBACK_UPLOADS_DIR = os.getenv("FEEDBACK_UPLOADS_DIR", "./data/feedback_uploads")
+os.makedirs(FEEDBACK_UPLOADS_DIR, exist_ok=True)
 
 # Временное хранилище токенов авторизации (token -> user_id)
 # В production можно использовать Redis или БД
@@ -27,6 +40,19 @@ def set_database(db: Database):
     """Устанавливает глобальную ссылку на БД."""
     global db_instance
     db_instance = db
+
+
+def _get_nlp_and_engine(db: Database) -> tuple[NLPExtractor, DecisionEngine]:
+    """
+    Creates (once) and returns NLPExtractor + DecisionEngine for web chat.
+    """
+    global nlp_extractor_instance, decision_engine_instance
+    if nlp_extractor_instance is None:
+        nlp_extractor_instance = NLPExtractor()
+    if decision_engine_instance is None:
+        # Reuse NLPExtractor OpenAI client inside DecisionEngine (emoji + calls)
+        decision_engine_instance = DecisionEngine(db, reminder_scheduler=None, ai_client=nlp_extractor_instance.client)
+    return nlp_extractor_instance, decision_engine_instance
 
 
 async def get_events_handler(request: web_request.Request):
@@ -437,6 +463,136 @@ async def get_feedback_handler(request: web_request.Request):
     except Exception as e:
         logger.error(f"❌ HTTP API: Неожиданная ошибка get_feedback: {e}", exc_info=True)
         return json_response({'error': f'Internal server error: {str(e)}'}, status=500)
+
+
+def _public_base_url(request: web_request.Request) -> str:
+    """
+    Best-effort base URL for building absolute links behind reverse proxies.
+    Uses X-Forwarded-* if present.
+    """
+    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.host)
+    return f"{proto}://{host}"
+
+
+def _decode_base64_payload(payload: str) -> bytes:
+    """
+    Accepts raw base64 or data URL (data:image/png;base64,....)
+    """
+    if not payload:
+        raise ValueError("Empty screenshot_base64")
+    data = payload.strip()
+    if data.startswith("data:"):
+        # data:image/png;base64,XXXX
+        comma = data.find(",")
+        if comma == -1:
+            raise ValueError("Invalid data URL")
+        data = data[comma + 1 :]
+    return base64.b64decode(data, validate=False)
+
+
+def _guess_ext_and_content_type(image_bytes: bytes) -> tuple[str, str]:
+    # PNG signature: 89 50 4E 47 0D 0A 1A 0A
+    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return (".png", "image/png")
+    # JPEG signature: FF D8
+    if image_bytes.startswith(b"\xff\xd8"):
+        return (".jpg", "image/jpeg")
+    # Fallback
+    return (".jpg", "image/jpeg")
+
+
+async def submit_feedback_handler(request: web_request.Request):
+    """
+    POST /api/feedback/submit
+    Body: { user_id, type, comment, screenshot_base64? }
+    Saves feedback to DB and optionally stores screenshot on server disk.
+    """
+    try:
+        try:
+            data = await request.json()
+        except Exception as e:
+            return json_response({'error': f'Invalid JSON: {str(e)}'}, status=400)
+
+        user_id = data.get("user_id")
+        feedback_type = data.get("type") or data.get("feedback_type")
+        comment = data.get("comment")
+        screenshot_base64 = data.get("screenshot_base64")
+
+        if not user_id or not feedback_type or not comment:
+            return json_response({'error': 'user_id, type, comment required'}, status=400)
+
+        try:
+            user_id_int = int(user_id)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+
+        screenshot_url = None
+        if screenshot_base64:
+            try:
+                image_bytes = _decode_base64_payload(screenshot_base64)
+                ext, _content_type = _guess_ext_and_content_type(image_bytes)
+                file_id = uuid.uuid4().hex
+                filename = f"{file_id}{ext}"
+                file_path = os.path.join(FEEDBACK_UPLOADS_DIR, filename)
+                with open(file_path, "wb") as f:
+                    f.write(image_bytes)
+                screenshot_url = f"{_public_base_url(request)}/feedback/screenshots/{filename}"
+            except Exception as e:
+                logger.error(f"❌ Feedback submit: screenshot save error: {e}", exc_info=True)
+                # Continue without screenshot
+                screenshot_url = None
+
+        # Save feedback in DB
+        db = Database()
+        feedback_id = db.save_feedback(user_id_int, str(feedback_type), str(comment), screenshot_url=screenshot_url)
+        if not feedback_id:
+            return json_response({'error': 'Failed to save feedback'}, status=500)
+
+        return json_response({
+            'success': True,
+            'id': str(feedback_id),
+            'screenshotUrl': screenshot_url,
+        })
+    except Exception as e:
+        logger.error(f"❌ HTTP API: Error submit_feedback: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
+
+
+async def get_feedback_screenshot_handler(request: web_request.Request):
+    """
+    GET /feedback/screenshots/{filename}
+    Serves stored feedback screenshots.
+    """
+    try:
+        filename = request.match_info.get("filename")
+        if not filename:
+            return web.Response(status=404)
+
+        # Basic path traversal protection
+        if "/" in filename or "\\" in filename or ".." in filename:
+            return web.Response(status=400, text="Invalid filename")
+
+        # Only allow common image extensions we store
+        lower = filename.lower()
+        if not (lower.endswith(".jpg") or lower.endswith(".jpeg") or lower.endswith(".png")):
+            return web.Response(status=400, text="Unsupported file type")
+
+        file_path = os.path.join(FEEDBACK_UPLOADS_DIR, filename)
+        if not os.path.exists(file_path):
+            return web.Response(status=404)
+
+        # Cache aggressively (filename is UUID-based)
+        resp = web.FileResponse(file_path)
+        if lower.endswith(".png"):
+            resp.content_type = "image/png"
+        else:
+            resp.content_type = "image/jpeg"
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+    except Exception as e:
+        logger.error(f"❌ HTTP API: Error get_feedback_screenshot: {e}", exc_info=True)
+        return web.Response(status=500, text="Internal server error")
 
 
 async def health_handler(request: web_request.Request):
@@ -902,18 +1058,58 @@ async def send_chat_message_handler(request: web_request.Request):
         
         # Сохраняем сообщение пользователя
         db.save_chat_message(user_id, 'user', message.strip())
-        
-        # Получаем историю чата (последние 20 сообщений для контекста)
-        chat_history = db.get_chat_messages(user_id, limit=20)
-        
+
         # Получаем настройки пользователя
         user = db.get_or_create_user(user_id)
-        
+        timezone = user.get('timezone', 'Europe/Moscow') if isinstance(user, dict) else 'Europe/Moscow'
+        locale = user.get('locale', 'ru_RU') if isinstance(user, dict) else 'ru_RU'
+        interpretation_mode = user.get('interpretation_mode', 'soft') if isinstance(user, dict) else 'soft'
+
+        # 1) Пытаемся обработать через decision_engine (создание/изменение событий, задач и т.д.)
+        try:
+            nlp, engine = _get_nlp_and_engine(db)
+            last_event = db.get_last_event(user_id)
+
+            extracted_data = await nlp.extract_intent_and_context(
+                message.strip(),
+                timezone,
+                locale,
+                last_event=last_event,
+                is_reply=False,
+                interpretation_mode=interpretation_mode,
+            )
+
+            result = await engine.process_intent(
+                user_id,
+                extracted_data,
+                last_event=last_event,
+                reply_to_event=None,
+            )
+
+            assistant_message = (result.get('message') or '').strip()
+            if assistant_message:
+                db.save_chat_message(user_id, 'assistant', assistant_message)
+
+            return json_response({
+                'success': True,
+                'message': assistant_message,
+                'action': result.get('action'),
+                'event_id': result.get('event_id'),
+                'needs_confirmation': result.get('needs_confirmation', False),
+                'confirmation_type': result.get('confirmation_type'),
+            })
+        except Exception as e:
+            logger.error(f"⚠️ Web chat: decision_engine failed, fallback to LLM-only: {e}", exc_info=True)
+
+        # 2) Fallback: обычный LLM-ответ (без действий), как было раньше
+        # Получаем историю чата (последние 50 сообщений для контекста)
+        chat_history = db.get_chat_messages(user_id, limit=50)
+
         # Получаем события для контекста
-        tz = pytz.timezone(user.get('timezone', 'Europe/Moscow') if isinstance(user, dict) else 'Europe/Moscow')
+        tz = pytz.timezone(timezone)
         now = datetime.now(tz)
         events = db.get_events(user_id, limit=10, start_from=now, start_to=now + timedelta(days=30))
-        
+
         # Формируем контекст событий
         events_context = ""
         if events:
@@ -921,7 +1117,7 @@ async def send_chat_message_handler(request: web_request.Request):
             for event in sorted(events[:5], key=lambda e: e.get('start_time', datetime.min)):
                 start_time = event.get('start_time')
                 title = event.get('title', 'Событие')
-                
+
                 if isinstance(start_time, datetime):
                     if start_time.tzinfo is None:
                         start_time = tz.localize(start_time)
@@ -929,13 +1125,13 @@ async def send_chat_message_handler(request: web_request.Request):
                     events_list.append(f"- {time_str}: {title}")
                 else:
                     events_list.append(f"- {title}")
-            
+
             if events_list:
                 events_context = f"\n\nБлижайшие события пользователя:\n" + "\n".join(events_list)
-        
+
         # Формируем сообщения для AI
         messages = []
-        
+
         # System prompt
         system_prompt = """Ты TRACY — дружелюбный AI-ассистент для планирования и управления календарем. 
 Ты помогаешь пользователю:
@@ -945,38 +1141,37 @@ async def send_chat_message_handler(request: web_request.Request):
 - Помогать с организацией времени
 
 Будь дружелюбным, полезным и кратки. Используй эмодзи где уместно."""
-        
+
         messages.append({"role": "system", "content": system_prompt + events_context})
-        
+
         # История чата
         for msg in chat_history:
             role = msg.get('role')
             content = msg.get('content', '')
             if role in ['user', 'assistant'] and content:
                 messages.append({"role": role, "content": content})
-        
+
         # Генерируем ответ через OpenRouter
         try:
             from openai import OpenAI
-            import config
-            
+
             ai_client = OpenAI(
                 api_key=config.OPENROUTER_API_KEY,
                 base_url=config.OPENROUTER_BASE_URL
             )
-            
+
             response = ai_client.chat.completions.create(
                 model=config.OPENROUTER_MODEL,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=500
             )
-            
+
             assistant_message = response.choices[0].message.content.strip()
-            
+
             # Сохраняем ответ ассистента
             db.save_chat_message(user_id, 'assistant', assistant_message)
-            
+
             return json_response({
                 'success': True,
                 'message': assistant_message
@@ -992,7 +1187,8 @@ async def send_chat_message_handler(request: web_request.Request):
 
 def create_app():
     """Создает и настраивает aiohttp приложение."""
-    app = web.Application()
+    # Allow larger payloads for screenshots
+    app = web.Application(client_max_size=12 * 1024 * 1024)  # 12MB
     
     # CORS middleware для разрешения запросов из веб-приложения
     @web.middleware
@@ -1059,6 +1255,8 @@ def create_app():
     app.router.add_post('/api/meetings/{meeting_id}/create-event', create_event_from_meeting_handler)
     app.router.add_post('/api/settings', update_settings_handler)
     app.router.add_get('/api/feedback', get_feedback_handler)
+    app.router.add_post('/api/feedback/submit', submit_feedback_handler)
+    app.router.add_get('/feedback/screenshots/{filename}', get_feedback_screenshot_handler)
     
     # To-Do Lists API
     app.router.add_get('/api/todo-lists', get_todo_lists_handler)

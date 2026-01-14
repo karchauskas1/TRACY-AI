@@ -8,6 +8,64 @@
 
 const DEFAULT_TIMEOUT = 15000 // 15 секунд
 
+// === Simple client-side GET cache (memory + sessionStorage) ===
+type CacheEntry = { expiresAt: number; value: any }
+const memoryGetCache = new Map<string, CacheEntry>()
+const SESSION_PREFIX = 'tracy_api_cache_v1:'
+
+function safeNow(): number {
+  return Date.now()
+}
+
+function getDefaultTtlMs(endpoint: string): number {
+  // Keep TTLs short to avoid stale UI while still reducing repeat loads.
+  if (endpoint.startsWith('/api/events')) return 60_000
+  if (endpoint.startsWith('/api/meetings')) return 60_000
+  if (endpoint.startsWith('/api/todo-lists') || endpoint.startsWith('/api/todo-items')) return 30_000
+  if (endpoint.startsWith('/api/chat/messages')) return 10_000
+  return 0
+}
+
+function cacheKeyForGet(url: string): string {
+  return `${SESSION_PREFIX}GET:${url}`
+}
+
+function readCachedGet<T>(key: string): T | null {
+  const now = safeNow()
+
+  const mem = memoryGetCache.get(key)
+  if (mem && mem.expiresAt > now) return mem.value as T
+  if (mem && mem.expiresAt <= now) memoryGetCache.delete(key)
+
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as CacheEntry
+    if (!parsed || typeof parsed.expiresAt !== 'number') return null
+    if (parsed.expiresAt <= now) {
+      window.sessionStorage.removeItem(key)
+      return null
+    }
+    memoryGetCache.set(key, parsed)
+    return parsed.value as T
+  } catch {
+    return null
+  }
+}
+
+function writeCachedGet(key: string, value: any, ttlMs: number) {
+  if (!ttlMs || ttlMs <= 0) return
+  const entry: CacheEntry = { expiresAt: safeNow() + ttlMs, value }
+  memoryGetCache.set(key, entry)
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(entry))
+  } catch {
+    // ignore quota / serialization errors
+  }
+}
+
 /**
  * Проверяет, запущено ли приложение в Telegram Mini App
  */
@@ -35,6 +93,8 @@ interface RequestOptions extends RequestInit {
   timeout?: number
   skipErrorLog?: boolean
   params?: Record<string, any>
+  noCache?: boolean
+  cacheTtlMs?: number
 }
 
 export interface ApiError {
@@ -432,8 +492,19 @@ export async function apiGet<T = any>(
     ).toString()
     url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}${queryString}`
   }
-  
-  return apiRequest<T>(url, { ...options, method: 'GET' })
+
+  const ttlMs = options?.cacheTtlMs ?? getDefaultTtlMs(endpoint)
+  const canCache = !options?.noCache && ttlMs > 0
+  const key = cacheKeyForGet(url)
+
+  if (canCache) {
+    const cached = readCachedGet<T>(key)
+    if (cached !== null) return cached
+  }
+
+  const data = await apiRequest<T>(url, { ...options, method: 'GET' })
+  if (canCache) writeCachedGet(key, data, ttlMs)
+  return data
 }
 
 /**
