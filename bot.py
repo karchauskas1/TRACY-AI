@@ -195,7 +195,7 @@ async def web_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Добавляем cache-busting для Telegram WebView
     import datetime
-    app_version = datetime.datetime.now().strftime("%Y%m%d%H%M")  # YYYYMMDDHHMM
+    app_version = datetime.datetime.now().strftime("%Y%m%d%H%M%S")  # YYYYMMDDHHMMSS
     web_url_with_version = f"{web_url}?v={app_version}"
     
     message_text = (
@@ -3613,7 +3613,7 @@ def main():
                     # Добавляем cache-busting для Telegram WebView
                     # Telegram агрессивно кеширует HTML/JS, поэтому добавляем версию
                     import datetime
-                    app_version = datetime.datetime.now().strftime("%Y%m%d%H%M")  # YYYYMMDDHHMM
+                    app_version = datetime.datetime.now().strftime("%Y%m%d%H%M%S")  # YYYYMMDDHHMMSS
                     web_url_with_version = f"{web_url}?v={app_version}"
                     
                     menu_button = MenuButtonWebApp(text="TRACY", web_app=WebAppInfo(url=web_url_with_version))
@@ -3720,6 +3720,12 @@ def main():
     # Обработчик голосовых сообщений (отдельно для лучшей отладки)
     application.add_handler(MessageHandler(
         filters.VOICE,
+        handle_message
+    ))
+
+    # Обработчик аудио (message.audio) — иначе “как аудио/файл” может не попасть в handle_message
+    application.add_handler(MessageHandler(
+        filters.AUDIO,
         handle_message
     ))
     

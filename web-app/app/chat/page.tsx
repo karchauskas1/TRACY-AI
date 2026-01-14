@@ -39,6 +39,7 @@ export default function ChatPage() {
   const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null)
   const msgTouchRef = useRef<{ y: number; scrollTop: number } | null>(null)
   const suppressAutoScrollUntilRef = useRef(0)
+  const lastMsgTouchYRef = useRef<number | null>(null)
 
   useEffect(() => {
     // Если пользователь не авторизован, перенаправляем на логин
@@ -78,6 +79,51 @@ export default function ChatPage() {
       vv.removeEventListener("scroll", computeInset)
     }
   }, [])
+
+  // iOS Telegram WebView: prevent top overscroll bounce while keyboard is open
+  useEffect(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    // Only matters on touch devices
+    if (typeof window === "undefined") return
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      lastMsgTouchYRef.current = e.touches[0].clientY
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (keyboardInset <= 0) return
+      if (e.touches.length !== 1) return
+      const lastY = lastMsgTouchYRef.current
+      if (lastY == null) return
+      const y = e.touches[0].clientY
+      const dy = y - lastY
+      lastMsgTouchYRef.current = y
+
+      // At top and pulling down -> prevent default to avoid bounce + snap-to-bottom
+      if (el.scrollTop <= 0 && dy > 0) {
+        suppressAutoScrollUntilRef.current = Date.now() + 1200
+        if (isNearBottom) setIsNearBottom(false)
+        e.preventDefault()
+      }
+    }
+
+    const onTouchEnd = () => {
+      lastMsgTouchYRef.current = null
+    }
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true })
+    el.addEventListener("touchmove", onTouchMove, { passive: false })
+    el.addEventListener("touchend", onTouchEnd, { passive: true })
+    el.addEventListener("touchcancel", onTouchEnd, { passive: true })
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart)
+      el.removeEventListener("touchmove", onTouchMove)
+      el.removeEventListener("touchend", onTouchEnd)
+      el.removeEventListener("touchcancel", onTouchEnd)
+    }
+  }, [keyboardInset, isNearBottom])
 
   useEffect(() => {
     if (keyboardInset <= 0) return

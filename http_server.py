@@ -1086,8 +1086,27 @@ async def send_chat_message_handler(request: web_request.Request):
         # История чата для контекста (в т.ч. для follow-up команд вроде "перенеси на 16:00")
         chat_history = db.get_chat_messages(user_id, limit=50)
 
+        # If this is a direct question (Q&A) and does not look like an action command,
+        # skip decision_engine entirely for a more precise answer.
+        msg_lower = message.strip().lower()
+        is_question = (
+            "?" in msg_lower
+            or msg_lower.startswith(("как ", "почему ", "что ", "зачем ", "когда ", "где ", "сколько ", "какой ", "какая ", "какие "))
+        )
+        has_action_words = any(
+            w in msg_lower
+            for w in (
+                "создай", "создать", "добавь", "добавить", "перенеси", "перенести",
+                "удали", "удалить", "напомни", "напомин", "покажи", "показать",
+                "список", "задач", "календар", "встреч", "событи",
+            )
+        )
+
         # 1) Пытаемся обработать через decision_engine (создание/изменение событий, задач и т.д.)
         try:
+            if is_question and not has_action_words:
+                raise RuntimeError("QA: bypass decision_engine")
+
             nlp, engine = _get_nlp_and_engine(db)
             last_event = db.get_last_event(user_id)
 
@@ -1101,15 +1120,9 @@ async def send_chat_message_handler(request: web_request.Request):
                 chat_history=chat_history,
             )
 
-            # If this is a direct question (Q&A) and NLP didn't detect a clear action,
-            # skip decision_engine and use the pure chat fallback for a more precise answer.
-            msg_lower = message.strip().lower()
-            is_question = (
-                "?" in msg_lower
-                or msg_lower.startswith(("как ", "почему ", "что ", "зачем ", "когда ", "где ", "сколько ", "какой ", "какая ", "какие "))
-            )
+            # Extra guard: if NLP couldn't detect a clear action for a question, route to QA fallback.
             intent = (extracted_data.get("intent") or "").strip().lower()
-            if is_question and intent in ("unknown", "note"):
+            if is_question and intent in ("unknown", "note") and not has_action_words:
                 raise RuntimeError("QA: route to fallback")
 
             result = await engine.process_intent(
