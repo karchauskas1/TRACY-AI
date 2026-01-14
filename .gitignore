@@ -26,6 +26,8 @@ wheels/
 # Environment
 .env
 .env.local
+.env.* 
+.env.bak
 
 # Database
 *.db

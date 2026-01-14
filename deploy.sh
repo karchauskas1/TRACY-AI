@@ -38,10 +38,19 @@ echo -e "${GREEN}✅ Изменения отправлены в GitHub${NC}"
 
 # 4. Перезапускаем бота на сервере
 echo -e "${BLUE}🔄 Перезапускаем бота на сервере...${NC}"
-sshpass -p '7WoEpj3HWex7Fg1Q26' ssh -o StrictHostKeyChecking=no root@5.35.126.42 \
-    "cd /opt/tracy-ai-bot && systemctl restart tracy-bot.service && systemctl status tracy-bot.service --no-pager -l" || {
-    echo -e "${YELLOW}⚠️  Ошибка при перезапуске бота${NC}"
-}
+REMOTE_CMD="cd /opt/tracy-ai-bot && systemctl restart tracy-bot.service && systemctl status tracy-bot.service --no-pager -l"
+
+# ВАЖНО: Никаких паролей в репозитории.
+# Если нужен non-interactive режим, задайте SSHPASS в окружении и установите sshpass локально.
+if [ -n "$SSHPASS" ] && command -v sshpass >/dev/null 2>&1; then
+    sshpass -e ssh -o StrictHostKeyChecking=no root@5.35.126.42 "$REMOTE_CMD" || {
+        echo -e "${YELLOW}⚠️  Ошибка при перезапуске бота${NC}"
+    }
+else
+    ssh -o StrictHostKeyChecking=no root@5.35.126.42 "$REMOTE_CMD" || {
+        echo -e "${YELLOW}⚠️  Ошибка при перезапуске бота${NC}"
+    }
+fi
 
 echo -e "${GREEN}✅ Бот перезапущен${NC}"
 
