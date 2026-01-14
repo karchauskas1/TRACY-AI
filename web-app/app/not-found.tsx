@@ -1,12 +1,10 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "../components/ui/button"
 
 export default function NotFound() {
-  const router = useRouter()
-
   useEffect(() => {
     // Telegram Web App уже инициализирован через TelegramBootstrap
     // Дополнительная настройка не требуется
@@ -21,11 +19,11 @@ export default function NotFound() {
           Запрашиваемая страница не существует или была перемещена.
         </p>
         <div className="flex gap-4 justify-center">
-          <Button onClick={() => router.push("/")}>
-            На главную
+          <Button asChild>
+            <Link href="/">На главную</Link>
           </Button>
-          <Button onClick={() => router.push("/assistant")} variant="outline">
-            К ассистенту
+          <Button asChild variant="outline">
+            <Link href="/assistant">К ассистенту</Link>
           </Button>
         </div>
       </div>

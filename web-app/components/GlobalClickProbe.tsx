@@ -28,6 +28,7 @@ export function GlobalClickProbe() {
     // Для Telegram Mini App делаем безопасный synth-click по завершению "тапа",
     // но только если реальный click НЕ пришёл в течение короткого окна.
     let lastClickSeenAt = 0
+    let lastNavRescueAt = 0
     let lastPointerDown:
       | { x: number; y: number; time: number; pointerType?: string; target: EventTarget | null }
       | null = null
@@ -206,6 +207,53 @@ export function GlobalClickProbe() {
       // Фиксируем факт прихода click (нужно, чтобы не делать synth-click поверх реального)
       lastClickSeenAt = Date.now()
       logEvent('click', e)
+
+      // Telegram-only: если клики есть, но Next/React навигация не срабатывает,
+      // делаем "nav rescue" для внутренних ссылок через window.location.assign().
+      // Это обходит случаи, когда событие не доходит до Link обработчика или где-то вызван preventDefault.
+      if (!isTelegramWebApp) return
+
+      const targetEl = e.target as HTMLElement | null
+      const link = (targetEl?.closest?.('a[href]') as HTMLAnchorElement | null) || null
+      if (!link) return
+
+      // Не трогаем внешние ссылки и target != _self
+      const rawHref = link.getAttribute('href')
+      if (!rawHref || rawHref.startsWith('#')) return
+      if (link.target && link.target !== '_self') return
+
+      let url: URL
+      try {
+        url = new URL(link.href, window.location.href)
+      } catch {
+        return
+      }
+      if (url.origin !== window.location.origin) return
+
+      const beforeHref = window.location.href
+      const scheduledAt = Date.now()
+      setTimeout(() => {
+        // Если навигация уже произошла — выходим
+        if (window.location.href !== beforeHref) return
+
+        // Дребезг/защита от циклов
+        const now = Date.now()
+        if (now - lastNavRescueAt < 500) return
+
+        // Если слишком поздно — тоже не делаем
+        if (now - scheduledAt > 1500) return
+
+        lastNavRescueAt = now
+        if (debugMode) {
+          console.log('[ClickProbe] nav-rescue assign', {
+            from: beforeHref,
+            to: url.toString(),
+            defaultPrevented: e.defaultPrevented,
+            cancelBubble: (e as any).cancelBubble || false,
+          })
+        }
+        window.location.assign(url.toString())
+      }, 140)
     }
 
     // Добавляем все обработчики в capture phase (true)

@@ -147,14 +147,13 @@ function AssistantPageContent() {
             </div>
             <span className="text-sm font-medium">TRACY</span>
           </div>
-          <button
-            type="button"
+          <Link
+            href="/settings"
             aria-label="Settings"
-            onClick={() => router.push('/settings')}
             className="text-foreground hover:text-muted-foreground transition-colors"
           >
             <Settings className="h-5 w-5" />
-          </button>
+          </Link>
         </div>
       </header>
 
@@ -204,12 +203,11 @@ function AssistantPageContent() {
                     <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
                       Для полного доступа ко всем функциям и сохранения данных авторизуйтесь через Telegram
                     </p>
-                    <Button
-                      onClick={() => router.push('/login')}
-                      className="bg-amber-600 hover:bg-amber-700 text-white"
-                    >
-                      <MessageCircle className="mr-2 h-4 w-4" />
-                      Войти через Telegram
+                    <Button asChild className="bg-amber-600 hover:bg-amber-700 text-white">
+                      <Link href="/login">
+                        <MessageCircle className="mr-2 h-4 w-4" />
+                        Войти через Telegram
+                      </Link>
                     </Button>
                   </div>
                 </div>
