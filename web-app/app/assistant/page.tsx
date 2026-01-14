@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, Suspense } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
+import Link from "next/link"
 import { logger } from "../../lib/logger"
 import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
@@ -217,24 +218,13 @@ function AssistantPageContent() {
           {/* Main Features */}
           <div className="space-y-4">
             {/* Чат с Tracy */}
-            <div 
+            <Link 
+              href="/chat"
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={() => {
+                logger.info('AssistantPage', 'Card clicked: /chat')
                 if (debugMode) {
                   lastNavAttemptRef.current = '/chat'
-                  logger.debug('AssistantPage', 'Click on Чат с Tracy', {
-                    eventCounts: eventCountsRef.current,
-                    lastClick: lastClickRef.current,
-                  })
-                }
-                router.push("/chat")
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  router.push("/chat")
                 }
               }}
             >
@@ -249,27 +239,16 @@ function AssistantPageContent() {
                   </p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             {/* Calendar */}
-            <div 
+            <Link 
+              href="/calendar"
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={() => {
+                logger.info('AssistantPage', 'Card clicked: /calendar')
                 if (debugMode) {
                   lastNavAttemptRef.current = '/calendar'
-                  logger.debug('AssistantPage', 'Click on Календарь', {
-                    eventCounts: eventCountsRef.current,
-                    lastClick: lastClickRef.current,
-                  })
-                }
-                router.push("/calendar")
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  router.push("/calendar")
                 }
               }}
             >
@@ -284,23 +263,16 @@ function AssistantPageContent() {
                   </p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             {/* История расшифровок */}
-            <div 
+            <Link 
+              href="/meetings/history"
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={() => {
+                logger.info('AssistantPage', 'Card clicked: /meetings/history')
                 if (debugMode) {
                   lastNavAttemptRef.current = '/meetings/history'
-                }
-                router.push("/meetings/history")
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  router.push("/meetings/history")
                 }
               }}
             >
@@ -315,23 +287,16 @@ function AssistantPageContent() {
                   </p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             {/* Списки задач */}
-            <div 
+            <Link 
+              href="/todo-lists"
               className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
               onClick={() => {
+                logger.info('AssistantPage', 'Card clicked: /todo-lists')
                 if (debugMode) {
                   lastNavAttemptRef.current = '/todo-lists'
-                }
-                router.push("/todo-lists")
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  router.push("/todo-lists")
                 }
               }}
             >
@@ -346,25 +311,18 @@ function AssistantPageContent() {
                   </p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (
               <>
-                <div 
+                <Link 
+                  href="/settings/feedback"
                   className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
                   onClick={() => {
+                    logger.info('AssistantPage', 'Card clicked: /settings/feedback')
                     if (debugMode) {
                       lastNavAttemptRef.current = '/settings/feedback'
-                    }
-                    router.push("/settings/feedback")
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      router.push("/settings/feedback")
                     }
                   }}
                 >
@@ -379,21 +337,14 @@ function AssistantPageContent() {
                       </p>
                     </div>
                   </div>
-                </div>
-                <div 
+                </Link>
+                <Link 
+                  href="/debug"
                   className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
                   onClick={() => {
+                    logger.info('AssistantPage', 'Card clicked: /debug')
                     if (debugMode) {
                       lastNavAttemptRef.current = '/debug'
-                    }
-                    router.push("/debug")
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      router.push("/debug")
                     }
                   }}
                 >
@@ -408,7 +359,7 @@ function AssistantPageContent() {
                       </p>
                     </div>
                   </div>
-                </div>
+                </Link>
               </>
             )}
           </div>

@@ -42,7 +42,11 @@ export function GlobalClickProbe() {
         target,
         timestamp: now,
       }
-      console.log('[ClickProbe] click', target, e.target)
+      console.log('[ClickProbe] click', target, {
+        defaultPrevented: e.defaultPrevented,
+        cancelBubble: e.cancelBubble,
+        target: e.target,
+      })
     }
 
     window.addEventListener('pointerdown', handlePointerDown, true)

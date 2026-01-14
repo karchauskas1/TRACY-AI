@@ -188,6 +188,7 @@ function LoginPageContent() {
 
   // Обработчик клика на кнопку "Войти через Telegram" для Mini App
   const handleTelegramLogin = async () => {
+    console.log('[LoginPage] Login button clicked')
     logger.info('LoginPage', 'Telegram login button clicked')
     
     if (typeof window === "undefined") return
