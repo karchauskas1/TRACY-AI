@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
+// This route reads cookies, so it must be treated as dynamic.
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
+    const cookieStore = cookies()
     const sessionId = cookieStore.get('tracy_session')
     
     if (!sessionId) {

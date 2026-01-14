@@ -54,6 +54,20 @@ export function TelegramBootstrap() {
         tg.setHeaderColor("#1a1a20")
         tg.setBackgroundColor("#1a1a20")
 
+        // iOS/Telegram WebView: disable pinch zoom gestures (prevents "zoomable UI").
+        // This should not affect taps/clicks, only gesture events.
+        const preventGesture = (ev: Event) => {
+          ev.preventDefault()
+        }
+        document.addEventListener("gesturestart", preventGesture, { passive: false } as any)
+        document.addEventListener("gesturechange", preventGesture, { passive: false } as any)
+        document.addEventListener("gestureend", preventGesture, { passive: false } as any)
+        ;(window as any).__tg_bootstrap._gestureCleanup = () => {
+          document.removeEventListener("gesturestart", preventGesture as any)
+          document.removeEventListener("gesturechange", preventGesture as any)
+          document.removeEventListener("gestureend", preventGesture as any)
+        }
+
         // Помечаем как инициализированное
         initializedRef.current = true
 
@@ -83,6 +97,8 @@ export function TelegramBootstrap() {
     // Cleanup
     return () => {
       clearInterval(checkInterval)
+      const cleanup = (window as any).__tg_bootstrap?._gestureCleanup
+      if (typeof cleanup === "function") cleanup()
     }
   }, [])
 

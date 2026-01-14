@@ -12,23 +12,30 @@ export function useNavigation() {
 
   const handleBack = useCallback(() => {
     if (typeof window !== "undefined") {
-      // Проверяем, есть ли история (window.history.length > 1)
-      // Но это не всегда надежно, поэтому используем другой подход:
-      // Пробуем router.back(), но если через небольшую задержку pathname не изменился,
-      // делаем fallback на /assistant
-      
+      const isTelegramWebApp = !!(window as any).Telegram?.WebApp
+
+      // В Telegram WebView router.back()/router.replace периодически "ломают" клики после возврата.
+      // Поэтому делаем максимально нативно: history.back(), а если не сработало — pushState + popstate на /assistant.
       const currentPath = window.location.pathname
-      
-      // Пробуем вернуться назад
+
+      if (isTelegramWebApp) {
+        history.back()
+        setTimeout(() => {
+          if (window.location.pathname === currentPath) {
+            history.pushState(null, "", "/assistant")
+            window.dispatchEvent(new PopStateEvent("popstate"))
+          }
+        }, 150)
+        return
+      }
+
+      // В обычном браузере используем Next router
       router.back()
-      
-      // Проверяем через 100мс, изменился ли pathname
       setTimeout(() => {
         if (window.location.pathname === currentPath) {
-          // История пустая или back не сработал, переходим на /assistant
           router.replace("/assistant")
         }
-      }, 100)
+      }, 150)
     } else {
       // SSR fallback
       router.replace("/assistant")

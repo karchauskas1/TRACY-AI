@@ -209,8 +209,9 @@ export function GlobalClickProbe() {
       logEvent('click', e)
 
       // Telegram-only: если клики есть, но Next/React навигация не срабатывает,
-      // делаем "nav rescue" для внутренних ссылок через window.location.assign().
-      // Это обходит случаи, когда событие не доходит до Link обработчика или где-то вызван preventDefault.
+      // делаем "nav rescue" для внутренних ссылок.
+      // Сначала пробуем мягко: history.pushState + PopStateEvent (без полного reload).
+      // Если по какой-то причине URL не меняется — fallback на window.location.assign().
       if (!isTelegramWebApp) return
 
       const targetEl = e.target as HTMLElement | null
@@ -252,7 +253,13 @@ export function GlobalClickProbe() {
             cancelBubble: (e as any).cancelBubble || false,
           })
         }
-        window.location.assign(url.toString())
+        try {
+          const nextUrl = url.pathname + url.search + url.hash
+          history.pushState(null, "", nextUrl)
+          window.dispatchEvent(new PopStateEvent("popstate"))
+        } catch {
+          window.location.assign(url.toString())
+        }
       }, 140)
     }
 

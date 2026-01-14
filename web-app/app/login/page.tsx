@@ -287,12 +287,40 @@ function LoginPageContent() {
     if (typeof window === "undefined") return
     
     const tg = (window as any).Telegram?.WebApp
-    if (!tg || !tg.initData) {
-      logger.error('LoginPage', 'Telegram WebApp or initData not available')
+    if (!tg) {
+      logger.error('LoginPage', 'Telegram WebApp not available')
       setAuthError("Telegram WebApp не доступен. Откройте приложение через Telegram.")
       toast({
         title: "Ошибка",
         description: "Telegram WebApp не доступен. Откройте приложение через Telegram.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // В некоторых случаях (особенно после hard navigation) initData может быть пустым,
+    // но initDataUnsafe.user всё ещё доступен. Даем мягкий fallback, чтобы вход работал.
+    if (!tg.initData) {
+      const user = tg.initDataUnsafe?.user
+      if (user && user.id) {
+        const userData = {
+          id: user.id.toString(),
+          first_name: user.first_name || "",
+          last_name: user.last_name || "",
+          username: user.username || "",
+          photo_url: user.photo_url || "",
+        }
+        localStorage.setItem("telegram_user", JSON.stringify(userData))
+        logger.warn('LoginPage', 'initData missing, using initDataUnsafe fallback', { userId: userData.id })
+        router.replace("/assistant")
+        return
+      }
+
+      logger.error('LoginPage', 'Telegram initData not available')
+      setAuthError("Telegram initData не доступен. Откройте Mini App из меню бота в Telegram.")
+      toast({
+        title: "Ошибка",
+        description: "Telegram initData не доступен. Откройте Mini App из меню бота в Telegram.",
         variant: "destructive",
       })
       return

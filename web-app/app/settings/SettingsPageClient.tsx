@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { ChevronRight, User, Globe, Bell, Brain, Calendar, X, MoreVertical, ArrowLeft, Sun, Moon, MessageSquare } from "lucide-react"
 import { Card, CardContent } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
@@ -21,7 +21,6 @@ interface SettingsPageClientProps {
 }
 
 export function SettingsPageClient({ user: initialUser }: SettingsPageClientProps) {
-  const router = useRouter()
   const { t } = useLocale()
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [user, setUser] = useState(initialUser)
@@ -68,17 +67,9 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
     }
   }, [])
 
-  const handleBack = () => {
-    router.push("/calendar")
-  }
-
-  const handleClose = () => {
-    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-      (window as any).Telegram.WebApp.close()
-    } else {
-      router.push("/calendar")
-    }
-  }
+  // В настройках "назад/закрыть" должны возвращать в приложение, а не закрывать Mini App.
+  // Используем реальную ссылку (a), чтобы работал Telegram nav-rescue и не зависеть от router.push.
+  const backHref = "/assistant"
 
   const settingsItems = [
     {
@@ -147,24 +138,26 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
       {/* Header - как на скриншоте */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex h-14 items-center justify-between px-4">
-          <button
-            onClick={handleBack}
+          <Link
+            href={backHref}
+            aria-label="Back"
             className="text-foreground hover:text-muted-foreground transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
-          </button>
+          </Link>
           <div className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center">
               <span className="text-xs font-bold text-primary-foreground">T</span>
             </div>
             <span className="text-sm font-medium">{t("settings.tracyAssistant")}</span>
           </div>
-          <button
-            onClick={handleClose}
+          <Link
+            href={backHref}
+            aria-label="Close"
             className="text-foreground hover:text-muted-foreground transition-colors"
           >
             <X className="h-5 w-5" />
-          </button>
+          </Link>
         </div>
       </header>
 
@@ -199,8 +192,8 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
                 return (
                   <div key={item.href}>
                     {index > 0 && <div className="border-t border-border" />}
-                    <button
-                      onClick={() => router.push(item.href)}
+                    <Link
+                      href={item.href}
                       className="w-full flex items-center justify-between p-4 hover:bg-accent/50 transition-colors"
                     >
                       <div className="flex items-center gap-3">
@@ -208,7 +201,7 @@ export function SettingsPageClient({ user: initialUser }: SettingsPageClientProp
                         <span className="font-medium">{item.label}</span>
                       </div>
                       <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                    </button>
+                    </Link>
                   </div>
                 )
               })}
