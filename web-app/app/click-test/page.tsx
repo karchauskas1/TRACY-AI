@@ -97,7 +97,7 @@ export default function ClickTestPage() {
         }}
       >
         Тест 4: Ссылка onClick
-      </a>
+      </div>
 
       {/* Тест 5: Навигация (используем Next.js router) */}
       <button
