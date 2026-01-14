@@ -37,6 +37,8 @@ export default function ChatPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [isNearBottom, setIsNearBottom] = useState(true)
   const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  const msgTouchRef = useRef<{ y: number; scrollTop: number } | null>(null)
+  const suppressAutoScrollUntilRef = useRef(0)
 
   useEffect(() => {
     // Если пользователь не авторизован, перенаправляем на логин
@@ -52,6 +54,7 @@ export default function ChatPage() {
   }, [userId, userLoading, router])
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    if (Date.now() < suppressAutoScrollUntilRef.current) return
     messagesEndRef.current?.scrollIntoView({ behavior })
   }
 
@@ -336,7 +339,34 @@ export default function ChatPage() {
           const el = messagesContainerRef.current
           if (!el) return
           const distance = el.scrollHeight - (el.scrollTop + el.clientHeight)
-          setIsNearBottom(distance < 120)
+          // tighter threshold reduces accidental “pinned” state on iOS
+          setIsNearBottom(distance < 60)
+        }}
+        onTouchStart={(e) => {
+          if (e.touches.length !== 1) return
+          const el = messagesContainerRef.current
+          msgTouchRef.current = {
+            y: e.touches[0].clientY,
+            scrollTop: el ? el.scrollTop : 0,
+          }
+        }}
+        onTouchMove={(e) => {
+          const el = messagesContainerRef.current
+          const start = msgTouchRef.current
+          if (!el || !start || e.touches.length !== 1) return
+          const dy = e.touches[0].clientY - start.y
+
+          // iOS Telegram WebView: when keyboard is open and user reaches top then pulls down,
+          // visualViewport can “jitter” and trigger our auto-scroll. Suppress it during this gesture.
+          if (keyboardInset > 0 && el.scrollTop <= 0 && dy > 8) {
+            suppressAutoScrollUntilRef.current = Date.now() + 800
+            if (isNearBottom) setIsNearBottom(false)
+          }
+        }}
+        onTouchEnd={() => {
+          msgTouchRef.current = null
+          // keep suppression a bit longer to survive iOS bounce animation
+          if (keyboardInset > 0) suppressAutoScrollUntilRef.current = Math.max(suppressAutoScrollUntilRef.current, Date.now() + 300)
         }}
       >
           {loading ? (

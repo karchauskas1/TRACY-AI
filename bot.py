@@ -81,8 +81,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🎤 Режим работы с записями встреч\n\n"
             "Вы вошли в режим расшифровки встреч. Чтобы продолжить и расшифровать встречу, отправьте голосовое сообщение или аудиофайл с записью встречи.\n\n"
-            "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n"
-            "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG",
+            "Бот обработает запись, создаст расшифровку с тайм-кодами и структурированное резюме.\n\n",
             reply_markup=reply_keyboard,
             parse_mode="Markdown"
         )
@@ -1247,7 +1246,6 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📋 Главное меню TRACY\n\n"
             "✅ Режим резюмирования встреч\n\n"
             "Теперь ты в режиме расшифровки встреч. Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
-            "📎 Поддерживаемые аудиоформаты: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие.\n\n"
             "Используй кнопки внизу экрана для переключения режима.",
             reply_markup=inline_markup,
             parse_mode="Markdown"
@@ -1590,13 +1588,18 @@ def get_reply_keyboard(context: ContextTypes.DEFAULT_TYPE, remove: bool = False)
     # Кнопка меню
     keyboard.append([KeyboardButton("📋 Меню")])
     
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    # is_persistent helps prevent the keyboard from disappearing in clients (esp. iOS)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
 
 
 def is_audio_file(message) -> bool:
     """Проверяет, является ли сообщение аудиофайлом."""
     # Голосовое сообщение
     if message.voice:
+        return True
+
+    # Аудио, отправленное как audio (не voice)
+    if getattr(message, "audio", None):
         return True
     
     # Документ с аудио
@@ -1692,6 +1695,12 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             file_type = "voice"
             file_name = "voice.ogg"
             logger.info(f"Получено голосовое сообщение, длительность: {voice.duration} сек")
+        elif update.message.audio:
+            audio = update.message.audio
+            audio_file = await context.bot.get_file(audio.file_id)
+            file_type = "audio"
+            file_name = audio.file_name or "audio_file"
+            logger.info(f"Получен audio: file_name={audio.file_name}, mime_type={audio.mime_type}, file_size={audio.file_size}")
         elif update.message.document:
             doc = update.message.document
             logger.info(f"Получен документ: file_name={doc.file_name}, mime_type={doc.mime_type}, file_size={doc.file_size}")
@@ -1707,7 +1716,6 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_keyboard = get_reply_keyboard(context)
                 await update.message.reply_text(
                     "❌ Это не аудиофайл. Пожалуйста, отправь голосовое сообщение или аудиофайл.\n\n"
-                    "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
                     "💡 Для iPhone: отправь файл из диктофона (обычно формат M4A).\n\n"
                     "Используй кнопки внизу экрана для переключения режима.",
                     reply_markup=reply_keyboard
@@ -1719,7 +1727,6 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
                 "❌ Не удалось получить аудиофайл. Убедись, что отправил голосовое сообщение или аудиофайл.\n\n"
-                "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
                 "Используй кнопки внизу экрана для переключения режима.",
                 reply_markup=reply_keyboard
             )
@@ -2253,8 +2260,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_keyboard = get_reply_keyboard(context)
             await update.message.reply_text(
                 "🎤 Режим расшифровки встреч\n\n"
-                "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
-                "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.",
+                "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n",
                 reply_markup=reply_keyboard,
                 parse_mode="Markdown"
             )
@@ -2730,7 +2736,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "❌ Режим расшифровки встреч активен\n\n"
                     "Этот файл не является аудиофайлом. Отправь голосовое сообщение или аудиофайл с записью встречи.\n\n"
-                    "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
                     "Используй кнопки ниже для переключения режима или возврата в меню.",
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
@@ -2739,7 +2744,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "🎤 Режим расшифровки встреч активен\n\n"
                     "Отправь голосовое сообщение или аудиофайл с записью встречи для расшифровки.\n\n"
-                    "📎 Поддерживаемые форматы: MP3, M4A, WAV, OGG, OPUS, FLAC, AAC, WMA, AMR, 3GP, MKA и другие аудиоформаты.\n\n"
                     "Используй кнопки ниже для переключения режима или возврата в меню.",
                     reply_markup=reply_markup,
                     parse_mode="Markdown"

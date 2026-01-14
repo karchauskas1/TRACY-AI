@@ -1101,6 +1101,17 @@ async def send_chat_message_handler(request: web_request.Request):
                 chat_history=chat_history,
             )
 
+            # If this is a direct question (Q&A) and NLP didn't detect a clear action,
+            # skip decision_engine and use the pure chat fallback for a more precise answer.
+            msg_lower = message.strip().lower()
+            is_question = (
+                "?" in msg_lower
+                or msg_lower.startswith(("как ", "почему ", "что ", "зачем ", "когда ", "где ", "сколько ", "какой ", "какая ", "какие "))
+            )
+            intent = (extracted_data.get("intent") or "").strip().lower()
+            if is_question and intent in ("unknown", "note"):
+                raise RuntimeError("QA: route to fallback")
+
             result = await engine.process_intent(
                 user_id,
                 extracted_data,
@@ -1153,14 +1164,13 @@ async def send_chat_message_handler(request: web_request.Request):
         messages = []
 
         # System prompt
-        system_prompt = """Ты TRACY — дружелюбный AI-ассистент для планирования и управления календарем. 
-Ты помогаешь пользователю:
-- Планировать день и анализировать задачи
-- Давать советы по тайм-менеджменту
-- Обсуждать предстоящие события
-- Помогать с организацией времени
+        system_prompt = """Ты TRACY — AI-ассистент для планирования и ответов на вопросы пользователя.
 
-Будь дружелюбным, полезным и кратки. Используй эмодзи где уместно."""
+Правила:
+1) Если пользователь задаёт вопрос (как/почему/что/зачем/?) — отвечай прямо и предметно, без общих фраз.
+2) Если пользователь просит действие (создать/перенести/удалить/напомнить) — объясни кратко, что сделал/что нужно уточнить.
+3) Если информации недостаточно — задай 1 уточняющий вопрос.
+4) Пиши по-русски, кратко, с конкретикой. Эмодзи — умеренно."""
 
         messages.append({"role": "system", "content": system_prompt + events_context})
 
