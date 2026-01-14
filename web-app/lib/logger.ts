@@ -12,7 +12,10 @@ interface LogEntry {
 
 class Logger {
   private logs: LogEntry[] = []
-  private maxLogs = 1000
+  private maxLogs = 50 // Ограничиваем до 50 последних событий
+  private consoleEnabled = true
+  private lastLogTime: { [key: string]: number } = {}
+  private throttleMs = 100 // Минимум 100мс между одинаковыми логами
 
   log(level: LogEntry['level'], category: string, message: string, data?: any) {
     const entry: LogEntry = {
@@ -28,14 +31,31 @@ class Logger {
       this.logs.shift()
     }
 
-    // Выводим в консоль с префиксом для фильтрации
-    const prefix = `[${new Date(entry.timestamp).toLocaleTimeString()}] [${level}] [${category}]`
-    const logMethod = level === 'ERROR' ? console.error : level === 'WARN' ? console.warn : console.log
-    
-    if (data) {
-      logMethod(`${prefix} ${message}`, data)
-    } else {
-      logMethod(`${prefix} ${message}`)
+    // В консоль выводим ТОЛЬКО критичные ошибки и важные события
+    // Остальное только в store для экспорта
+    const shouldLogToConsole = 
+      level === 'ERROR' || 
+      level === 'WARN' ||
+      (level === 'INFO' && (category === 'AssistantPage' && message.includes('router.push') || message.includes('Pathname changed')))
+
+    if (shouldLogToConsole && this.consoleEnabled) {
+      // Throttle для предотвращения спама одинаковых логов
+      const logKey = `${category}:${message}`
+      const now = Date.now()
+      const lastTime = this.lastLogTime[logKey] || 0
+      
+      if (now - lastTime > this.throttleMs) {
+        this.lastLogTime[logKey] = now
+        
+        const prefix = `[${new Date(entry.timestamp).toLocaleTimeString()}] [${level}] [${category}]`
+        const logMethod = level === 'ERROR' ? console.error : level === 'WARN' ? console.warn : console.log
+        
+        if (data) {
+          logMethod(`${prefix} ${message}`, data)
+        } else {
+          logMethod(`${prefix} ${message}`)
+        }
+      }
     }
   }
 

@@ -15,14 +15,23 @@ export default function AssistantPage() {
   const { user: telegramUser, userId, isLoading: userLoading } = useTelegramUser()
   const [user, setUser] = useState<any>(null)
   const [isSuperUser, setIsSuperUser] = useState(false)
+  const mountedRef = useRef(false)
+  const lastPathnameRef = useRef<string | null>(null)
 
-  // Мониторинг изменений pathname
+  // Мониторинг изменений pathname (только при реальных изменениях)
   useEffect(() => {
-    logger.info('AssistantPage', 'Pathname changed', { pathname, windowPathname: typeof window !== 'undefined' ? window.location.pathname : 'N/A' })
+    if (lastPathnameRef.current !== pathname) {
+      logger.info('AssistantPage', 'Pathname changed', { pathname, windowPathname: typeof window !== 'undefined' ? window.location.pathname : 'N/A' })
+      lastPathnameRef.current = pathname
+    }
   }, [pathname])
 
   useEffect(() => {
-    logger.info('AssistantPage', 'Component mounted', { userLoading, userId })
+    // Логируем только при реальных изменениях, не на каждом render
+    if (mountedRef.current === false) {
+      logger.info('AssistantPage', 'Component mounted', { userLoading, userId })
+      mountedRef.current = true
+    }
     
     // Если пользователь не загружен и не загружается, перенаправляем на логин
     if (!userLoading && !userId) {
@@ -34,7 +43,10 @@ export default function AssistantPage() {
     // Если пользователь загружен, обновляем состояние
     if (telegramUser && userId) {
       const fullName = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(" ")
-      logger.info('AssistantPage', 'User loaded', { userId, fullName })
+      // Логируем только если user еще не был установлен
+      if (!user || user.id !== userId) {
+        logger.info('AssistantPage', 'User loaded', { userId, fullName })
+      }
       setUser({
         id: userId,
         name: fullName || telegramUser.first_name || "Пользователь",
@@ -49,7 +61,7 @@ export default function AssistantPage() {
 
     // Telegram Web App уже инициализирован через TelegramBootstrap
     // Дополнительная настройка не требуется
-  }, [telegramUser, userId, userLoading, router])
+  }, [telegramUser, userId, userLoading, router, user])
 
   const displayName = user?.name || [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Пользователь"
   const avatarInitials = displayName

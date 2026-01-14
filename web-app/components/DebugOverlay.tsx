@@ -65,11 +65,11 @@ export function DebugOverlay() {
       setIsVisible(true)
     }
 
-    // Проверяем mounted state
+    // Проверяем mounted state (один раз)
     mountedRef.current = true
     setDebugInfo((prev) => ({ ...prev, isMounted: true }))
 
-    // Инициализация данных
+    // Инициализация данных (один раз)
     setDebugInfo((prev) => ({
       ...prev,
       pathname: window.location.pathname,
@@ -78,36 +78,31 @@ export function DebugOverlay() {
       routerPathname: pathname,
     }))
 
-    // Проверяем TelegramBootstrap
+    // Проверяем TelegramBootstrap (один раз при монтировании)
     const checkBootstrap = () => {
       const tgBootstrap = (window as any).__tg_bootstrap
       if (tgBootstrap) {
-        setDebugInfo((prev) => ({
-          ...prev,
-          tgBootstrap: {
-            readyCalledAt: tgBootstrap.readyCalledAt || null,
-            expandCalledAt: tgBootstrap.expandCalledAt || null,
-          },
-        }))
+        setDebugInfo((prev) => {
+          // Обновляем только если значения изменились
+          const newReady = tgBootstrap.readyCalledAt || null
+          const newExpand = tgBootstrap.expandCalledAt || null
+          if (prev.tgBootstrap.readyCalledAt === newReady && prev.tgBootstrap.expandCalledAt === newExpand) {
+            return prev // Не обновляем, если значения не изменились
+          }
+          return {
+            ...prev,
+            tgBootstrap: {
+              readyCalledAt: newReady,
+              expandCalledAt: newExpand,
+            },
+          }
+        })
       }
     }
     checkBootstrap()
-    const bootstrapInterval = setInterval(checkBootstrap, 100)
+    // НЕ используем setInterval - проверяем только при монтировании и при реальных изменениях
 
-    // Слушаем изменения pathname
-    const updatePathname = () => {
-      setDebugInfo((prev) => ({
-        ...prev,
-        routerPathname: pathname,
-        pathname: window.location.pathname,
-      }))
-    }
-    updatePathname()
-
-    // Обновляем при изменении pathname
-    const pathnameInterval = setInterval(updatePathname, 100)
-
-    // Глобальные обработчики событий (capture phase)
+    // Глобальные обработчики событий (capture phase) - обновляют ТОЛЬКО при событиях
     const handlePointerDown = (e: PointerEvent) => {
       setDebugInfo((prev) => ({
         ...prev,
@@ -210,8 +205,6 @@ export function DebugOverlay() {
     document.addEventListener("click", handleLinkClick, true)
 
     return () => {
-      clearInterval(bootstrapInterval)
-      clearInterval(pathnameInterval)
       window.removeEventListener("pointerdown", handlePointerDown, true)
       window.removeEventListener("click", handleClick, true)
       window.removeEventListener("touchstart", handleTouchStart, true)
@@ -220,7 +213,24 @@ export function DebugOverlay() {
       document.removeEventListener("click", handleLinkClick, true)
       history.pushState = originalPushState
     }
-  }, [pathname])
+  }, []) // Пустой deps - выполняется только при монтировании
+
+  // Отдельный useEffect для отслеживания изменений pathname (только при реальных изменениях)
+  useEffect(() => {
+    setDebugInfo((prev) => {
+      const newPathname = window.location.pathname
+      const newRouterPathname = pathname
+      // Обновляем только если pathname действительно изменился
+      if (prev.pathname === newPathname && prev.routerPathname === newRouterPathname) {
+        return prev
+      }
+      return {
+        ...prev,
+        routerPathname: newRouterPathname,
+        pathname: newPathname,
+      }
+    })
+  }, [pathname]) // Зависит только от pathname из usePathname
 
   const handleManualNav = (path: string, method: "router" | "location") => {
     setDebugInfo((prev) => ({
