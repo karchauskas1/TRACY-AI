@@ -31,6 +31,14 @@ function LoginPageContent() {
   const debugMode = searchParams.get('debug') === '1'
   const clickLogRef = useRef<Array<{ type: string; target: string; timestamp: number }>>([])
 
+  // ClientAlive маркер
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      console.log('[ClientAlive] LoginPage mounted', window.location.href)
+      window.__clientAlive = true
+    }
+  }, [])
+
   // Логирование кликов для диагностики (только в debug режиме)
   useEffect(() => {
     if (!debugMode || typeof window === 'undefined') return
@@ -217,7 +225,16 @@ function LoginPageContent() {
         throw new Error(data.error || 'Ошибка авторизации')
       }
 
-      // Сохраняем данные пользователя
+      // Сессия установлена через httpOnly cookie
+      // Проверяем что cookie установлена
+      const cookies = document.cookie.split(';')
+      const hasSession = cookies.some(c => c.trim().startsWith('tracy_session='))
+      
+      if (!hasSession) {
+        logger.warn('LoginPage', 'Session cookie not found after auth')
+      }
+
+      // Сохраняем данные пользователя в localStorage для совместимости
       const userData = {
         id: data.user.id,
         first_name: data.user.first_name || "",
@@ -227,7 +244,7 @@ function LoginPageContent() {
       }
       
       localStorage.setItem("telegram_user", JSON.stringify(userData))
-      logger.info('LoginPage', 'Telegram auth successful', { userId: userData.id })
+      logger.info('LoginPage', 'Telegram auth successful via /api/auth/telegram', { userId: userData.id, hasSession })
       
       toast({
         title: "Успешно",
@@ -235,7 +252,7 @@ function LoginPageContent() {
       })
 
       // Перенаправляем в приложение
-      router.push("/assistant")
+      router.replace("/assistant")
     } catch (error: any) {
       logger.error('LoginPage', 'Telegram auth failed', { error: error.message })
       const errorMessage = error.message || "Не удалось авторизоваться через Telegram"

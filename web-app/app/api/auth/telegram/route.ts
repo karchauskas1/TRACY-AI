@@ -104,18 +104,33 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Возвращаем данные пользователя
-    // В production здесь можно создать сессию (JWT/cookie)
-    return NextResponse.json({
+    // Создаем httpOnly cookie для сессии
+    const sessionId = crypto.randomBytes(32).toString('hex')
+    const sessionData = {
+      userId: verification.user.id.toString(),
+      first_name: verification.user.first_name || '',
+      last_name: verification.user.last_name || '',
+      username: verification.user.username || '',
+      photo_url: verification.user.photo_url || '',
+    }
+    
+    // Устанавливаем httpOnly cookie (7 дней)
+    const response = NextResponse.json({
       success: true,
-      user: {
-        id: verification.user.id.toString(),
-        first_name: verification.user.first_name || '',
-        last_name: verification.user.last_name || '',
-        username: verification.user.username || '',
-        photo_url: verification.user.photo_url || '',
-      }
+      user: sessionData
     })
+    
+    response.cookies.set('tracy_session', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 дней
+      path: '/',
+    })
+    
+    // TODO: Сохранить sessionId -> sessionData в БД/Redis для проверки
+    
+    return response
     
   } catch (error: any) {
     console.error('[Auth] Error:', error)

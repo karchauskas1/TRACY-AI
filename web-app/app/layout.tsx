@@ -8,6 +8,7 @@ import { ApiDebugInit } from "../components/ApiDebugInit"
 import { TelegramBootstrap } from "../components/TelegramBootstrap"
 import { DebugOverlay } from "../components/DebugOverlay"
 import { ChunkErrorHandler } from "../components/ChunkErrorHandler"
+import { GlobalClickProbe } from "../components/GlobalClickProbe"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -40,6 +41,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <ChunkErrorHandler />
         <TelegramBootstrap />
+        <GlobalClickProbe />
         <ApiDebugInit />
         <DebugOverlay />
         <ThemeProvider>

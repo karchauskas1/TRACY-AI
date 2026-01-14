@@ -499,6 +499,45 @@ export function DebugOverlay() {
           </button>
         </div>
       </div>
+
+      <div style={{ marginBottom: "16px" }}>
+        <h2 style={{ marginBottom: "8px", color: "#E91E63" }}>Find Blocker</h2>
+        <button
+          onClick={() => {
+            const centerX = window.innerWidth / 2
+            const centerY = window.innerHeight / 2
+            const el = document.elementFromPoint(centerX, centerY)
+            if (el) {
+              const styles = window.getComputedStyle(el)
+              const info = {
+                tag: el.tagName,
+                id: el.id,
+                className: el.className,
+                pointerEvents: styles.pointerEvents,
+                zIndex: styles.zIndex,
+                position: styles.position,
+                display: styles.display,
+                visibility: styles.visibility,
+                opacity: styles.opacity,
+              }
+              console.log('[TopElement]', info, el)
+              alert(`Top element at center:\n${JSON.stringify(info, null, 2)}`)
+            } else {
+              alert('No element found at center')
+            }
+          }}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#E91E63",
+            color: "#fff",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+          }}
+        >
+          Find Blocker
+        </button>
+      </div>
     </div>
   )
 }

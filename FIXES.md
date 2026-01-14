@@ -1,30 +1,49 @@
 # FIXES
 
-## Telegram Login
+## Telegram Login Button
 
-Problem: Button "Войти через Telegram" not working in Mini App
+Problem: Button "Войти через Telegram" not working in demo mode
 
 Root Cause:
-- No button for manual auth in Telegram Mini App
-- No backend endpoint for initData verification
-- useSearchParams not wrapped in Suspense
+- Button rendered correctly (Button component)
+- No overlay/z-index issues
+- Auth endpoint exists
 
 Fix:
-- Added button with handleTelegramLogin handler
-- Created /api/auth/telegram endpoint with HMAC SHA256 verification
-- Wrapped useSearchParams in Suspense boundary
-- Added debug logging for clicks (debug=1 mode)
+- Button handler calls handleTelegramLogin
+- Endpoint /api/auth/telegram verifies initData via HMAC SHA256
+- Session stored in localStorage as telegram_user
+- Wrapped useSearchParams in Suspense
 
 Files:
-- web-app/app/api/auth/telegram/route.ts (new)
 - web-app/app/login/page.tsx
-
-Endpoint: POST /api/auth/telegram
-- Verifies initData signature using Bot Token
-- Returns user data on success
-
-Session: Stored in localStorage as telegram_user JSON
+- web-app/app/api/auth/telegram/route.ts
 
 Test:
-- Mobile/Desktop Telegram: Click button → auth → redirect to /assistant
-- Check localStorage for real userId (not "demo")
+- Click button in Telegram Mini App → handleTelegramLogin → verify initData → redirect to /assistant
+
+## Card Clicks After Return
+
+Problem: Cards on /assistant stop working after returning from other pages
+
+Root Cause:
+- preventDefault() and stopPropagation() on card onClick handlers blocked events
+- setTimeout fallback navigation violated requirements
+
+Fix:
+- Removed preventDefault/stopPropagation from all card onClick handlers
+- Removed setTimeout fallback navigation
+- Simplified handlers to direct router.push() calls
+- Added debug diagnostics (debug=1): event counters, lastClick, lastNavAttempt
+- Wrapped useSearchParams in Suspense
+
+Files:
+- web-app/app/assistant/page.tsx
+
+Test:
+- Navigate /assistant → /chat → back → /assistant → click cards → should navigate
+- Check debug=1 overlay for event counts and navigation attempts
+
+Post-fix:
+- Bot restarted: systemctl restart tracy-bot.service
+- Production deploy: https://tracy-ai.vercel.app

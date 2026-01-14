@@ -63,6 +63,14 @@ function AssistantPageContent() {
     }
   }, [debugMode])
 
+  // ClientAlive маркер
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      console.log('[ClientAlive] AssistantPage mounted', window.location.href)
+      window.__clientAlive = true
+    }
+  }, [])
+
   // Логируем mounted ТОЛЬКО один раз при монтировании компонента
   useEffect(() => {
     if (mountedRef.current === false) {
