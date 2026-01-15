@@ -3107,10 +3107,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # Получаем режим интерпретации из user_data (по умолчанию 'soft')
                     ai_mode = context.user_data.get('ai_mode', 'soft')
+                    logger.info(f"🔍 NLP INPUT (confirmation): user_id={user_id}, text='{text}', has_history={len(chat_history)}, ai_mode={ai_mode}")
                     extracted_data = await nlp_extractor.extract_intent_and_context(
                         text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message),
                         interpretation_mode=ai_mode, chat_history=chat_history
                     )
+                    logger.info(f"📊 NLP OUTPUT (confirmation): intent={extracted_data.get('intent')}, title={extracted_data.get('title')}, start_time={extracted_data.get('start_time')}")
 
                     # Сохраняем сообщение пользователя в историю диалога
                     if conversation_memory:
@@ -3174,10 +3176,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Извлекаем intent и контекст (передаем информацию о последнем событии и историю диалога)
             # Получаем режим интерпретации из user_data (по умолчанию 'soft')
             ai_mode = context.user_data.get('ai_mode', 'soft')
+            logger.info(f"🔍 NLP INPUT: user_id={user_id}, text='{text}', has_history={len(chat_history)}, ai_mode={ai_mode}")
             extracted_data = await nlp_extractor.extract_intent_and_context(
                 text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message),
                 interpretation_mode=ai_mode, chat_history=chat_history
             )
+            logger.info(f"📊 NLP OUTPUT: intent={extracted_data.get('intent')}, title={extracted_data.get('title')}, start_time={extracted_data.get('start_time')}")
 
             # Сохраняем сообщение пользователя в историю диалога
             if conversation_memory:

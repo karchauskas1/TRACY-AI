@@ -210,14 +210,16 @@ class DecisionEngine:
         
         # КРИТИЧЕСКИ ВАЖНЫЙ FALLBACK: Умная логика определения событий на основе контекста
         # Если AI не распознал событие, но есть признаки события - переопределяем intent
-        
+
+        import re as re_module  # Локальный импорт для избежания конфликтов
+
         start_time = extracted_data.get('start_time')
         title = extracted_data.get('title', '') or extracted_data.get('description', '')
         has_explicit_time = extracted_data.get('has_explicit_time', False)
-        
+
         # Проверяем наличие времени в формате ЧЧ:ММ (например, "14:00", "в 14:00", "14.00", "в 14")
         time_pattern = r'\b(\d{1,2}[:.]\d{2}|\d{1,2}\s*(?:час|часа|часов|утра|дня|вечера|ночи)|в\s*\d{1,2})\b'
-        has_time_format = bool(re.search(time_pattern, original_text, re.IGNORECASE)) if original_text else False
+        has_time_format = bool(re_module.search(time_pattern, original_text, re_module.IGNORECASE)) if original_text else False
         
         # Проверяем наличие дат/времени в тексте (расширенный список)
         time_keywords = [
