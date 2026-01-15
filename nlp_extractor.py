@@ -176,6 +176,21 @@ Intent (проверяй в порядке):
 ПРАВИЛО: reminder_intervals может быть указан для intent="event", если в тексте есть несколько напоминаний: "за час", "за полтора часа" (1.5 hours), "за два часа" (2 hours), "за 30 минут" (30 minutes), "за день" (1 day) и т.д.
 ПРАВИЛО: Формат reminder_intervals: массив строк в формате ["1 hour", "1.5 hours", "2 hours", "30 minutes", "1 day"] или ["60 minutes", "90 minutes", "120 minutes"].
 ПРИМЕР: "за час, за полтора часа, за два часа напомни" → reminder_intervals: ["1 hour", "1.5 hours", "2 hours"]
+
+RECURRING PATTERNS (повторяющиеся события):
+- "каждый день" / "ежедневно" / "daily" → is_recurring: true, recurrence_type: 'daily', interval: 1
+- "каждые 2 дня" → is_recurring: true, recurrence_type: 'daily', interval: 2
+- "каждую неделю" / "еженедельно" / "weekly" → is_recurring: true, recurrence_type: 'weekly', interval: 1
+- "по понедельникам" → is_recurring: true, recurrence_type: 'weekly', days_of_week: ['MO']
+- "по понедельникам и средам" → is_recurring: true, recurrence_type: 'weekly', days_of_week: ['MO', 'WE']
+- "по вторникам и четвергам" → is_recurring: true, recurrence_type: 'weekly', days_of_week: ['TU', 'TH']
+- "по пятницам" → is_recurring: true, recurrence_type: 'weekly', days_of_week: ['FR']
+- "по выходным" → is_recurring: true, recurrence_type: 'weekly', days_of_week: ['SA', 'SU']
+- "каждый месяц" / "ежемесячно" / "monthly" → is_recurring: true, recurrence_type: 'monthly', interval: 1
+- "каждое 15 число" → is_recurring: true, recurrence_type: 'monthly', day_of_month: 15
+
+ВАЖНО: Если есть слова "каждый/каждая/каждые/ежедневно/еженедельно/ежемесячно/по [дням недели]" - это RECURRING событие!
+
 Отвечай только JSON.
 
 Текущая дата и время: {current_time}
@@ -217,7 +232,14 @@ Intent (проверяй в порядке):
     "reminder_intervals": ["2 hours", "1 hour", "1.5 hours", "30 minutes"] или null (для add_reminder И для event, когда указаны несколько напоминаний),
     "note_text": "текст заметки" или null (только для add_note),
     "update_fields": {{"time": "16:00", "location": "новый офис"}} или null (для update),
-    "refers_to_last_event": true/false (относится ли запрос к последнему событию)
+    "refers_to_last_event": true/false (относится ли запрос к последнему событию),
+    "is_recurring": true/false (повторяющееся ли событие, default false),
+    "recurrence_type": "daily|weekly|monthly" или null (тип повторения),
+    "interval": число (каждые N дней/недель/месяцев, default 1) или null,
+    "days_of_week": ["MO", "TU", "WE", "TH", "FR", "SA", "SU"] или null (дни недели для weekly),
+    "day_of_month": число 1-31 или null (число месяца для monthly),
+    "recurrence_end_date": "YYYY-MM-DDTHH:MM:SS" или null (дата окончания повторений),
+    "recurrence_count": число или null (количество повторений)
 }}"""
             
             response = self.client.chat.completions.create(
@@ -345,7 +367,7 @@ Intent (проверяй в порядке):
     def is_command(self, text: str) -> Optional[str]:
         """Проверить, является ли текст командой."""
         text_lower = text.lower().strip()
-        
+
         commands = {
             "/search": "search",
             "/edit": "edit",
@@ -355,10 +377,238 @@ Intent (проверяй в порядке):
             "/start": "start",
             "/help": "help"
         }
-        
+
         for cmd, action in commands.items():
             if text_lower.startswith(cmd):
                 return action
-        
+
         return None
+
+    def _detect_missing_fields(self, extracted_data: Dict) -> List[str]:
+        """
+        Определить какие поля отсутствуют для выполнения действия.
+
+        Args:
+            extracted_data: Извлеченные данные из NLP
+
+        Returns:
+            Список названий недостающих полей в порядке приоритета
+        """
+        missing = []
+        intent = extracted_data.get('intent', 'unknown')
+
+        # Для создания событий и напоминаний
+        if intent in ['event', 'reminder']:
+            # Время - критично
+            if not extracted_data.get('start_time'):
+                missing.append('time')
+
+            # Название - желательно
+            if not extracted_data.get('title'):
+                missing.append('title')
+
+        # Для удаления
+        elif intent == 'delete':
+            if not extracted_data.get('title') and not extracted_data.get('event_id'):
+                missing.append('title')
+
+        # Для обновления
+        elif intent == 'update':
+            if not extracted_data.get('title') and not extracted_data.get('event_id'):
+                missing.append('title')
+
+        return missing
+
+    def generate_clarification_question(self, missing_field: str, context: Dict) -> str:
+        """
+        Сгенерировать естественный вопрос для уточнения.
+
+        Args:
+            missing_field: Название недостающего поля ('time', 'title', etc.)
+            context: Контекст с частично собранными данными
+
+        Returns:
+            Текст вопроса для пользователя
+        """
+        import random
+
+        questions = {
+            'time': [
+                "Во сколько? 🕐",
+                "В какое время это должно быть?",
+                "Когда планируешь?",
+                "На какое время запланируем?"
+            ],
+            'title': [
+                "О чём событие? 📝",
+                "Как назовём это событие?",
+                "Что именно планируешь?",
+                "Что это за событие?"
+            ],
+            'location': [
+                "Где это будет? 📍",
+                "Какое место?",
+                "Где планируется?"
+            ],
+            'confirmation': [
+                "Всё верно? Создать событие? ✅",
+                "Подтверждаешь? ✅",
+                "Создать это событие? ✅"
+            ],
+            'selection': [
+                "Какой вариант?",
+                "Выбери номер или название"
+            ]
+        }
+
+        question_list = questions.get(missing_field, ["Уточни, пожалуйста"])
+        return random.choice(question_list)
+
+    async def extract_from_answer(
+        self,
+        text: str,
+        awaiting_field: str,
+        partial_data: Dict,
+        user_timezone: str = "Europe/Moscow"
+    ) -> Dict:
+        """
+        Извлечь значение поля из ответа пользователя на уточняющий вопрос.
+
+        Args:
+            text: Ответ пользователя
+            awaiting_field: Поле, которое ожидалось ('time', 'title', etc.)
+            partial_data: Частично собранные данные
+            user_timezone: Часовой пояс пользователя
+
+        Returns:
+            Словарь с извлеченным полем
+        """
+        if awaiting_field == 'time':
+            # Парсим время из ответа
+            return await self._parse_time_answer(text, partial_data, user_timezone)
+
+        elif awaiting_field == 'title':
+            # Просто берем текст как название
+            return {'title': text.strip()}
+
+        elif awaiting_field == 'location':
+            # Берем текст как место
+            return {'location': text.strip()}
+
+        elif awaiting_field == 'confirmation':
+            # Да/нет ответ
+            return {'confirmed': self._parse_yes_no(text)}
+
+        elif awaiting_field == 'selection':
+            # Пользователь выбрал номер или название
+            # Пытаемся распарсить как число
+            text_stripped = text.strip()
+            if text_stripped.isdigit():
+                return {'selected_index': int(text_stripped) - 1}  # -1 для 0-based индекса
+            else:
+                return {'selected_text': text_stripped}
+
+        else:
+            # Неизвестное поле - возвращаем как есть
+            return {awaiting_field: text.strip()}
+
+    async def _parse_time_answer(self, text: str, partial_data: Dict, user_timezone: str) -> Dict:
+        """
+        Парсить время из ответа пользователя.
+
+        Args:
+            text: Ответ пользователя (например, "15:00", "завтра в 10")
+            partial_data: Частично собранные данные (может содержать дату)
+            user_timezone: Часовой пояс
+
+        Returns:
+            Словарь с полем start_time
+        """
+        # Используем существующий парсер времени
+        tz = pytz.timezone(user_timezone)
+        now = datetime.now(tz)
+
+        # Проверяем есть ли уже дата в partial_data
+        existing_date = partial_data.get('start_time')
+
+        # Если есть дата но без времени, комбинируем с новым временем
+        if existing_date:
+            try:
+                # Пытаемся распарсить только время из ответа
+                parsed_time = dateparser.parse(
+                    text,
+                    languages=['ru'],
+                    settings={
+                        'RELATIVE_BASE': now,
+                        'TIMEZONE': user_timezone,
+                        'RETURN_AS_TIMEZONE_AWARE': True
+                    }
+                )
+
+                if parsed_time:
+                    # Если распарсили - берем время от parsed, дату от existing
+                    if isinstance(existing_date, str):
+                        existing_dt = datetime.fromisoformat(existing_date.replace('Z', '+00:00'))
+                    else:
+                        existing_dt = existing_date
+
+                    combined = existing_dt.replace(
+                        hour=parsed_time.hour,
+                        minute=parsed_time.minute,
+                        second=0,
+                        microsecond=0
+                    )
+
+                    return {
+                        'start_time': combined,
+                        'has_explicit_time': True
+                    }
+            except:
+                pass
+
+        # Парсим текст как полную дату-время
+        parsed = dateparser.parse(
+            text,
+            languages=['ru'],
+            settings={
+                'RELATIVE_BASE': now,
+                'TIMEZONE': user_timezone,
+                'RETURN_AS_TIMEZONE_AWARE': True
+            }
+        )
+
+        if parsed:
+            return {
+                'start_time': parsed,
+                'has_explicit_time': True
+            }
+        else:
+            # Не смогли распарсить - возвращаем как есть для дальнейшей обработки
+            return {'time_text': text}
+
+    def _parse_yes_no(self, text: str) -> bool:
+        """
+        Распарсить да/нет ответ.
+
+        Args:
+            text: Ответ пользователя
+
+        Returns:
+            True если да, False если нет
+        """
+        text_lower = text.lower().strip()
+
+        yes_words = ['да', 'yes', 'y', 'ок', 'ok', 'окей', 'ага', 'угу', 'конечно', 'верно', 'подтверждаю', '+', '✅']
+        no_words = ['нет', 'no', 'n', 'не', 'отмена', 'cancel', 'неа', 'нope', '-', '❌']
+
+        for word in yes_words:
+            if word in text_lower:
+                return True
+
+        for word in no_words:
+            if word in text_lower:
+                return False
+
+        # По умолчанию считаем "да" если не распознали
+        return True
 

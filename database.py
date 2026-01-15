@@ -335,7 +335,63 @@ class Database:
                 """)
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id ON chat_messages(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at)")
-                
+
+                # Таблицы для conversation memory (скользящее окно диалога)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS conversation_sessions (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        message_role TEXT NOT NULL,
+                        message_content TEXT NOT NULL,
+                        intent TEXT,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_conv_sessions_user_time ON conversation_sessions(user_id, created_at DESC)")
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS conversation_state (
+                        user_id BIGINT PRIMARY KEY,
+                        pending_action TEXT,
+                        partial_data JSONB,
+                        awaiting_field TEXT,
+                        context_event_id INTEGER,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+
+                # Таблицы для повторяющихся событий
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS recurring_patterns (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        event_template_id INTEGER,
+                        recurrence_type TEXT NOT NULL,
+                        interval INTEGER DEFAULT 1,
+                        days_of_week TEXT,
+                        day_of_month INTEGER,
+                        start_date DATE NOT NULL,
+                        end_date DATE,
+                        exceptions TEXT,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id),
+                        FOREIGN KEY (event_template_id) REFERENCES events(id)
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS recurring_instances (
+                        id SERIAL PRIMARY KEY,
+                        pattern_id INTEGER NOT NULL,
+                        event_id INTEGER NOT NULL,
+                        occurrence_date DATE NOT NULL,
+                        FOREIGN KEY (pattern_id) REFERENCES recurring_patterns(id),
+                        FOREIGN KEY (event_id) REFERENCES events(id)
+                    )
+                """)
+
             else:
                 # SQLite схемы (оригинальные)
                 cursor.execute("""
@@ -514,7 +570,63 @@ class Database:
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_sent ON reminders(sent)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_meetings_user_id ON meetings(user_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_meetings_created_at ON meetings(created_at)")
-            
+
+                # Таблицы для conversation memory (скользящее окно диалога)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS conversation_sessions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        message_role TEXT NOT NULL,
+                        message_content TEXT NOT NULL,
+                        intent TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_conv_sessions_user_time ON conversation_sessions(user_id, created_at DESC)")
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS conversation_state (
+                        user_id INTEGER PRIMARY KEY,
+                        pending_action TEXT,
+                        partial_data TEXT,
+                        awaiting_field TEXT,
+                        context_event_id INTEGER,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    )
+                """)
+
+                # Таблицы для повторяющихся событий (SQLite)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS recurring_patterns (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        event_template_id INTEGER,
+                        recurrence_type TEXT NOT NULL,
+                        interval INTEGER DEFAULT 1,
+                        days_of_week TEXT,
+                        day_of_month INTEGER,
+                        start_date DATE NOT NULL,
+                        end_date DATE,
+                        exceptions TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id),
+                        FOREIGN KEY (event_template_id) REFERENCES events(id)
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS recurring_instances (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        pattern_id INTEGER NOT NULL,
+                        event_id INTEGER NOT NULL,
+                        occurrence_date DATE NOT NULL,
+                        FOREIGN KEY (pattern_id) REFERENCES recurring_patterns(id),
+                        FOREIGN KEY (event_id) REFERENCES events(id)
+                    )
+                """)
+
             conn.commit()
         except Exception as e:
             logger.error(f"Ошибка инициализации БД: {e}", exc_info=True)

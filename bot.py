@@ -21,6 +21,8 @@ from decision_engine import DecisionEngine
 from calendar_google import GoogleCalendar
 from meeting_processor import MeetingProcessor
 from reminder_scheduler import ReminderScheduler
+from conversation_memory import ConversationMemory
+from conversation_handler import ConversationHandler
 import config
 
 logging.basicConfig(
@@ -36,6 +38,8 @@ nlp_extractor = NLPExtractor()
 meeting_processor = MeetingProcessor(nlp_extractor.client)
 reminder_scheduler = None  # Будет инициализирован в main()
 decision_engine = None  # Будет инициализирован в main() после scheduler
+conversation_memory = None  # Будет инициализирован в main()
+conversation_handler = None  # Будет инициализирован в main()
 
 
 async def submit_feedback_to_backend(
@@ -3098,13 +3102,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         except Exception as e:
                             logger.debug(f"Не удалось извлечь событие из reply: {e}")
                     
+                    # Получаем историю диалога для контекста
+                    chat_history = conversation_memory.get_history(user_id, limit=20) if conversation_memory else []
+
                     # Получаем режим интерпретации из user_data (по умолчанию 'soft')
                     ai_mode = context.user_data.get('ai_mode', 'soft')
                     extracted_data = await nlp_extractor.extract_intent_and_context(
                         text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message),
-                        interpretation_mode=ai_mode
+                        interpretation_mode=ai_mode, chat_history=chat_history
                     )
-                    result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
+
+                    # Сохраняем сообщение пользователя в историю диалога
+                    if conversation_memory:
+                        conversation_memory.add_message(user_id, 'user', text, intent=extracted_data.get('intent'))
+
+                    # Обрабатываем через conversation_handler
+                    if conversation_handler:
+                        result = await conversation_handler.process_message(user_id, text, extracted_data, last_event=last_event)
+                    else:
+                        # Fallback на обычную обработку
+                        result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
+
+                    # Сохраняем ответ бота в историю диалога
+                    if conversation_memory:
+                        conversation_memory.add_message(user_id, 'assistant', result.get('message', ''))
             else:
                 # Отмена подтверждения
                 context.user_data.pop('pending_confirmation', None)
@@ -3147,16 +3168,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("Ошибка инициализации. Попробуй перезапустить бота.")
                 return
             
-            # Извлекаем intent и контекст (передаем информацию о последнем событии)
+            # Получаем историю диалога для контекста
+            chat_history = conversation_memory.get_history(user_id, limit=20) if conversation_memory else []
+
+            # Извлекаем intent и контекст (передаем информацию о последнем событии и историю диалога)
             # Получаем режим интерпретации из user_data (по умолчанию 'soft')
             ai_mode = context.user_data.get('ai_mode', 'soft')
             extracted_data = await nlp_extractor.extract_intent_and_context(
                 text, timezone, locale, last_event=last_event, is_reply=bool(update.message.reply_to_message),
-                interpretation_mode=ai_mode
+                interpretation_mode=ai_mode, chat_history=chat_history
             )
-            
-            # Принимаем решение и выполняем действие
-            result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
+
+            # Сохраняем сообщение пользователя в историю диалога
+            if conversation_memory:
+                conversation_memory.add_message(user_id, 'user', text, intent=extracted_data.get('intent'))
+
+            # Обрабатываем через conversation_handler (для multi-turn диалогов)
+            if conversation_handler:
+                result = await conversation_handler.process_message(user_id, text, extracted_data, last_event=last_event)
+            else:
+                # Fallback на обычную обработку если conversation_handler не инициализирован
+                result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
+
+            # Сохраняем ответ бота в историю диалога
+            if conversation_memory:
+                conversation_memory.add_message(user_id, 'assistant', result.get('message', ''))
         
         # Код ниже выполняется для обоих случаев (подтверждение и обычная обработка)
         # Форматируем сообщение для лучшей читаемости
@@ -3571,7 +3607,7 @@ def main():
     application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     
     # Инициализируем планировщик напоминаний и decision_engine
-    global reminder_scheduler, decision_engine
+    global reminder_scheduler, decision_engine, conversation_memory, conversation_handler
     # Инициализируем AI клиент для reminder_scheduler
     from openai import OpenAI
     ai_client = OpenAI(
@@ -3581,6 +3617,10 @@ def main():
     reminder_scheduler = ReminderScheduler(application.bot, db, ai_client=ai_client)
     # Передаем AI клиент из nlp_extractor для подбора эмодзи
     decision_engine = DecisionEngine(db, reminder_scheduler, ai_client=nlp_extractor.client)
+
+    # Инициализируем систему диалогов
+    conversation_memory = ConversationMemory(db)
+    conversation_handler = ConversationHandler(db, nlp_extractor, decision_engine, conversation_memory)
     
     # Запускаем планировщик напоминаний через post_init хук
     async def post_init(app: Application) -> None:
