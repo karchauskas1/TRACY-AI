@@ -166,22 +166,36 @@ function AssistantPageContent() {
             </p>
           </div>
 
-          {/* Profile Card */}
+          {/* Profile Card - MODERNIZED */}
           {user && (
-            <Card className="mb-6 border-border">
-              <CardContent className="pt-6">
+            <Card variant="gradient" className="mb-6 border-0 overflow-hidden relative">
+              {/* Animated gradient background */}
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-purple-500/10 to-pink-500/20 opacity-50" />
+
+              <CardContent className="pt-6 relative z-10">
                 <div className="flex items-center gap-4">
-                  <Avatar className="h-16 w-16">
-                    <AvatarImage src={user?.avatarUrl || user?.photo_url} alt={displayName} />
-                    <AvatarFallback className="bg-muted text-muted-foreground text-xl">
-                      {avatarInitials}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                    <Avatar className="h-20 w-20 ring-4 ring-white/20 shadow-xl">
+                      <AvatarImage src={user?.avatarUrl || user?.photo_url} alt={displayName} />
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white text-2xl font-bold">
+                        {avatarInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                    {/* Online indicator */}
+                    <div className="absolute bottom-0 right-0 h-5 w-5 bg-green-500 rounded-full border-4 border-white dark:border-card shadow-lg" />
+                  </div>
                   <div className="flex-1">
-                    <h2 className="text-xl font-semibold">{displayName}</h2>
+                    <h2 className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                      {displayName}
+                    </h2>
                     {user?.username && (
-                      <p className="text-sm text-muted-foreground">@{user.username}</p>
+                      <p className="text-sm text-muted-foreground mt-1">@{user.username}</p>
                     )}
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-semibold backdrop-blur-sm">
+                        ✨ Premium
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -217,10 +231,10 @@ function AssistantPageContent() {
 
           {/* Main Features */}
           <div className="space-y-4">
-            {/* Чат с Tracy */}
-            <Link 
+            {/* Чат с Tracy - MODERNIZED */}
+            <Link
               href="/chat"
-              className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+              className="block group"
               onClick={() => {
                 logger.info('AssistantPage', 'Card clicked: /chat')
                 if (debugMode) {
@@ -228,23 +242,44 @@ function AssistantPageContent() {
                 }
               }}
             >
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <MessageCircle className="h-6 w-6 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-1">Чат с Tracy</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Онлайн чат с AI-ассистентом для планирования дня
-                  </p>
+              <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+                {/* Gradient line on top */}
+                <div className="h-1 bg-gradient-to-r from-primary via-purple-500 to-pink-500" />
+
+                <div className="p-6">
+                  <div className="flex items-center gap-4">
+                    {/* Icon with gradient and glow */}
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary to-purple-600 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
+                      <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                        <MessageCircle className="h-7 w-7 text-white" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold mb-1 group-hover:text-primary transition-colors">
+                        Чат с Tracy
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Онлайн чат с AI-ассистентом для планирования дня
+                      </p>
+                    </div>
+
+                    {/* Arrow */}
+                    <div className="text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Link>
 
-            {/* Calendar */}
-            <Link 
+            {/* Calendar - MODERNIZED */}
+            <Link
               href="/calendar"
-              className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+              className="block group"
               onClick={() => {
                 logger.info('AssistantPage', 'Card clicked: /calendar')
                 if (debugMode) {
@@ -252,23 +287,41 @@ function AssistantPageContent() {
                 }
               }}
             >
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-1">Календарь</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Просмотр и управление событиями
-                  </p>
+              <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+                <div className="h-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500" />
+
+                <div className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
+                      <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                        <Calendar className="h-7 w-7 text-white" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold mb-1 group-hover:text-blue-500 transition-colors">
+                        Календарь
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Просмотр и управление событиями
+                      </p>
+                    </div>
+
+                    <div className="text-muted-foreground group-hover:text-blue-500 group-hover:translate-x-1 transition-all">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Link>
 
-            {/* История расшифровок */}
-            <Link 
+            {/* История расшифровок - MODERNIZED */}
+            <Link
               href="/meetings/history"
-              className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+              className="block group"
               onClick={() => {
                 logger.info('AssistantPage', 'Card clicked: /meetings/history')
                 if (debugMode) {
@@ -276,23 +329,41 @@ function AssistantPageContent() {
                 }
               }}
             >
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <History className="h-6 w-6 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-1">История расшифровок</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Просмотр всех расшифрованных встреч
-                  </p>
+              <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+                <div className="h-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500" />
+
+                <div className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
+                      <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                        <History className="h-7 w-7 text-white" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold mb-1 group-hover:text-orange-500 transition-colors">
+                        История расшифровок
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Просмотр всех расшифрованных встреч
+                      </p>
+                    </div>
+
+                    <div className="text-muted-foreground group-hover:text-orange-500 group-hover:translate-x-1 transition-all">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Link>
 
-            {/* Списки задач */}
-            <Link 
+            {/* Списки задач - MODERNIZED */}
+            <Link
               href="/todo-lists"
-              className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+              className="block group"
               onClick={() => {
                 logger.info('AssistantPage', 'Card clicked: /todo-lists')
                 if (debugMode) {
@@ -300,15 +371,33 @@ function AssistantPageContent() {
                 }
               }}
             >
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <ListTodo className="h-6 w-6 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-1">Списки задач</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Создание и управление списками задач
-                  </p>
+              <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+                <div className="h-1 bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500" />
+
+                <div className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
+                      <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-green-500 to-teal-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                        <ListTodo className="h-7 w-7 text-white" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold mb-1 group-hover:text-green-500 transition-colors">
+                        Списки задач
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Создание и управление списками задач
+                      </p>
+                    </div>
+
+                    <div className="text-muted-foreground group-hover:text-green-500 group-hover:translate-x-1 transition-all">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Link>

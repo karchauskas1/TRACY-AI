@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Modern fonts for 2026 */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 /* Отключение pinch/zoom в Telegram WebView */
 @layer base {
   html,
@@ -31,58 +35,120 @@
 
 @layer base {
   :root {
-    /* Light theme */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* === MODERNIZED LIGHT THEME === */
+
+    /* Base colors */
+    --background: 245 245 250;
+    --foreground: 220 25% 10%;
+
+    /* Cards with improved contrast */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 220 25% 10%;
+
+    /* Popover */
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 270 70% 60%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --popover-foreground: 220 25% 10%;
+
+    /* Primary colors (gradient-ready) */
+    --primary: 260 85% 65%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 260 85% 75%;
+    --primary-dark: 260 85% 55%;
+
+    /* Secondary colors */
+    --secondary: 220 15% 96%;
+    --secondary-foreground: 220 25% 10%;
+
+    /* Muted colors */
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 40%;
+
+    /* Accent colors */
+    --accent: 260 85% 96%;
+    --accent-foreground: 260 85% 30%;
+
+    /* Destructive */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 270 70% 60%;
-    --radius: 0.75rem;
-    
-    /* Custom colors для календаря */
+
+    /* Borders and inputs */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 260 85% 65%;
+
+    /* Updated radius */
+    --radius: 1rem;
+
+    /* Calendar colors */
     --calendar-selected: 25 95% 53%;
     --calendar-event-dot: 270 70% 60%;
+
+    /* Glassmorphism variables */
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.3);
+
+    /* Shadows */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.16);
   }
 
   .dark {
-    /* Dark theme */
-    --background: 240 10% 15%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 18%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 18%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 270 70% 60%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 10% 25%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 10% 25%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 240 10% 25%;
-    --accent-foreground: 0 0% 98%;
+    /* === MODERNIZED DARK THEME === */
+
+    /* Base colors */
+    --background: 222 25% 8%;
+    --foreground: 210 20% 98%;
+
+    /* Cards */
+    --card: 222 25% 12%;
+    --card-foreground: 210 20% 98%;
+
+    /* Popover */
+    --popover: 222 25% 12%;
+    --popover-foreground: 210 20% 98%;
+
+    /* Primary colors (same as light) */
+    --primary: 260 85% 65%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 260 85% 75%;
+    --primary-dark: 260 85% 55%;
+
+    /* Secondary colors */
+    --secondary: 222 25% 18%;
+    --secondary-foreground: 210 20% 98%;
+
+    /* Muted colors */
+    --muted: 222 25% 16%;
+    --muted-foreground: 215 15% 65%;
+
+    /* Accent colors */
+    --accent: 222 25% 18%;
+    --accent-foreground: 210 20% 98%;
+
+    /* Destructive */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 10% 25%;
-    --input: 240 10% 25%;
-    --ring: 270 70% 60%;
-    
-    /* Custom colors для календаря */
+
+    /* Borders and inputs */
+    --border: 222 20% 22%;
+    --input: 222 20% 22%;
+    --ring: 260 85% 65%;
+
+    /* Calendar colors */
     --calendar-selected: 25 95% 53%;
     --calendar-event-dot: 270 70% 60%;
+
+    /* Glassmorphism for dark theme */
+    --glass-bg: rgba(30, 35, 48, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+
+    /* Shadows for dark theme */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -90,8 +156,122 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    line-height: 1.7;
+  }
+}
+
+/* === UTILITY CLASSES === */
+@layer utilities {
+  /* Gradient text */
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-dark)) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Glassmorphism cards */
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* Gradient backgrounds */
+  .bg-gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-dark)) 100%);
+  }
+
+  /* Animated gradient background */
+  .bg-gradient-animated {
+    background: linear-gradient(270deg,
+      hsl(260, 85%, 65%),
+      hsl(280, 75%, 60%),
+      hsl(300, 70%, 65%)
+    );
+    background-size: 200% 200%;
+    animation: gradient-shift 8s ease infinite;
+  }
+
+  /* Hover effects */
+  .hover-lift {
+    transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+  }
+
+  .hover-glow {
+    transition: box-shadow 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hover-glow:hover {
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  }
+
+  /* Shimmer effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.2) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Float animation */
+  .float {
+    animation: float 3s ease-in-out infinite;
+  }
+}
+
+/* === ANIMATIONS === */
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes spring-in {
+  0% { transform: scale(0.95); opacity: 0; }
+  60% { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(102, 126, 234, 0.5);
   }
 }
 
