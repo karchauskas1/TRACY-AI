@@ -137,15 +137,18 @@ class NLPExtractor:
    - Просто текст без дат и действий
 
 Intent (проверяй в порядке):
-1. "delete_all" - "удали все планы/события"
-2. "list_events" - "покажи события/планы" (time_period: today/tomorrow/week/month/all)
-3. "delete_by_period" - "удали все за сегодня/неделю"
-4. "delete_many" - "удали X и Y" (titles: ["X", "Y"])
-5. "delete_by_pattern" - "удали все встречи" (pattern: "встреча")
-6. "add_reminder" - "напомни за 2 часа" БЕЗ указания времени события (reminder_intervals: ["2 hours"]) - только для существующих событий!
-7. "add_note" - "добавь заметку к событию X" или reply к событию (note_text)
-8. "create_many" - "добавь X и Y" (titles: ["X", "Y"])
-9. "event" - если есть дата/время + действие (ПО УМОЛЧАНИЮ для действий с датой!)
+1. "small_talk" - приветствия, вопросы о делах, благодарности:
+   - Примеры: "привет", "здравствуй", "как дела", "как у тебя дела", "что нового", "спасибо", "пока", "до свидания"
+   - → intent: "small_talk", message_type: "greeting" | "how_are_you" | "thanks" | "goodbye"
+2. "delete_all" - "удали все планы/события"
+3. "list_events" - "покажи события/планы" (time_period: today/tomorrow/week/month/all)
+4. "delete_by_period" - "удали все за сегодня/неделю"
+5. "delete_many" - "удали X и Y" (titles: ["X", "Y"])
+6. "delete_by_pattern" - "удали все встречи" (pattern: "встреча")
+7. "add_reminder" - "напомни за 2 часа" БЕЗ указания времени события (reminder_intervals: ["2 hours"]) - только для существующих событий!
+8. "add_note" - "добавь заметку к событию X" или reply к событию (note_text)
+9. "create_many" - "добавь X и Y" (titles: ["X", "Y"])
+10. "event" - если есть дата/время + действие (ПО УМОЛЧАНИЮ для действий с датой!)
    - ВАЖНО: "напомни в [время] [действие]" = "event" с start_time = [время]
    - ВАЖНО: "напомни [действие] в [время]" = "event" с start_time = [время]
    - ВАЖНО: "напомни завтра/сегодня [действие]" = "event" с start_time = завтра/сегодня
@@ -160,15 +163,15 @@ Intent (проверяй в порядке):
                "с 14 до 18" → start_time="14:00", end_time="18:00" на сегодня
                "с 14 часов до 18" → start_time="14:00", end_time="18:00" на сегодня
                "завтра с 14 до 18" → start_time="завтра 14:00", end_time="завтра 18:00"
-10. "update" - "измени/перенеси событие X" (update_fields)
-11. "update_many" - "перенеси все X"
-12. "delete" - "удали событие X"
-13. "search" - поиск
-14. "list_notes" - "покажи заметки"
-15. "delete_note" - "удали заметку"
-16. "note" - ТОЛЬКО если НЕТ даты/времени и явно сказано "заметка"
+11. "update" - "измени/перенеси событие X" (update_fields)
+12. "update_many" - "перенеси все X"
+13. "delete" - "удали событие X"
+14. "search" - поиск
+15. "list_notes" - "покажи заметки"
+16. "delete_note" - "удали заметку"
+17. "note" - ТОЛЬКО если НЕТ даты/времени и явно сказано "заметка"
 
-Поля JSON: intent, title/titles, description, start_time, end_time, location, priority (0-5), time_period, pattern, reminder_intervals, note_text, update_fields, refers_to_last_event.
+Поля JSON: intent, title/titles, description, start_time, end_time, location, priority (0-5), time_period, pattern, reminder_intervals, note_text, update_fields, refers_to_last_event, message_type (для small_talk: "greeting"|"how_are_you"|"thanks"|"goodbye"|"general").
 
 ПРАВИЛО: Дата/время + действие = СОБЫТИЕ, не заметка!
 ПРАВИЛО: "напомни" + время + действие = СОБЫТИЕ с этим временем!

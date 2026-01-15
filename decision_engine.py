@@ -357,6 +357,8 @@ class DecisionEngine:
             return await self._handle_add_note(user_id, extracted_data, calendar_connections, timezone, target_event_for_note)
         elif intent == 'create_many':
             return await self._handle_create_many(user_id, extracted_data, calendar_connections, timezone)
+        elif intent == 'small_talk':
+            return await self._handle_small_talk(user_id, extracted_data)
         elif intent == 'event':
             return await self._handle_event(user_id, extracted_data, calendar_connections, timezone)
         elif intent == 'reminder':
@@ -1274,12 +1276,64 @@ class DecisionEngine:
             'needs_confirmation': False
         }
     
+    async def _handle_small_talk(self, user_id: int, extracted_data: Dict) -> Dict:
+        """Обработать приветствия и общий разговор."""
+        message_type = extracted_data.get('message_type', 'general')
+
+        # Разные ответы в зависимости от типа сообщения
+        responses = {
+            'greeting': [
+                "Привет! 👋 Я твой умный календарь-ассистент.",
+                "Здравствуй! Рад тебя видеть! 📅",
+                "Привет! Готов помочь с планами.",
+            ],
+            'how_are_you': [
+                "У меня всё отлично, спасибо! 😊",
+                "Всё хорошо, работаю для тебя! 💪",
+                "Отлично! Готов помогать с делами.",
+            ],
+            'thanks': [
+                "Всегда пожалуйста! 😊",
+                "Рад помочь! ✨",
+                "Обращайся! 💙",
+            ],
+            'goodbye': [
+                "Пока! До скорой встречи! 👋",
+                "До свидания! Буду ждать твоих задач! 📅",
+                "Удачи! Возвращайся! ✨",
+            ],
+            'general': [
+                "Понял! 😊",
+                "Хорошо! 👍",
+                "Принял! ✅",
+            ]
+        }
+
+        import random
+        base_response = random.choice(responses.get(message_type, responses['general']))
+
+        # Добавляем напоминание о возможностях
+        capabilities_reminder = (
+            "\n\n💡 Что я умею:\n"
+            "• Создавать события — просто скажи что и когда\n"
+            "• Напоминать о делах — я не дам забыть\n"
+            "• Показывать планы — спроси «что на сегодня»\n"
+            "• Управлять календарём — удалять, переносить\n\n"
+            "Напиши своё дело или вопрос, и я помогу! 🚀"
+        )
+
+        return {
+            'action': 'small_talk',
+            'message': base_response + capabilities_reminder,
+            'needs_confirmation': False
+        }
+
     async def _handle_note(self, user_id: int, extracted_data: Dict) -> Dict:
         """Обработать сохранение заметки."""
         content = extracted_data.get('description') or extracted_data.get('title', '')
-        
+
         note_id = self.db.save_note(user_id, content, extracted_data)
-        
+
         return {
             'action': 'saved_note',
             'message': f"✓ Сохранена заметка: {content[:50]}...",
