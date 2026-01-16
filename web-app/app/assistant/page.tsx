@@ -168,38 +168,40 @@ function AssistantPageContent() {
 
           {/* Profile Card - MODERNIZED */}
           {user && (
-            <Card variant="gradient" className="mb-6 border-0 overflow-hidden relative">
-              {/* Animated gradient background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-purple-500/10 to-pink-500/20 opacity-50" />
+            <Link href="/settings/account" className="block">
+              <Card variant="gradient" className="mb-6 border-0 overflow-hidden relative cursor-pointer hover:shadow-xl transition-shadow">
+                {/* Animated gradient background */}
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-purple-500/10 to-pink-500/20 opacity-50" />
 
-              <CardContent className="pt-6 relative z-10">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <Avatar className="h-20 w-20 ring-4 ring-white/20 shadow-xl">
-                      <AvatarImage src={user?.avatarUrl || user?.photo_url} alt={displayName} />
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white text-2xl font-bold">
-                        {avatarInitials}
-                      </AvatarFallback>
-                    </Avatar>
-                    {/* Online indicator */}
-                    <div className="absolute bottom-0 right-0 h-5 w-5 bg-green-500 rounded-full border-4 border-white dark:border-card shadow-lg" />
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                      {displayName}
-                    </h2>
-                    {user?.username && (
-                      <p className="text-sm text-muted-foreground mt-1">@{user.username}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="px-3 py-1 bg-gradient-to-r from-primary/20 to-purple-500/20 border border-primary/30 text-primary dark:text-primary-foreground rounded-full text-xs font-semibold backdrop-blur-sm shadow-sm">
-                        ✨ Premium
+                <CardContent className="pt-6 relative z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Avatar className="h-20 w-20 ring-4 ring-white/20 shadow-xl">
+                        <AvatarImage src={user?.avatarUrl || user?.photo_url} alt={displayName} />
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white text-2xl font-bold">
+                          {avatarInitials}
+                        </AvatarFallback>
+                      </Avatar>
+                      {/* Online indicator */}
+                      <div className="absolute bottom-0 right-0 h-5 w-5 bg-green-500 rounded-full border-4 border-white dark:border-card shadow-lg" />
+                    </div>
+                    <div className="flex-1">
+                      <h2 className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                        {displayName}
+                      </h2>
+                      {user?.username && (
+                        <p className="text-sm text-muted-foreground mt-1">@{user.username}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="px-3 py-1 bg-gradient-to-r from-primary/20 to-purple-500/20 border border-primary/30 text-primary dark:text-primary-foreground rounded-full text-xs font-semibold backdrop-blur-sm shadow-sm">
+                          ✨ Premium
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </Link>
           )}
 
           {/* Demo Mode Warning */}
