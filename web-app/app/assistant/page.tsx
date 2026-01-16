@@ -192,7 +192,7 @@ function AssistantPageContent() {
                       <p className="text-sm text-muted-foreground mt-1">@{user.username}</p>
                     )}
                     <div className="flex items-center gap-2 mt-2">
-                      <div className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-semibold backdrop-blur-sm">
+                      <div className="px-3 py-1 bg-gradient-to-r from-primary/20 to-purple-500/20 border border-primary/30 text-primary dark:text-primary-foreground rounded-full text-xs font-semibold backdrop-blur-sm shadow-sm">
                         ✨ Premium
                       </div>
                     </div>
@@ -405,9 +405,9 @@ function AssistantPageContent() {
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (
               <>
-                <Link 
+                <Link
                   href="/settings/feedback"
-                  className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+                  className="block group"
                   onClick={() => {
                     logger.info('AssistantPage', 'Card clicked: /settings/feedback')
                     if (debugMode) {
@@ -415,21 +415,40 @@ function AssistantPageContent() {
                     }
                   }}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <MessageSquare className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-1">Обратная связь</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Просмотр всех сообщений об ошибках и предложениях
-                      </p>
+                  <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+                    <div className="h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+
+                    <div className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
+                          <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                            <MessageSquare className="h-7 w-7 text-white" />
+                          </div>
+                        </div>
+
+                        <div className="flex-1">
+                          <h3 className="text-xl font-bold mb-1 group-hover:text-indigo-500 transition-colors">
+                            Обратная связь
+                          </h3>
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            Просмотр всех сообщений об ошибках и предложениях
+                          </p>
+                        </div>
+
+                        <div className="text-muted-foreground group-hover:text-indigo-500 group-hover:translate-x-1 transition-all">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Link>
-                <Link 
+
+                <Link
                   href="/debug"
-                  className="block border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer p-6"
+                  className="block group"
                   onClick={() => {
                     logger.info('AssistantPage', 'Card clicked: /debug')
                     if (debugMode) {
@@ -437,15 +456,33 @@ function AssistantPageContent() {
                     }
                   }}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Settings className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold mb-1">Debug: Network</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Мониторинг сетевых запросов и диагностика ошибок
-                      </p>
+                  <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+                    <div className="h-1 bg-gradient-to-r from-slate-500 via-gray-500 to-zinc-500" />
+
+                    <div className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-gradient-to-br from-slate-500 to-gray-600 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
+                          <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-slate-500 to-gray-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                            <Bug className="h-7 w-7 text-white" />
+                          </div>
+                        </div>
+
+                        <div className="flex-1">
+                          <h3 className="text-xl font-bold mb-1 group-hover:text-slate-500 transition-colors">
+                            Debug: Network
+                          </h3>
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            Мониторинг сетевых запросов и диагностика ошибок
+                          </p>
+                        </div>
+
+                        <div className="text-muted-foreground group-hover:text-slate-500 group-hover:translate-x-1 transition-all">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Link>
@@ -479,8 +516,12 @@ export default function AssistantPage() {
     <Suspense fallback={
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-          <p className="mt-4 text-muted-foreground">Загрузка...</p>
+          <div className="relative">
+            {/* Glow effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-primary to-purple-600 rounded-full blur-2xl opacity-20 animate-pulse" />
+            {/* Spinner */}
+            <div className="relative inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-primary/20 border-t-primary"></div>
+          </div>
         </div>
       </div>
     }>
