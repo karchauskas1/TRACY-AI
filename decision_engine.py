@@ -283,7 +283,53 @@ class DecisionEngine:
             logger.info(f"Переопределил intent 'note' → 'add_note' (reply к событию)")
             extracted_data['intent'] = 'add_note'
             extracted_data['refers_to_last_event'] = True
-        
+
+        # FALLBACK: Определение типа операции для reply по глаголу
+        if reply_to_event and original_text:
+            # "удали" в reply → это delete события, не note!
+            if any(word in original_text.lower() for word in ['удали', 'удалить', 'стереть', 'убрать']):
+                if intent == 'note' or intent == 'add_note':
+                    intent = 'delete'
+                    extracted_data['intent'] = 'delete'
+                    extracted_data['refers_to_last_event'] = True
+                    logger.info(f"Fallback: reply + 'удали' → intent='delete' (было '{original_intent}')")
+
+            # "перенеси/измени" в reply → это update, не note!
+            elif any(word in original_text.lower() for word in ['перенеси', 'перенести', 'измени', 'изменить', 'сдвинь', 'передвинь']):
+                if intent == 'note' or intent == 'add_note':
+                    intent = 'update'
+                    extracted_data['intent'] = 'update'
+                    extracted_data['refers_to_last_event'] = True
+                    logger.info(f"Fallback: reply + 'перенеси/измени' → intent='update' (было '{original_intent}')")
+
+            # "напомни" в reply → это add_reminder, не event!
+            elif any(word in original_text.lower() for word in ['напомни', 'напоминание', 'напомнить']):
+                if intent == 'event' or intent == 'note':
+                    intent = 'add_reminder'
+                    extracted_data['intent'] = 'add_reminder'
+                    extracted_data['refers_to_last_event'] = True
+                    logger.info(f"Fallback: reply + 'напомни' → intent='add_reminder' (было '{original_intent}')")
+
+        # FALLBACK: Определение refers_to_last_event по местоимениям
+        if original_text and not extracted_data.get('refers_to_last_event', False):
+            pronouns = ['это', 'его', 'её', 'эту', 'этот', 'тот', 'то', 'тому']
+
+            if any(pronoun in original_text.lower().split() for pronoun in pronouns):
+                extracted_data['refers_to_last_event'] = True
+                logger.info(f"Fallback: обнаружено местоимение → refers_to_last_event=True")
+
+                # Если intent=note и есть глагол действия → переопределяем
+                if intent == 'note' and any(word in original_text.lower() for word in ['удали', 'перенеси', 'измени', 'сдвинь']):
+                    if 'удали' in original_text.lower():
+                        intent = 'delete'
+                    elif 'перенеси' in original_text.lower() or 'сдвинь' in original_text.lower():
+                        intent = 'update'
+                    elif 'измени' in original_text.lower():
+                        intent = 'update'
+
+                    extracted_data['intent'] = intent
+                    logger.info(f"Fallback: местоимение + глагол → intent='{intent}' (было 'note')")
+
         # Получить настройки пользователя
         user = self.db.get_or_create_user(user_id)
         timezone = user.get('timezone', 'Europe/Moscow')
@@ -1344,6 +1390,52 @@ class DecisionEngine:
     async def _handle_update(self, user_id: int, extracted_data: Dict,
                             calendar_connections: List[Dict], timezone: str) -> Dict:
         """Обработать обновление существующего события."""
+
+        # Проверяем относительные модификаторы времени
+        relative_mod = extracted_data.get('relative_time_modification')
+        new_date = extracted_data.get('new_date')
+        new_time = extracted_data.get('new_time')
+
+        # Если есть относительный модификатор или refers_to_last_event
+        if extracted_data.get('refers_to_last_event', False):
+            last_event = self.db.get_last_event(user_id)
+            if not last_event:
+                return {
+                    'action': 'error',
+                    'message': '❌ Не найдено событие для изменения. Уточни какое событие нужно изменить.',
+                    'needs_confirmation': False
+                }
+
+            # Применяем относительные модификаторы
+            if relative_mod:
+                current_start = last_event.get('start_time')
+                if current_start:
+                    new_start = self._apply_time_modification(current_start, relative_mod, timezone)
+                    extracted_data['start_time'] = new_start
+                    logger.info(f"Применён относительный модификатор: {current_start} + {relative_mod} = {new_start}")
+
+            # Применяем new_date
+            if new_date:
+                current_start = last_event.get('start_time')
+                if current_start:
+                    # Парсим new_date и заменяем дату, сохраняя время
+                    new_start = self._replace_date_keep_time(current_start, new_date, timezone)
+                    extracted_data['start_time'] = new_start
+                    logger.info(f"Применена новая дата: {new_date} → {new_start}")
+
+            # Применяем new_time
+            if new_time:
+                current_start = last_event.get('start_time')
+                if current_start:
+                    new_start = self._replace_time_keep_date(current_start, new_time, timezone)
+                    extracted_data['start_time'] = new_start
+                    logger.info(f"Применено новое время: {new_time} → {new_start}")
+
+            # Используем last_event как целевое событие
+            return await self._update_existing_event(
+                user_id, last_event, extracted_data, calendar_connections, timezone
+            )
+
         # Ищем событие для обновления
         title = extracted_data.get('title', '')
         similar_events = self.db.find_similar_events(user_id, title)
@@ -1870,6 +1962,19 @@ class DecisionEngine:
     async def _handle_delete(self, user_id: int, extracted_data: Dict,
                             calendar_connections: List[Dict]) -> Dict:
         """Обработать удаление одного события."""
+
+        # ПРИОРИТЕТ 1: Если refers_to_last_event или reply_to_event
+        if extracted_data.get('refers_to_last_event', False):
+            last_event = self.db.get_last_event(user_id)
+            if last_event:
+                return await self._delete_event_by_id(user_id, last_event['id'], calendar_connections)
+            else:
+                return {
+                    'action': 'error',
+                    'message': '❌ Не найдено событие для удаления. Уточни какое событие удалить.',
+                    'needs_confirmation': False
+                }
+
         title = extracted_data.get('title', '')
         similar_events = self.db.find_similar_events(user_id, title)
         
@@ -2856,4 +2961,184 @@ class DecisionEngine:
                 return "😴"
             else:
                 return "📅"
+
+    def _apply_time_modification(self, original_time, modification: str, timezone: str):
+        """
+        Применить относительную модификацию времени.
+
+        Args:
+            original_time: Исходное время (datetime или строка)
+            modification: Модификация ("+1 hour", "-30 minutes", "+1 day")
+            timezone: Часовой пояс
+
+        Returns:
+            Новое время с применённой модификацией
+        """
+        import re as re_module
+        import pytz
+
+        # Парсим original_time
+        if isinstance(original_time, str):
+            original_time = datetime.fromisoformat(original_time.replace('Z', '+00:00'))
+
+        tz = pytz.timezone(timezone)
+        if original_time.tzinfo is None:
+            original_time = tz.localize(original_time)
+
+        # Парсим modification ("+1 hour", "-30 minutes", "+2 days")
+        match = re_module.match(r'([+-]?\d+)\s*(hour|hours|minute|minutes|day|days)', modification.lower())
+        if not match:
+            logger.warning(f"Не удалось распарсить модификатор: {modification}")
+            return original_time
+
+        amount = int(match.group(1))
+        unit = match.group(2)
+
+        # Применяем модификацию
+        if 'hour' in unit:
+            new_time = original_time + timedelta(hours=amount)
+        elif 'minute' in unit:
+            new_time = original_time + timedelta(minutes=amount)
+        elif 'day' in unit:
+            new_time = original_time + timedelta(days=amount)
+        else:
+            new_time = original_time
+
+        return new_time
+
+    def _replace_date_keep_time(self, original_time, new_date_str: str, timezone: str):
+        """
+        Заменить дату, сохранив время.
+
+        Args:
+            original_time: Исходное время
+            new_date_str: Новая дата ("завтра", "среда", "2026-01-20")
+            timezone: Часовой пояс
+
+        Returns:
+            Новое datetime с обновлённой датой
+        """
+        import pytz
+        from dateutil import parser
+
+        # Парсим original_time
+        if isinstance(original_time, str):
+            original_time = datetime.fromisoformat(original_time.replace('Z', '+00:00'))
+
+        tz = pytz.timezone(timezone)
+        now = datetime.now(tz)
+
+        # Парсим new_date_str (используем существующую логику из nlp_extractor)
+        # Для простоты - базовая реализация
+        if new_date_str == 'завтра':
+            new_date = now.date() + timedelta(days=1)
+        elif new_date_str == 'послезавтра':
+            new_date = now.date() + timedelta(days=2)
+        else:
+            try:
+                new_date = parser.parse(new_date_str, dayfirst=True).date()
+            except:
+                logger.warning(f"Не удалось распарсить дату: {new_date_str}")
+                return original_time
+
+        # Комбинируем новую дату и старое время
+        new_datetime = datetime.combine(new_date, original_time.time())
+        new_datetime = tz.localize(new_datetime) if new_datetime.tzinfo is None else new_datetime
+
+        return new_datetime
+
+    def _replace_time_keep_date(self, original_time, new_time_str: str, timezone: str):
+        """
+        Заменить время, сохранив дату.
+
+        Args:
+            original_time: Исходное время
+            new_time_str: Новое время ("15:00", "10:30")
+            timezone: Часовой пояс
+
+        Returns:
+            Новое datetime с обновлённым временем
+        """
+        import pytz
+        import re as re_module
+
+        # Парсим original_time
+        if isinstance(original_time, str):
+            original_time = datetime.fromisoformat(original_time.replace('Z', '+00:00'))
+
+        tz = pytz.timezone(timezone)
+
+        # Парсим new_time_str (формат "HH:MM")
+        match = re_module.match(r'(\d{1,2}):?(\d{2})?', new_time_str)
+        if not match:
+            logger.warning(f"Не удалось распарсить время: {new_time_str}")
+            return original_time
+
+        hour = int(match.group(1))
+        minute = int(match.group(2)) if match.group(2) else 0
+
+        # Комбинируем старую дату и новое время
+        new_datetime = original_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        return new_datetime
+
+    async def _delete_event_by_id(self, user_id: int, event_id: int, calendar_connections: List[Dict]) -> Dict:
+        """
+        Удалить событие по ID (с синхронизацией календарей).
+
+        Args:
+            user_id: ID пользователя
+            event_id: ID события
+            calendar_connections: Подключения к календарям
+
+        Returns:
+            Результат удаления
+        """
+        event = self.db.get_event_by_id(event_id, user_id)
+        if not event:
+            return {
+                'action': 'error',
+                'message': '❌ Событие не найдено',
+                'needs_confirmation': False
+            }
+
+        # Удаляем из внешних календарей
+        if event.get('external_id') and event.get('provider'):
+            try:
+                if event['provider'] == 'google':
+                    calendar = GoogleCalendar(user_id)
+                    calendar.delete_event(event['external_id'])
+                    logger.info(f"Удалено событие {event['external_id']} из Google Calendar")
+
+                elif event['provider'] == 'icloud':
+                    conn = next((c for c in calendar_connections if c['provider'] == 'icloud'), None)
+                    if conn:
+                        import json
+                        credentials = json.loads(conn['credentials'])
+                        icloud_calendar = ICloudCalendar(
+                            credentials['username'],
+                            credentials['password'],
+                            credentials.get('calendar_name', 'Основной')
+                        )
+                        icloud_calendar.delete_event(event['external_id'])
+                        logger.info(f"Удалено событие {event['external_id']} из iCloud Calendar")
+            except Exception as e:
+                logger.error(f"Ошибка удаления из внешнего календаря: {e}")
+
+        # Удаляем напоминания
+        try:
+            self.db.delete_reminders_for_event(event_id)
+            logger.info(f"Удалены напоминания для события {event_id}")
+        except Exception as e:
+            logger.error(f"Ошибка удаления напоминаний: {e}")
+
+        # Удаляем из БД
+        self.db.delete_event(event_id, user_id)
+
+        return {
+            'action': 'deleted',
+            'message': f"✅ Удалено: {event['title']}",
+            'event_id': event_id,
+            'needs_confirmation': False
+        }
 

@@ -136,6 +136,28 @@ class NLPExtractor:
    - НЕТ даты/времени И явно сказано "заметка"/"записать"
    - Просто текст без дат и действий
 
+ПОНИМАНИЕ КОНТЕКСТА И МЕСТОИМЕНИЙ:
+- "это", "его", "её", "то", "тот", "эту", "тому" → refers_to_last_event: true
+- Примеры:
+  * "удали это" → intent="delete", refers_to_last_event: true
+  * "перенеси его на завтра" → intent="update", refers_to_last_event: true, new_date="завтра"
+  * "добавь напоминание к нему" → intent="add_reminder", refers_to_last_event: true
+  * "измени это событие" → intent="update", refers_to_last_event: true
+
+ОПЕРАЦИИ ПО ГЛАГОЛАМ (высокий приоритет):
+- "удали/удалить/стереть/убрать + [название/местоимение]" → intent="delete", operation_verb="удали"
+- "перенеси/перенести/сдвинь/передвинь + [название/местоимение]" → intent="update", operation_verb="перенеси"
+- "измени/изменить/поменяй + [название/местоимение]" → intent="update", operation_verb="измени"
+- "покажи/показать/найди/найти + [название]" → intent="search" или "list_events"
+- "напомни/напоминание + [к чему]" → intent="add_reminder" (если есть событие) или "event" (если новое)
+
+ОТНОСИТЕЛЬНЫЕ МОДИФИКАТОРЫ ВРЕМЕНИ:
+- "на час позже" / "+1 час" → relative_time_modification: "+1 hour"
+- "на 30 минут раньше" / "-30 минут" → relative_time_modification: "-30 minutes"
+- "сдвинь на завтра" → intent="update", new_date="завтра"
+- "перенеси на час" → intent="update", relative_time_modification: "+1 hour"
+- "раньше на 30 минут" → relative_time_modification: "-30 minutes"
+
 Intent (проверяй в порядке):
 1. "small_talk" - приветствия, вопросы о делах, благодарности:
    - Примеры: "привет", "здравствуй", "как дела", "как у тебя дела", "что нового", "спасибо", "пока", "до свидания"
@@ -152,6 +174,12 @@ Intent (проверяй в порядке):
    - ВАЖНО: "напомни в [время] [действие]" = "event" с start_time = [время]
    - ВАЖНО: "напомни [действие] в [время]" = "event" с start_time = [время]
    - ВАЖНО: "напомни завтра/сегодня [действие]" = "event" с start_time = завтра/сегодня
+   Примеры:
+   - "встреча завтра в 15:00" → intent="event", title="встреча", start_time="завтра 15:00"
+   - "19-го января фотосессия в 17:00" → intent="event", title="фотосессия", start_time="2026-01-19T17:00:00"
+   - "позвонить Маше в среду" → intent="event", title="позвонить Маше", start_time="ближайшая среда"
+   - "напомни в 14:00 проветрить" → intent="event", title="проветрить", start_time="сегодня 14:00"
+   - "зарядка каждый день в 7 утра" → intent="event", is_recurring: true, recurrence_type="daily", title="зарядка", start_time="07:00"
    - ВАЖНО: Если указан диапазон времени (например, "с 11 утра до 15 часов", "с 10:00 до 14:00", "11:00-15:00", "зарядка с 11 утра до 15 часов дня", "с 14 до 18", "с 14 часов до 18"), то:
      * start_time = время начала (11:00, 10:00, 14:00 и т.д.)
      * end_time = время окончания (15:00, 14:00, 18:00 и т.д.)
@@ -163,15 +191,41 @@ Intent (проверяй в порядке):
                "с 14 до 18" → start_time="14:00", end_time="18:00" на сегодня
                "с 14 часов до 18" → start_time="14:00", end_time="18:00" на сегодня
                "завтра с 14 до 18" → start_time="завтра 14:00", end_time="завтра 18:00"
-11. "update" - "измени/перенеси событие X" (update_fields)
+11. "update" - "измени/перенеси событие X"
+    Примеры:
+    - "перенеси встречу на завтра" → intent="update", title="встреча", new_date="завтра"
+    - "сдвинь на час позже" → intent="update", refers_to_last_event: true, relative_time_modification: "+1 hour"
+    - "измени время на 15:00" → intent="update", refers_to_last_event: true, new_time="15:00"
+    - "перенеси его на среду" → intent="update", refers_to_last_event: true, new_date="среда"
+    - "раньше на 30 минут" → intent="update", refers_to_last_event: true, relative_time_modification: "-30 minutes"
 12. "update_many" - "перенеси все X"
 13. "delete" - "удали событие X"
+    Примеры:
+    - "удали встречу с Настей" → intent="delete", title="встреча с Настей"
+    - "удали это" → intent="delete", refers_to_last_event: true
+    - "удали то что на вторник" → intent="delete", time_period="вторник"
+    - "стереть последнее" → intent="delete", refers_to_last_event: true
+    - "убрать событие" → intent="delete", refers_to_last_event: true
 14. "search" - поиск
 15. "list_notes" - "покажи заметки"
 16. "delete_note" - "удали заметку"
 17. "note" - ТОЛЬКО если НЕТ даты/времени и явно сказано "заметка"
 
-Поля JSON: intent, title/titles, description, start_time, end_time, location, priority (0-5), time_period, pattern, reminder_intervals, note_text, update_fields, refers_to_last_event, message_type (для small_talk: "greeting"|"how_are_you"|"thanks"|"goodbye"|"general").
+Поля JSON:
+- intent, title/titles, description
+- start_time, end_time, location, priority (0-5)
+- time_period, pattern, reminder_intervals, note_text, update_fields
+- refers_to_last_event: bool (true если "это", "его", "её" и т.д.)
+- message_type (для small_talk: "greeting"|"how_are_you"|"thanks"|"goodbye"|"general")
+- relative_time_modification: str | null ("+1 hour", "-30 minutes", "+1 day")
+- new_date: str | null (для update: "завтра", "среда", "2026-01-20")
+- new_time: str | null (для update: "15:00", "10:30")
+- operation_verb: str | null ("удали", "перенеси", "измени" - для приоритизации)
+- is_recurring: bool (для повторяющихся событий)
+- recurrence_type: 'daily' | 'weekly' | 'monthly' | null
+- interval: int (для recurring, по умолчанию 1)
+- days_of_week: List[str] | null (например ['MO', 'WE', 'FR'])
+- day_of_month: int | null (1-31).
 
 ПРАВИЛО: Дата/время + действие = СОБЫТИЕ, не заметка!
 ПРАВИЛО: "напомни" + время + действие = СОБЫТИЕ с этим временем!
@@ -225,6 +279,16 @@ RECURRING PATTERNS (повторяющиеся события):
           "с 14 до 18" → start_time="14:00", end_time="18:00" (на сегодня)
           "с 14 часов до 18" → start_time="14:00", end_time="18:00" (на сегодня)
           "завтра с 14 до 18" → start_time="завтра 14:00", end_time="завтра 18:00"
+
+ВАЖНО для контекста:
+- Если в сообщении есть "это", "его", "её", "то" → refers_to_last_event: true
+- Если есть глагол операции ("удали", "перенеси", "измени") → извлекай operation_verb
+- Если есть относительный модификатор ("на час позже", "+30 минут") → извлекай relative_time_modification
+- Примеры:
+  * "удали это" → intent="delete", refers_to_last_event: true, operation_verb: "удали"
+  * "перенеси на час позже" → intent="update", refers_to_last_event: true, relative_time_modification: "+1 hour", operation_verb: "перенеси"
+  * "измени время на 15:00" → intent="update", refers_to_last_event: true, new_time: "15:00", operation_verb: "измени"
+  * "сдвинь на завтра" → intent="update", refers_to_last_event: true, new_date: "завтра", operation_verb: "сдвинь"
 
 Верни JSON:
 {{
