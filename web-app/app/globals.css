@@ -38,7 +38,7 @@
     /* === MODERNIZED LIGHT THEME === */
 
     /* Base colors */
-    --background: 245 245 250;
+    --background: 0 0% 98%;
     --foreground: 220 25% 10%;
 
     /* Cards with improved contrast */
@@ -56,12 +56,12 @@
     --primary-dark: 260 85% 55%;
 
     /* Secondary colors */
-    --secondary: 220 15% 96%;
+    --secondary: 220 20% 96%;
     --secondary-foreground: 220 25% 10%;
 
     /* Muted colors */
-    --muted: 220 15% 95%;
-    --muted-foreground: 220 10% 40%;
+    --muted: 220 20% 95%;
+    --muted-foreground: 220 15% 40%;
 
     /* Accent colors */
     --accent: 260 85% 96%;
