@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, X, MessageSquare, Bug, Lightbulb, Image as ImageIcon, Loader2 } from "lucide-react"
+import { ArrowLeft, X, MessageSquare, Bug, Lightbulb, Image as ImageIcon, Loader2, Check, Clock, Circle } from "lucide-react"
 import { Card, CardContent } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
 import { getErrorDetails, formatErrorForDisplay, type ErrorDetails } from "../../../lib/error-utils"
-import { apiGet, apiPost, formatApiError, type ApiError } from "../../../lib/apiClient"
+import { apiGet, apiPut, formatApiError, type ApiError } from "../../../lib/apiClient"
 import { useNavigation } from "../../../lib/useNavigation"
+
+type FeedbackStatus = 'new' | 'in_progress' | 'resolved'
 
 interface FeedbackItem {
   id: string
@@ -15,6 +17,7 @@ interface FeedbackItem {
   type: string
   comment: string
   screenshotUrl?: string
+  status?: FeedbackStatus
   sheetName?: string
   sheetRowNumber?: number
   createdAt: string
@@ -234,6 +237,65 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
     return s.slice(0, max).trimEnd() + "…"
   }
 
+  const getStatusLabel = (status?: FeedbackStatus) => {
+    switch (status) {
+      case 'in_progress': return 'В работе'
+      case 'resolved': return 'Выполнено'
+      case 'new':
+      default: return 'Новое'
+    }
+  }
+
+  const getStatusColor = (status?: FeedbackStatus) => {
+    switch (status) {
+      case 'in_progress': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
+      case 'resolved': return 'bg-green-500/10 text-green-600 border-green-500/20'
+      case 'new':
+      default: return 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+    }
+  }
+
+  const getStatusIcon = (status?: FeedbackStatus) => {
+    switch (status) {
+      case 'in_progress': return Clock
+      case 'resolved': return Check
+      case 'new':
+      default: return Circle
+    }
+  }
+
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+
+  const updateStatus = async (feedbackId: string, newStatus: FeedbackStatus) => {
+    if (!user?.id) return
+
+    setUpdatingStatus(feedbackId)
+    try {
+      const response = await apiPut<{ success?: boolean; error?: string }>(
+        `/api/feedback/${feedbackId}/status`,
+        { user_id: parseInt(user.id), status: newStatus },
+        { timeout: 10000 }
+      )
+
+      if (response.success) {
+        // Обновляем локальное состояние
+        setFeedback(prev => prev.map(item => 
+          item.id === feedbackId ? { ...item, status: newStatus } : item
+        ))
+        if (selected && selected.id === feedbackId) {
+          setSelected({ ...selected, status: newStatus })
+        }
+        console.log(`[Feedback] ✅ Статус обновлен: ${feedbackId} -> ${newStatus}`)
+      } else {
+        console.error(`[Feedback] ❌ Ошибка обновления статуса:`, response.error)
+      }
+    } catch (e: any) {
+      console.error(`[Feedback] ❌ Ошибка обновления статуса:`, e)
+    } finally {
+      setUpdatingStatus(null)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Header */}
@@ -286,6 +348,7 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
               {feedback.map((item) => {
                 const TypeIcon = getFeedbackTypeIcon(item.type)
                 const typeLabel = getFeedbackTypeLabel(item.type)
+                const StatusIcon = getStatusIcon(item.status)
                 
                 return (
                   <Card key={item.id} className="border-border">
@@ -293,13 +356,18 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
                       <div className="space-y-4">
                         {/* Header */}
                         <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <TypeIcon className="h-5 w-5 text-muted-foreground" />
                             <span className="font-semibold">#{item.id}</span>
                             <span className="text-sm text-muted-foreground">•</span>
                             <span className="text-sm font-medium">{typeLabel}</span>
+                            {/* Status Badge */}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
+                              <StatusIcon className="h-3 w-3" />
+                              {getStatusLabel(item.status)}
+                            </span>
                           </div>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
                             {formatDate(item.createdAt)}
                           </span>
                         </div>
@@ -363,9 +431,72 @@ export function FeedbackPageClient({ user: initialUser }: FeedbackPageClientProp
               </button>
             </div>
             <div className="p-4 space-y-4 max-h-[80vh] overflow-auto">
+              {/* Status section */}
+              <div className="space-y-2">
+                <div className="font-medium text-sm">Статус</div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Current status badge */}
+                  {(() => {
+                    const StatusIcon = getStatusIcon(selected.status)
+                    return (
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(selected.status)}`}>
+                        <StatusIcon className="h-3 w-3" />
+                        {getStatusLabel(selected.status)}
+                      </span>
+                    )
+                  })()}
+                  
+                  {/* Status change buttons */}
+                  <div className="flex gap-2 ml-auto">
+                    {selected.status !== 'new' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateStatus(selected.id, 'new')}
+                        disabled={updatingStatus === selected.id}
+                        className="text-xs"
+                      >
+                        <Circle className="h-3 w-3 mr-1" />
+                        Новое
+                      </Button>
+                    )}
+                    {selected.status !== 'in_progress' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateStatus(selected.id, 'in_progress')}
+                        disabled={updatingStatus === selected.id}
+                        className="text-xs"
+                      >
+                        <Clock className="h-3 w-3 mr-1" />
+                        В работе
+                      </Button>
+                    )}
+                    {selected.status !== 'resolved' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateStatus(selected.id, 'resolved')}
+                        disabled={updatingStatus === selected.id}
+                        className="text-xs bg-green-500/10 hover:bg-green-500/20 border-green-500/30 text-green-600"
+                      >
+                        <Check className="h-3 w-3 mr-1" />
+                        Выполнено
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {updatingStatus === selected.id && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Обновление статуса...</span>
+                  </div>
+                )}
+              </div>
+
               <div className="text-sm text-muted-foreground">
                 <div><span className="font-medium">User ID:</span> {selected.userId}</div>
-                <div><span className="font-medium">Created:</span> {formatDate(selected.createdAt)}</div>
+                <div><span className="font-medium">Создано:</span> {formatDate(selected.createdAt)}</div>
                 {selected.sheetName && (
                   <div><span className="font-medium">Sheet:</span> {selected.sheetName}{selected.sheetRowNumber ? ` #${selected.sheetRowNumber}` : ""}</div>
                 )}

@@ -279,10 +279,17 @@ class Database:
                         feedback_type TEXT NOT NULL,
                         comment TEXT NOT NULL,
                         screenshot_url TEXT,
+                        status TEXT DEFAULT 'new',
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     )
                 """)
+                
+                # Добавляем колонку status если её нет (для существующих БД)
+                try:
+                    cursor.execute("ALTER TABLE feedback ADD COLUMN status TEXT DEFAULT 'new'")
+                except:
+                    pass
                 
                 # Таблица для списков задач
                 cursor.execute("""
@@ -530,10 +537,17 @@ class Database:
                         feedback_type TEXT NOT NULL,
                         comment TEXT NOT NULL,
                         screenshot_url TEXT,
+                        status TEXT DEFAULT 'new',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     )
                 """)
+                
+                # Добавляем колонку status если её нет (для существующих БД)
+                try:
+                    cursor.execute("ALTER TABLE feedback ADD COLUMN status TEXT DEFAULT 'new'")
+                except:
+                    pass
                 
                 # Таблица для списков задач
                 cursor.execute("""
@@ -1835,7 +1849,7 @@ class Database:
         finally:
             self.return_connection(conn)
     
-    def save_feedback(self, user_id: int, feedback_type: str, comment: str, screenshot_url: Optional[str] = None) -> Optional[int]:
+    def save_feedback(self, user_id: int, feedback_type: str, comment: str, screenshot_url: Optional[str] = None, status: str = 'new') -> Optional[int]:
         """Сохранить обратную связь в БД."""
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -1843,16 +1857,16 @@ class Database:
         try:
             if self.use_postgresql:
                 cursor.execute("""
-                    INSERT INTO feedback (user_id, feedback_type, comment, screenshot_url)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO feedback (user_id, feedback_type, comment, screenshot_url, status)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING id
-                """, (user_id, feedback_type, comment, screenshot_url))
+                """, (user_id, feedback_type, comment, screenshot_url, status))
                 feedback_id = cursor.fetchone()[0]
             else:
                 cursor.execute("""
-                    INSERT INTO feedback (user_id, feedback_type, comment, screenshot_url)
-                    VALUES (?, ?, ?, ?)
-                """, (user_id, feedback_type, comment, screenshot_url))
+                    INSERT INTO feedback (user_id, feedback_type, comment, screenshot_url, status)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (user_id, feedback_type, comment, screenshot_url, status))
                 feedback_id = cursor.lastrowid
             
             conn.commit()
@@ -1875,7 +1889,7 @@ class Database:
                 cursor.close()
                 dict_cursor = conn.cursor(cursor_factory=RealDictCursor)
                 dict_cursor.execute("""
-                    SELECT id, user_id, feedback_type, comment, screenshot_url, sheet_name, sheet_row_number, created_at
+                    SELECT id, user_id, feedback_type, comment, screenshot_url, status, sheet_name, sheet_row_number, created_at
                     FROM feedback
                     ORDER BY created_at DESC
                     LIMIT %s OFFSET %s
@@ -1891,6 +1905,7 @@ class Database:
                         'feedback_type': row.get('feedback_type'),
                         'comment': row.get('comment'),
                         'screenshot_url': row.get('screenshot_url'),
+                        'status': row.get('status', 'new'),
                         'sheet_name': row.get('sheet_name'),  # Может быть None если колонка не существует
                         'sheet_row_number': row.get('sheet_row_number'),  # Может быть None если колонка не существует
                         'created_at': row.get('created_at')
@@ -1900,7 +1915,7 @@ class Database:
                 # Для SQLite выбираем только существующие колонки (без sheet_name и sheet_row_number, если их нет)
                 # Выполняем запрос
                 cursor.execute("""
-                    SELECT id, user_id, feedback_type, comment, screenshot_url, created_at
+                    SELECT id, user_id, feedback_type, comment, screenshot_url, status, created_at
                     FROM feedback
                     ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
@@ -1916,6 +1931,9 @@ class Database:
                     # Добавляем None для отсутствующих колонок
                     row_dict['sheet_name'] = None
                     row_dict['sheet_row_number'] = None
+                    # Устанавливаем default для status если нет
+                    if 'status' not in row_dict or row_dict.get('status') is None:
+                        row_dict['status'] = 'new'
                     result.append(row_dict)
                 
                 logger.debug(f"get_all_feedback SQLite: получено {len(result)} записей из {len(rows)} строк")
@@ -1940,6 +1958,51 @@ class Database:
         except Exception as e:
             logger.error(f"Ошибка подсчета обратной связи: {e}", exc_info=True)
             return 0
+        finally:
+            self.return_connection(conn)
+    
+    def update_feedback_status(self, feedback_id: int, status: str) -> bool:
+        """Обновить статус обратной связи.
+        
+        Args:
+            feedback_id: ID записи обратной связи
+            status: Новый статус ('new', 'in_progress', 'resolved')
+        
+        Returns:
+            True если обновление успешно, False иначе
+        """
+        if status not in ('new', 'in_progress', 'resolved'):
+            logger.warning(f"Неверный статус обратной связи: {status}")
+            return False
+        
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.use_postgresql:
+                cursor.execute(
+                    "UPDATE feedback SET status = %s WHERE id = %s",
+                    (status, feedback_id)
+                )
+            else:
+                cursor.execute(
+                    "UPDATE feedback SET status = ? WHERE id = ?",
+                    (status, feedback_id)
+                )
+            
+            updated = cursor.rowcount > 0
+            conn.commit()
+            
+            if updated:
+                logger.info(f"Статус обратной связи {feedback_id} обновлен на '{status}'")
+            else:
+                logger.warning(f"Обратная связь {feedback_id} не найдена")
+            
+            return updated
+        except Exception as e:
+            logger.error(f"Ошибка обновления статуса обратной связи: {e}", exc_info=True)
+            conn.rollback()
+            return False
         finally:
             self.return_connection(conn)
     

@@ -2636,7 +2636,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 photo_file = await context.bot.get_file(photo.file_id)
             elif update.message.document and (update.message.document.mime_type or "").startswith("image/"):
                 photo_file = await context.bot.get_file(update.message.document.file_id)
-                
+            
+            # Если получили файл изображения (photo или document), обрабатываем его
+            if photo_file:
                 try:
                     from io import BytesIO
                     import base64

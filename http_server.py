@@ -353,9 +353,9 @@ async def get_feedback_handler(request: web_request.Request):
                 conn = db_to_use.get_connection()
                 cursor = conn.cursor()
                 
-                # Получаем все записи напрямую
+                # Получаем все записи напрямую (включая status)
                 cursor.execute("""
-                    SELECT id, user_id, feedback_type, comment, screenshot_url, created_at
+                    SELECT id, user_id, feedback_type, comment, screenshot_url, status, created_at
                     FROM feedback
                     ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
@@ -381,6 +381,9 @@ async def get_feedback_handler(request: web_request.Request):
                                 row_dict[col_name] = row[col_idx]
                         row_dict['sheet_name'] = None
                         row_dict['sheet_row_number'] = None
+                        # Устанавливаем default для status если нет
+                        if 'status' not in row_dict or row_dict.get('status') is None:
+                            row_dict['status'] = 'new'
                         feedback_list.append(row_dict)
                         logger.debug(f"📊 HTTP API: Обработана строка {idx+1}: {row_dict}")
                     except Exception as e:
@@ -427,15 +430,31 @@ async def get_feedback_handler(request: web_request.Request):
                 'warning': 'feedback_list is empty but total_count > 0'
             })
         
+        # Часовой пояс для конвертации времени
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        
         for idx, item in enumerate(feedback_list):
             try:
                 created_at = item.get('created_at')
+                created_at_str = None
+                
                 if isinstance(created_at, datetime):
-                    created_at_str = created_at.isoformat()
+                    # Если время без timezone, считаем его UTC
+                    if created_at.tzinfo is None:
+                        created_at = pytz.utc.localize(created_at)
+                    # Конвертируем в Europe/Moscow
+                    created_at_moscow = created_at.astimezone(moscow_tz)
+                    created_at_str = created_at_moscow.isoformat()
                 elif isinstance(created_at, str):
-                    created_at_str = created_at
-                else:
-                    created_at_str = None
+                    # Пробуем распарсить и сконвертировать
+                    try:
+                        dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        if dt.tzinfo is None:
+                            dt = pytz.utc.localize(dt)
+                        created_at_moscow = dt.astimezone(moscow_tz)
+                        created_at_str = created_at_moscow.isoformat()
+                    except:
+                        created_at_str = created_at
                 
                 web_feedback.append({
                     'id': str(item.get('id', '')),
@@ -443,6 +462,7 @@ async def get_feedback_handler(request: web_request.Request):
                     'type': item.get('feedback_type'),
                     'comment': item.get('comment'),
                     'screenshotUrl': item.get('screenshot_url'),
+                    'status': item.get('status', 'new'),
                     'sheetName': item.get('sheet_name'),
                     'sheetRowNumber': item.get('sheet_row_number'),
                     'createdAt': created_at_str
@@ -611,6 +631,66 @@ async def get_feedback_screenshot_handler(request: web_request.Request):
     except Exception as e:
         logger.error(f"❌ HTTP API: Error get_feedback_screenshot: {e}", exc_info=True)
         return web.Response(status=500, text="Internal server error")
+
+
+async def update_feedback_status_handler(request: web_request.Request):
+    """
+    PUT /api/feedback/{feedback_id}/status
+    Body: { user_id, status }
+    Updates the status of a feedback item (only for super-user).
+    """
+    try:
+        feedback_id_str = request.match_info.get("feedback_id")
+        if not feedback_id_str:
+            return json_response({'error': 'feedback_id required'}, status=400)
+        
+        try:
+            feedback_id = int(feedback_id_str)
+        except ValueError:
+            return json_response({'error': 'Invalid feedback_id'}, status=400)
+        
+        try:
+            data = await request.json()
+        except Exception as e:
+            return json_response({'error': f'Invalid JSON: {str(e)}'}, status=400)
+        
+        user_id = data.get("user_id")
+        new_status = data.get("status")
+        
+        if not user_id:
+            return json_response({'error': 'user_id required'}, status=400)
+        
+        try:
+            user_id_int = int(user_id)
+        except ValueError:
+            return json_response({'error': 'Invalid user_id'}, status=400)
+        
+        # Только супер-пользователь может менять статус
+        if user_id_int != config.SUPER_USER_ID:
+            return json_response({'error': 'Access denied'}, status=403)
+        
+        if not new_status:
+            return json_response({'error': 'status required'}, status=400)
+        
+        if new_status not in ('new', 'in_progress', 'resolved'):
+            return json_response({'error': 'Invalid status. Must be: new, in_progress, or resolved'}, status=400)
+        
+        # Обновляем статус в БД
+        db = Database()
+        success = db.update_feedback_status(feedback_id, new_status)
+        
+        if success:
+            return json_response({
+                'success': True,
+                'feedback_id': feedback_id,
+                'status': new_status
+            })
+        else:
+            return json_response({'error': 'Failed to update status or feedback not found'}, status=404)
+    
+    except Exception as e:
+        logger.error(f"❌ HTTP API: Error update_feedback_status: {e}", exc_info=True)
+        return json_response({'error': str(e)}, status=500)
 
 
 async def health_handler(request: web_request.Request):
@@ -1299,6 +1379,7 @@ def create_app():
     app.router.add_post('/api/settings', update_settings_handler)
     app.router.add_get('/api/feedback', get_feedback_handler)
     app.router.add_post('/api/feedback/submit', submit_feedback_handler)
+    app.router.add_put('/api/feedback/{feedback_id}/status', update_feedback_status_handler)
     app.router.add_get('/feedback/screenshots/{filename}', get_feedback_screenshot_handler)
     
     # To-Do Lists API

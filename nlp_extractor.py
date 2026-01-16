@@ -106,7 +106,20 @@ class NLPExtractor:
             
             # Если это reply, добавляем информацию об этом
             if is_reply:
-                last_event_info += "\n\n⚠️ Это reply к сообщению. Если это заметка/примечание без даты - это intent 'add_note' к последнему событию."
+                last_event_info += """
+
+⚠️ Это REPLY к сообщению бота о событии. ВАЖНЫЕ ПРАВИЛА:
+- "удали" / "удалить" / "стереть" / "убрать" → intent="delete" (удалить событие)
+- "перенеси на [дата]" / "измени время на [время]" → intent="update" (изменить событие)
+- "напомни за [время]" / "добавь напоминание" → intent="add_reminder" (добавить напоминание)
+- Просто текст без операций → intent="add_note" (добавить заметку к событию)
+
+Примеры:
+- Reply + "удали" → intent="delete", refers_to_last_event: true
+- Reply + "перенеси на завтра" → intent="update", refers_to_last_event: true, new_date="завтра"
+- Reply + "напомни за час" → intent="add_reminder", refers_to_last_event: true, reminder_intervals: [60]
+- Reply + "важная встреча" → intent="add_note", note_text="важная встреча"
+"""
             
             # Добавляем информацию о режиме интерпретации в промпт
             interpretation_note = ""
@@ -125,6 +138,11 @@ class NLPExtractor:
    - Слово "напомни" + время + действие = СОБЫТИЕ (например: "напомни в 14:00 проветрить", "напомни завтра в 10 утра позвонить")
    - Примеры: "завтра в 11 утра зарядка", "сегодня в 15:00 встреча", "фотосессия в 17:00 19-го января", "встреча 3-е февраля в 14:00"
    - ВАЖНО: Распознавай даты в формате "19-го января", "3-е февраля", "1-го марта" как полноценные даты!
+   - 🔴 КРИТИЧНО: Принимай ЛЮБОЕ действие/активность как валидное событие, НЕЗАВИСИМО от содержания:
+     * "почесать яйца", "попить пивка", "поспать", "ничего не делать" - ВСЕ валидные события
+     * НЕ фильтруй действия по "благопристойности" или "уместности"
+     * Если есть дата/время + ЛЮБОЙ текст действия → intent="event"
+     * Примеры: "в 10 утра почесать яйца" → event, "завтра попить пивка" → event, "в пятницу поспать" → event
    - → intent: "event" (НЕ "note", НЕ "reminder", НЕ "add_reminder"!)
 
 2. ЗАМЕТКА К СОБЫТИЮ - только если:
@@ -269,6 +287,13 @@ RECURRING PATTERNS (повторяющиеся события):
   * "встреча с Настей 3-е февраля в 14:00" → intent="event", title="Встреча с Настей", start_time="2026-02-03T14:00:00"
   * "зарядка 15 января в 7 утра" → intent="event", title="Зарядка", start_time="2026-01-15T07:00:00"
 
+ВАЖНО для нестандартных действий (принимай ЛЮБЫЕ действия как валидные):
+- Примеры с нестандартными/разговорными действиями:
+  * "в 10 утра почесать яйца" → intent="event", title="почесать яйца", start_time="10:00"
+  * "завтра попить пивка с друзьями" → intent="event", title="попить пивка с друзьями", start_time="завтра"
+  * "в пятницу поспать" → intent="event", title="поспать", start_time="пятница"
+  * "сегодня в 20:00 ничего не делать" → intent="event", title="ничего не делать", start_time="20:00"
+
 ВАЖНО для диапазонов времени:
 - Если есть "с X до Y" / "X-Y" / "X до Y часов" / "от X до Y" / "с X часов до Y" → извлекай оба: start_time (начало) и end_time (окончание)
 - Если указано только время без даты (например, "с 14 до 18"), используй сегодняшнюю дату для обоих времен
@@ -287,6 +312,19 @@ RECURRING PATTERNS (повторяющиеся события):
 - Примеры:
   * "удали это" → intent="delete", refers_to_last_event: true, operation_verb: "удали"
   * "перенеси на час позже" → intent="update", refers_to_last_event: true, relative_time_modification: "+1 hour", operation_verb: "перенеси"
+
+ВАЖНО для Reply операций (когда is_reply=true):
+- Примеры reply к событиям:
+  * Context: is_reply=true, last_event="Встреча с клиентом 19.01 в 15:00"
+    Input: "удали" → intent="delete", refers_to_last_event: true, operation_verb: "удали"
+  * Context: is_reply=true, last_event="Фотосессия 20.01 в 17:00"
+    Input: "перенеси на завтра" → intent="update", refers_to_last_event: true, new_date: "завтра", operation_verb: "перенеси"
+  * Context: is_reply=true, last_event="Тренировка завтра в 18:00"
+    Input: "измени время на 16:00" → intent="update", refers_to_last_event: true, new_time: "16:00", operation_verb: "измени"
+  * Context: is_reply=true, last_event="Встреча завтра в 15:00"
+    Input: "напомни за час" → intent="add_reminder", refers_to_last_event: true, reminder_intervals: [60]
+  * Context: is_reply=true, last_event="Презентация 20.01 в 10:00"
+    Input: "важная встреча" → intent="add_note", note_text: "важная встреча"
   * "измени время на 15:00" → intent="update", refers_to_last_event: true, new_time: "15:00", operation_verb: "измени"
   * "сдвинь на завтра" → intent="update", refers_to_last_event: true, new_date: "завтра", operation_verb: "сдвинь"
 
@@ -348,6 +386,38 @@ RECURRING PATTERNS (повторяющиеся события):
                         # Если время 00:00:00 (только дата без времени), устанавливаем 12:00
                         if parsed_date.hour == 0 and parsed_date.minute == 0 and parsed_date.second == 0:
                             parsed_date = parsed_date.replace(hour=12, minute=0, second=0)
+                        
+                        # 🔴 КРИТИЧНО: Если указано только время (без явной даты) и оно уже прошло → сдвигаем на следующий день
+                        original_time_str = result.get("start_time", "").lower()
+                        
+                        # Проверяем была ли указана явная дата (день недели, число месяца, относительная дата)
+                        date_indicators = [
+                            'завтра', 'послезавтра', 'сегодня', 'вчера',
+                            'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье',
+                            'пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс',
+                            'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
+                            'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+                            'january', 'february', 'march', 'april', 'may', 'june',
+                            'july', 'august', 'september', 'october', 'november', 'december',
+                            'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+                            '-', '/'  # Разделители в датах (2026-01-19, 19/01/2026)
+                        ]
+                        
+                        has_explicit_date = any(indicator in original_time_str for indicator in date_indicators)
+                        # Также проверяем есть ли числа (возможно это дата в формате DD.MM или DD/MM)
+                        if not has_explicit_date and any(char.isdigit() for char in original_time_str):
+                            # Если есть два и более числа через точку/слэш - это дата
+                            import re
+                            date_pattern = r'\d{1,2}[\./]\d{1,2}|\d{1,2}\s+\w+'  # 19.01, 19/01, или "19 января"
+                            if re.search(date_pattern, original_time_str):
+                                has_explicit_date = True
+                        
+                        # Если НЕТ явной даты И время уже прошло → добавляем 1 день
+                        if not has_explicit_date and parsed_date < now:
+                            from datetime import timedelta
+                            parsed_date = parsed_date + timedelta(days=1)
+                            logger.info(f"⏰ Время '{original_time_str}' уже прошло сегодня, переносим на завтра: {parsed_date}")
+                        
                         result["start_time"] = parsed_date.astimezone(tz)
                     else:
                         result["start_time"] = None

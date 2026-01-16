@@ -234,7 +234,25 @@ class DecisionEngine:
         
         # Проверяем наличие слова "напомни" + время + действие
         has_remind_word = any(word in original_text for word in ['напомни', 'напомнить', 'напоминание', 'напоминать'])
+        
+        # 🔴 ИСПРАВЛЕНИЕ: Проверяем has_action по оригинальному тексту, не только по extracted title
+        # Если title есть - отлично, если нет - проверяем есть ли в тексте слова кроме временных выражений
         has_action = bool(title and len(title.strip()) > 0)
+        
+        # Если title пустой, но в тексте есть слова (возможно действие) - считаем что действие есть
+        if not has_action and original_text:
+            # Убираем временные выражения и проверяем остался ли текст
+            text_without_time = original_text.lower()
+            for keyword in time_keywords:
+                text_without_time = text_without_time.replace(keyword, '')
+            # Убираем предлоги и служебные слова
+            for word in ['в', 'на', 'с', 'до', 'к', 'по', 'для', 'за', 'у', 'о', 'об']:
+                text_without_time = text_without_time.replace(f' {word} ', ' ')
+            # Если после удаления временных слов остался текст (более 2 символов) - считаем что есть действие
+            text_without_time = text_without_time.strip()
+            if len(text_without_time) > 2:
+                has_action = True
+                logger.info(f"Fallback: обнаружено действие в тексте (title пустой, но есть текст: '{text_without_time}')")
         
         # Объединяем все признаки времени
         has_any_time = start_time or has_time_in_text or has_time_format
@@ -271,10 +289,20 @@ class DecisionEngine:
             intent = 'event'
             extracted_data['intent'] = 'event'
             extracted_data['has_explicit_time'] = bool(start_time)
-            # Если title пустой, но есть description - используем description как title
-            if not extracted_data.get('title') and extracted_data.get('description'):
-                extracted_data['title'] = extracted_data['description']
-                extracted_data['description'] = None
+            
+            # 🔴 ИСПРАВЛЕНИЕ: Если title пустой, пытаемся извлечь из текста
+            if not extracted_data.get('title'):
+                # Пробуем использовать description как title
+                if extracted_data.get('description'):
+                    extracted_data['title'] = extracted_data['description']
+                    extracted_data['description'] = None
+                # Если и description пустой - извлекаем title из оригинального текста
+                elif original_text:
+                    extracted_title = self._extract_title_from_text(original_text)
+                    if extracted_title:
+                        extracted_data['title'] = extracted_title
+                        logger.info(f"🔴 Извлечен title из текста: '{extracted_title}'")
+            
             logger.warning(f"✅ Fallback: переопределил intent '{original_intent}' → 'event' ({reason}). Текст: '{original_text}'")
         
         # Если это reply к событию и intent="note" - переопределяем на "add_note"
@@ -284,31 +312,40 @@ class DecisionEngine:
             extracted_data['intent'] = 'add_note'
             extracted_data['refers_to_last_event'] = True
 
-        # FALLBACK: Определение типа операции для reply по глаголу
+        # 🔴 ИСПРАВЛЕНИЕ: Определение типа операции для reply НЕЗАВИСИМО от текущего intent
         if reply_to_event and original_text:
-            # "удали" в reply → это delete события, не note!
-            if any(word in original_text.lower() for word in ['удали', 'удалить', 'стереть', 'убрать']):
-                if intent == 'note' or intent == 'add_note':
+            text_lower = original_text.lower()
+            
+            # "удали" в reply → это delete события, НЕЗАВИСИМО от текущего intent
+            if any(word in text_lower for word in ['удали', 'удалить', 'стереть', 'убрать']):
+                if intent != 'delete':
+                    logger.info(f"🔴 Fallback: reply + 'удали' → intent='delete' (было '{intent}')")
                     intent = 'delete'
                     extracted_data['intent'] = 'delete'
                     extracted_data['refers_to_last_event'] = True
-                    logger.info(f"Fallback: reply + 'удали' → intent='delete' (было '{original_intent}')")
 
-            # "перенеси/измени" в reply → это update, не note!
-            elif any(word in original_text.lower() for word in ['перенеси', 'перенести', 'измени', 'изменить', 'сдвинь', 'передвинь']):
-                if intent == 'note' or intent == 'add_note':
+            # "перенеси/измени" в reply → это update
+            elif any(word in text_lower for word in ['перенеси', 'перенести', 'измени', 'изменить', 'сдвинь', 'передвинь']):
+                if intent not in ['update', 'event']:  # event может быть корректным для update
+                    logger.info(f"🔴 Fallback: reply + 'перенеси/измени' → intent='update' (было '{intent}')")
                     intent = 'update'
                     extracted_data['intent'] = 'update'
                     extracted_data['refers_to_last_event'] = True
-                    logger.info(f"Fallback: reply + 'перенеси/измени' → intent='update' (было '{original_intent}')")
 
-            # "напомни" в reply → это add_reminder, не event!
-            elif any(word in original_text.lower() for word in ['напомни', 'напоминание', 'напомнить']):
-                if intent == 'event' or intent == 'note':
+            # "напомни" в reply → это add_reminder
+            elif any(word in text_lower for word in ['напомни', 'напоминание', 'напомнить']):
+                if intent != 'add_reminder':
+                    logger.info(f"🔴 Fallback: reply + 'напомни' → intent='add_reminder' (было '{intent}')")
                     intent = 'add_reminder'
                     extracted_data['intent'] = 'add_reminder'
                     extracted_data['refers_to_last_event'] = True
-                    logger.info(f"Fallback: reply + 'напомни' → intent='add_reminder' (было '{original_intent}')")
+            
+            # Если есть reply но нет операционных глаголов → add_note (только если intent не определен корректно)
+            elif intent not in ['add_note', 'note', 'delete', 'update', 'add_reminder']:
+                logger.info(f"🔴 Fallback: reply без операций → intent='add_note' (было '{intent}')")
+                intent = 'add_note'
+                extracted_data['intent'] = 'add_note'
+                extracted_data['note_text'] = original_text
 
         # FALLBACK: Определение refers_to_last_event по местоимениям
         if original_text and not extracted_data.get('refers_to_last_event', False):
@@ -3141,4 +3178,53 @@ class DecisionEngine:
             'event_id': event_id,
             'needs_confirmation': False
         }
+    
+    def _extract_title_from_text(self, text: str) -> str:
+        """
+        Извлечь title из оригинального текста, убрав временные выражения.
+        
+        Используется как fallback когда NLP не смог извлечь title.
+        
+        Args:
+            text: Оригинальный текст сообщения
+            
+        Returns:
+            Извлеченный title или пустая строка
+        """
+        if not text:
+            return ""
+        
+        import re
+        
+        # Список временных выражений для удаления
+        time_patterns = [
+            r'\d{1,2}:\d{2}',  # 10:00, 14:30
+            r'\d{1,2}\s*(час|часов|утра|дня|вечера)',  # 10 утра, 14 часов
+            r'в\s+\d{1,2}',  # в 10, в 14
+            r'\d{1,2}-го\s+\w+',  # 19-го января
+            r'\d{1,2}\s+\w+',  # 19 января
+            r'завтра|сегодня|послезавтра|вчера',
+            r'понедельник|вторник|среда|четверг|пятница|суббота|воскресенье',
+            r'пн|вт|ср|чт|пт|сб|вс',
+            r'января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря',
+        ]
+        
+        # Удаляем все временные выражения
+        cleaned_text = text.lower()
+        for pattern in time_patterns:
+            cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.IGNORECASE)
+        
+        # Удаляем предлоги и служебные слова
+        prepositions = ['в', 'на', 'с', 'до', 'к', 'по', 'для', 'за', 'у', 'о', 'об', 'от']
+        for prep in prepositions:
+            cleaned_text = cleaned_text.replace(f' {prep} ', ' ')
+            # Также удаляем если предлог в начале
+            if cleaned_text.startswith(f'{prep} '):
+                cleaned_text = cleaned_text[len(prep)+1:]
+        
+        # Очищаем от множественных пробелов и обрезаем
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+        
+        # Возвращаем очищенный текст, ограниченный 100 символами
+        return cleaned_text[:100] if cleaned_text else ""
 
