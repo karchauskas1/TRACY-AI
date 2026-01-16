@@ -1,14 +1,28 @@
 "use client"
 
-import { useEffect, useState, useRef, Suspense } from "react"
+import { useEffect, useState, useRef, Suspense, useCallback } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { logger } from "../../lib/logger"
-import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug } from "lucide-react"
+import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug, GripVertical } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
 import { useTelegramUser } from "../../lib/useTelegramUser"
+
+// Определение плиток для главного экрана
+interface TileConfig {
+  id: string
+  href: string
+  title: string
+  description: string
+  icon: React.ReactNode
+  gradient: string
+  gradientLine: string
+  hoverColor: string
+}
+
+const DEFAULT_TILE_ORDER = ['chat', 'calendar', 'history', 'todos']
 
 declare global {
   interface Window {
@@ -30,6 +44,202 @@ function AssistantPageContent() {
   const eventCountsRef = useRef({ pointerdown: 0, click: 0, touchstart: 0 })
   const lastClickRef = useRef<{ target: string; timestamp: number } | null>(null)
   const lastNavAttemptRef = useRef<string | null>(null)
+
+  // Drag-and-drop состояние для плиток
+  const [tileOrder, setTileOrder] = useState<string[]>(DEFAULT_TILE_ORDER)
+  const [draggedTile, setDraggedTile] = useState<string | null>(null)
+  const [dragOverTile, setDragOverTile] = useState<string | null>(null)
+
+  // Загрузка порядка плиток из localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tile_order')
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (Array.isArray(parsed) && parsed.length === DEFAULT_TILE_ORDER.length) {
+            setTileOrder(parsed)
+          }
+        } catch (e) {
+          console.error('Failed to parse tile order:', e)
+        }
+      }
+    }
+  }, [])
+
+  // Обработчики drag-and-drop
+  const handleDragStart = useCallback((e: React.DragEvent, tileId: string) => {
+    setDraggedTile(tileId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', tileId)
+    // Добавляем небольшую задержку для визуального эффекта
+    setTimeout(() => {
+      (e.target as HTMLElement).style.opacity = '0.5'
+    }, 0)
+  }, [])
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    (e.target as HTMLElement).style.opacity = '1'
+    setDraggedTile(null)
+    setDragOverTile(null)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, tileId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (draggedTile && draggedTile !== tileId) {
+      setDragOverTile(tileId)
+    }
+  }, [draggedTile])
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverTile(null)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent, targetTileId: string) => {
+    e.preventDefault()
+    const sourceTileId = e.dataTransfer.getData('text/plain')
+    
+    if (sourceTileId && sourceTileId !== targetTileId) {
+      setTileOrder(prevOrder => {
+        const newOrder = [...prevOrder]
+        const sourceIndex = newOrder.indexOf(sourceTileId)
+        const targetIndex = newOrder.indexOf(targetTileId)
+        
+        if (sourceIndex !== -1 && targetIndex !== -1) {
+          // Удаляем элемент из исходной позиции и вставляем в целевую
+          newOrder.splice(sourceIndex, 1)
+          newOrder.splice(targetIndex, 0, sourceTileId)
+          
+          // Сохраняем в localStorage
+          localStorage.setItem('tile_order', JSON.stringify(newOrder))
+        }
+        
+        return newOrder
+      })
+    }
+    
+    setDraggedTile(null)
+    setDragOverTile(null)
+  }, [])
+
+  // Конфигурация плиток
+  const tilesConfig: Record<string, TileConfig> = {
+    chat: {
+      id: 'chat',
+      href: '/chat',
+      title: 'Чат с Tracy',
+      description: 'Онлайн чат с AI-ассистентом для планирования дня',
+      icon: <MessageCircle className="h-7 w-7 text-white" />,
+      gradient: 'from-primary to-purple-600',
+      gradientLine: 'from-primary via-purple-500 to-pink-500',
+      hoverColor: 'text-primary',
+    },
+    calendar: {
+      id: 'calendar',
+      href: '/calendar',
+      title: 'Календарь',
+      description: 'Просмотр и управление событиями',
+      icon: <Calendar className="h-7 w-7 text-white" />,
+      gradient: 'from-blue-500 to-cyan-500',
+      gradientLine: 'from-blue-500 via-cyan-500 to-teal-500',
+      hoverColor: 'text-blue-500',
+    },
+    history: {
+      id: 'history',
+      href: '/meetings/history',
+      title: 'История расшифровок',
+      description: 'Просмотр всех расшифрованных встреч',
+      icon: <History className="h-7 w-7 text-white" />,
+      gradient: 'from-orange-500 to-red-500',
+      gradientLine: 'from-orange-500 via-red-500 to-pink-500',
+      hoverColor: 'text-orange-500',
+    },
+    todos: {
+      id: 'todos',
+      href: '/todo-lists',
+      title: 'Списки задач',
+      description: 'Создание и управление списками задач',
+      icon: <ListTodo className="h-7 w-7 text-white" />,
+      gradient: 'from-green-500 to-teal-500',
+      gradientLine: 'from-green-500 via-emerald-500 to-teal-500',
+      hoverColor: 'text-green-500',
+    },
+  }
+
+  // Рендер одной плитки
+  const renderTile = (tileId: string) => {
+    const tile = tilesConfig[tileId]
+    if (!tile) return null
+
+    const isDragging = draggedTile === tileId
+    const isDragOver = dragOverTile === tileId
+
+    return (
+      <div
+        key={tile.id}
+        draggable
+        onDragStart={(e) => handleDragStart(e, tile.id)}
+        onDragEnd={handleDragEnd}
+        onDragOver={(e) => handleDragOver(e, tile.id)}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e, tile.id)}
+        className={`relative ${isDragOver ? 'scale-105' : ''} transition-transform duration-200`}
+      >
+        <Link
+          href={tile.href}
+          className="block group"
+          onClick={() => {
+            logger.info('AssistantPage', `Card clicked: ${tile.href}`)
+            if (debugMode) {
+              lastNavAttemptRef.current = tile.href
+            }
+          }}
+        >
+          <div className={`relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 ${isDragOver ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+            {/* Gradient line on top */}
+            <div className={`h-1 bg-gradient-to-r ${tile.gradientLine}`} />
+
+            <div className="p-6">
+              <div className="flex items-center gap-4">
+                {/* Drag handle */}
+                <div 
+                  className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <GripVertical className="h-5 w-5" />
+                </div>
+
+                {/* Icon with gradient and glow */}
+                <div className="relative">
+                  <div className={`absolute inset-0 bg-gradient-to-br ${tile.gradient} rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity`} />
+                  <div className={`relative h-14 w-14 rounded-2xl bg-gradient-to-br ${tile.gradient} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                    {tile.icon}
+                  </div>
+                </div>
+
+                <div className="flex-1">
+                  <h3 className={`text-xl font-bold mb-1 group-hover:${tile.hoverColor} transition-colors`}>
+                    {tile.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {tile.description}
+                  </p>
+                </div>
+
+                {/* Arrow */}
+                <div className={`text-muted-foreground group-hover:${tile.hoverColor} group-hover:translate-x-1 transition-all`}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Link>
+      </div>
+    )
+  }
 
   // Диагностика в debug=1 режиме
   useEffect(() => {
@@ -231,178 +441,15 @@ function AssistantPageContent() {
             </Card>
           )}
 
-          {/* Main Features */}
+          {/* Main Features - Draggable Tiles */}
           <div className="space-y-4">
-            {/* Чат с Tracy - MODERNIZED */}
-            <Link
-              href="/chat"
-              className="block group"
-              onClick={() => {
-                logger.info('AssistantPage', 'Card clicked: /chat')
-                if (debugMode) {
-                  lastNavAttemptRef.current = '/chat'
-                }
-              }}
-            >
-              <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-                {/* Gradient line on top */}
-                <div className="h-1 bg-gradient-to-r from-primary via-purple-500 to-pink-500" />
-
-                <div className="p-6">
-                  <div className="flex items-center gap-4">
-                    {/* Icon with gradient and glow */}
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-gradient-to-br from-primary to-purple-600 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-                      <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                        <MessageCircle className="h-7 w-7 text-white" />
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold mb-1 group-hover:text-primary transition-colors">
-                        Чат с Tracy
-                      </h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Онлайн чат с AI-ассистентом для планирования дня
-                      </p>
-                    </div>
-
-                    {/* Arrow */}
-                    <div className="text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Link>
-
-            {/* Calendar - MODERNIZED */}
-            <Link
-              href="/calendar"
-              className="block group"
-              onClick={() => {
-                logger.info('AssistantPage', 'Card clicked: /calendar')
-                if (debugMode) {
-                  lastNavAttemptRef.current = '/calendar'
-                }
-              }}
-            >
-              <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-                <div className="h-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500" />
-
-                <div className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-                      <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                        <Calendar className="h-7 w-7 text-white" />
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold mb-1 group-hover:text-blue-500 transition-colors">
-                        Календарь
-                      </h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Просмотр и управление событиями
-                      </p>
-                    </div>
-
-                    <div className="text-muted-foreground group-hover:text-blue-500 group-hover:translate-x-1 transition-all">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Link>
-
-            {/* История расшифровок - MODERNIZED */}
-            <Link
-              href="/meetings/history"
-              className="block group"
-              onClick={() => {
-                logger.info('AssistantPage', 'Card clicked: /meetings/history')
-                if (debugMode) {
-                  lastNavAttemptRef.current = '/meetings/history'
-                }
-              }}
-            >
-              <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-                <div className="h-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500" />
-
-                <div className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-                      <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                        <History className="h-7 w-7 text-white" />
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold mb-1 group-hover:text-orange-500 transition-colors">
-                        История расшифровок
-                      </h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Просмотр всех расшифрованных встреч
-                      </p>
-                    </div>
-
-                    <div className="text-muted-foreground group-hover:text-orange-500 group-hover:translate-x-1 transition-all">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Link>
-
-            {/* Списки задач - MODERNIZED */}
-            <Link
-              href="/todo-lists"
-              className="block group"
-              onClick={() => {
-                logger.info('AssistantPage', 'Card clicked: /todo-lists')
-                if (debugMode) {
-                  lastNavAttemptRef.current = '/todo-lists'
-                }
-              }}
-            >
-              <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-                <div className="h-1 bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500" />
-
-                <div className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-                      <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-green-500 to-teal-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                        <ListTodo className="h-7 w-7 text-white" />
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold mb-1 group-hover:text-green-500 transition-colors">
-                        Списки задач
-                      </h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Создание и управление списками задач
-                      </p>
-                    </div>
-
-                    <div className="text-muted-foreground group-hover:text-green-500 group-hover:translate-x-1 transition-all">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Link>
+            {/* Hint about drag-and-drop */}
+            <p className="text-xs text-muted-foreground text-center mb-2">
+              Перетащите плитки для изменения порядка
+            </p>
+            
+            {/* Render tiles in user-defined order */}
+            {tileOrder.map(tileId => renderTile(tileId))}
 
             {/* Обратная связь (только для супер-пользователя) */}
             {isSuperUser && (

@@ -176,9 +176,15 @@ class NLPExtractor:
 - "перенеси на час" → intent="update", relative_time_modification: "+1 hour"
 - "раньше на 30 минут" → relative_time_modification: "-30 minutes"
 
+🔴 ПРИОРИТЕТ: Если в сообщении есть И small_talk И команда (событие, удаление, и т.д.), то:
+- intent = команда (event/delete/update и т.д.)
+- small_talk игнорируется
+- Пример: "Привет! Встреча завтра в 15:00" → intent="event", НЕ "small_talk"
+
 Intent (проверяй в порядке):
-1. "small_talk" - приветствия, вопросы о делах, благодарности:
+1. "small_talk" - приветствия, вопросы о делах, благодарности (ТОЛЬКО если нет команд/событий):
    - Примеры: "привет", "здравствуй", "как дела", "как у тебя дела", "что нового", "спасибо", "пока", "до свидания"
+   - ⚠️ ВАЖНО: Если в том же сообщении есть событие, дата, время, команда → это НЕ small_talk!
    - → intent: "small_talk", message_type: "greeting" | "how_are_you" | "thanks" | "goodbye"
 2. "delete_all" - "удали все планы/события"
 3. "list_events" - "покажи события/планы" (time_period: today/tomorrow/week/month/all)
@@ -367,8 +373,9 @@ RECURRING PATTERNS (повторяющиеся события):
             
             result = json.loads(response.choices[0].message.content)
             
-            # Сохраняем оригинальный текст для fallback проверок
+            # Сохраняем оригинальный текст для fallback проверок и small_talk генерации
             result['_original_text'] = text
+            result['original_text'] = text  # Для доступа из decision_engine
             
             # Парсинг дат и нормализация
             if result.get("start_time"):
@@ -414,7 +421,6 @@ RECURRING PATTERNS (повторяющиеся события):
                         
                         # Если НЕТ явной даты И время уже прошло → добавляем 1 день
                         if not has_explicit_date and parsed_date < now:
-                            from datetime import timedelta
                             parsed_date = parsed_date + timedelta(days=1)
                             logger.info(f"⏰ Время '{original_time_str}' уже прошло сегодня, переносим на завтра: {parsed_date}")
                         
@@ -505,7 +511,8 @@ RECURRING PATTERNS (повторяющиеся события):
             "priority": 0,
             "has_explicit_time": False,
             "confidence": 0.3,
-            "_original_text": text  # Сохраняем оригинальный текст для fallback логики
+            "_original_text": text,  # Сохраняем оригинальный текст для fallback логики
+            "original_text": text  # Для доступа из decision_engine
         }
         return result
     

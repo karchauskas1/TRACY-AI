@@ -1360,54 +1360,24 @@ class DecisionEngine:
         }
     
     async def _handle_small_talk(self, user_id: int, extracted_data: Dict) -> Dict:
-        """Обработать приветствия и общий разговор."""
+        """Обработать приветствия и общий разговор с фиксированными ответами."""
         message_type = extracted_data.get('message_type', 'general')
-
-        # Разные ответы в зависимости от типа сообщения
+        
+        # Фиксированные ответы по типу сообщения
         responses = {
-            'greeting': [
-                "Привет! 👋 Я твой умный календарь-ассистент.",
-                "Здравствуй! Рад тебя видеть! 📅",
-                "Привет! Готов помочь с планами.",
-            ],
-            'how_are_you': [
-                "У меня всё отлично, спасибо! 😊",
-                "Всё хорошо, работаю для тебя! 💪",
-                "Отлично! Готов помогать с делами.",
-            ],
-            'thanks': [
-                "Всегда пожалуйста! 😊",
-                "Рад помочь! ✨",
-                "Обращайся! 💙",
-            ],
-            'goodbye': [
-                "Пока! До скорой встречи! 👋",
-                "До свидания! Буду ждать твоих задач! 📅",
-                "Удачи! Возвращайся! ✨",
-            ],
-            'general': [
-                "Понял! 😊",
-                "Хорошо! 👍",
-                "Принял! ✅",
-            ]
+            'greeting': "Привет!",
+            'how_are_you': "Всё хорошо, спасибо!",
+            'thanks': "Пожалуйста! Я всегда рядом",
+            'goodbye': "Пока!",
+            'general': "Понял!"
         }
-
-        import random
-        base_response = random.choice(responses.get(message_type, responses['general']))
-
-        # Добавляем напоминание о возможностях
-        capabilities_reminder = (
-            "\n\n💡 Что я умею:\n"
-            "• Создавать события — просто скажи что и когда\n"
-            "• Напоминать о делах — я не дам забыть\n"
-            "• Показывать планы — спроси «что на сегодня»\n"
-            "• Управлять календарём — удалять, переносить\n\n"
-            "Напиши своё дело или вопрос, и я помогу! 🚀"
-        )
-
+        
+        response_message = responses.get(message_type, "Понял!")
+        logger.info(f"Small_talk response: '{response_message}' for message_type: '{message_type}'")
+        
         return {
             'action': 'small_talk',
-            'message': base_response + capabilities_reminder,
+            'message': response_message,
             'needs_confirmation': False
         }
 

@@ -42,6 +42,31 @@ conversation_memory = None  # Будет инициализирован в main(
 conversation_handler = None  # Будет инициализирован в main()
 
 
+async def notify_super_user_about_feedback(user_id: int, feedback_type: str, comment: str):
+    """Отправить уведомление суперпользователю о новой обратной связи."""
+    from telegram import Bot
+    
+    try:
+        super_user_id = config.SUPER_USER_ID
+        if not super_user_id:
+            logger.warning("SUPER_USER_ID не настроен, уведомление не отправлено")
+            return
+        
+        type_label = "🐛 Баг" if feedback_type == "bug" else "💡 Предложение"
+        message = (
+            f"📬 Новая обратная связь!\n\n"
+            f"Тип: {type_label}\n"
+            f"От пользователя: {user_id}\n"
+            f"Комментарий: {comment[:200]}{'...' if len(comment) > 200 else ''}"
+        )
+        
+        bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+        await bot.send_message(chat_id=super_user_id, text=message)
+        logger.info(f"✅ Уведомление о фидбэке отправлено суперпользователю {super_user_id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки уведомления суперпользователю: {e}", exc_info=True)
+
+
 async def submit_feedback_to_backend(
     user_id: int,
     feedback_type: str,
@@ -62,7 +87,12 @@ async def submit_feedback_to_backend(
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(url, json=payload)
         resp.raise_for_status()
-        return resp.json()
+        result = resp.json()
+        
+        # Отправляем уведомление суперпользователю о новом фидбэке
+        await notify_super_user_about_feedback(user_id, feedback_type, comment)
+        
+        return result
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

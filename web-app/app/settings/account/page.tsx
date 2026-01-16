@@ -49,7 +49,7 @@ export default function AccountPage() {
   }, [])
 
   const handleClose = () => {
-    router.push("/settings")
+    router.back()
   }
 
   const displayName = user?.name || [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Пользователь"

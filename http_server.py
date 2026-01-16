@@ -540,6 +540,31 @@ def _guess_ext_and_content_type(image_bytes: bytes) -> tuple[str, str]:
     return (".jpg", "image/jpeg")
 
 
+async def notify_super_user_about_feedback(user_id: int, feedback_type: str, comment: str):
+    """Отправить уведомление суперпользователю о новой обратной связи."""
+    try:
+        from telegram import Bot
+        
+        super_user_id = config.SUPER_USER_ID
+        if not super_user_id:
+            logger.warning("SUPER_USER_ID не настроен, уведомление не отправлено")
+            return
+        
+        type_label = "🐛 Баг" if feedback_type == "bug" else "💡 Предложение"
+        message = (
+            f"📬 Новая обратная связь!\n\n"
+            f"Тип: {type_label}\n"
+            f"От пользователя: {user_id}\n"
+            f"Комментарий: {comment[:200]}{'...' if len(comment) > 200 else ''}"
+        )
+        
+        bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+        await bot.send_message(chat_id=super_user_id, text=message)
+        logger.info(f"✅ Уведомление о фидбэке отправлено суперпользователю {super_user_id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки уведомления суперпользователю: {e}", exc_info=True)
+
+
 async def submit_feedback_handler(request: web_request.Request):
     """
     POST /api/feedback/submit
@@ -586,6 +611,9 @@ async def submit_feedback_handler(request: web_request.Request):
         feedback_id = db.save_feedback(user_id_int, str(feedback_type), str(comment), screenshot_url=screenshot_url)
         if not feedback_id:
             return json_response({'error': 'Failed to save feedback'}, status=500)
+
+        # Отправить уведомление суперпользователю
+        await notify_super_user_about_feedback(user_id_int, str(feedback_type), str(comment))
 
         return json_response({
             'success': True,
@@ -1213,7 +1241,10 @@ async def send_chat_message_handler(request: web_request.Request):
             )
 
             assistant_message = (result.get('message') or '').strip()
-            if assistant_message:
+            action = result.get('action')
+
+            # Логируем только если это НЕ small_talk (бытовые диалоги не нужны в истории)
+            if assistant_message and action != 'small_talk':
                 db.save_chat_message(user_id, 'assistant', assistant_message)
 
             return json_response({
