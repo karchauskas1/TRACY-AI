@@ -1,6 +1,92 @@
 """
-Простой HTTP сервер для обслуживания запросов от веб-приложения.
-Позволяет веб-приложению получать события напрямую из БД через HTTP API.
+==============================================================================
+HTTP_SERVER.PY - REST API ДЛЯ ВЕБ-ПРИЛОЖЕНИЯ
+==============================================================================
+
+ОПИСАНИЕ:
+    HTTP сервер (aiohttp) для обслуживания запросов от веб-приложения.
+    Предоставляет REST API для работы с событиями, встречами, чатом, feedback.
+
+ЗАВИСИМОСТИ (импортирует):
+    - database.py       → Database для всех CRUD операций
+    - nlp_extractor.py  → NLPExtractor для веб-чата
+    - decision_engine.py→ DecisionEngine для обработки команд из веб-чата
+    - config.py         → SUPER_USER_ID, OPENROUTER_*, TELEGRAM_BOT_TOKEN
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - bot.py            → start_http_server() запускается параллельно с ботом
+
+ЗАПУСК СЕРВЕРА:
+    bot.py → asyncio.create_task(start_http_server(host, port))
+    По умолчанию: http://localhost:8080
+
+API ENDPOINTS:
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ EVENTS                                                                   │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ GET  /api/events?user_id=XXX         Список событий пользователя        │
+    │ GET  /api/events?user_id=XXX&from=..&to=..  Фильтр по периоду          │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ MEETINGS                                                                │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ GET  /api/meetings?user_id=XXX       Список расшифровок встреч          │
+    │ GET  /api/meetings/{id}?user_id=XXX  Конкретная встреча                 │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ TODO-LISTS                                                              │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ GET  /api/todo-lists?user_id=XXX     Все списки задач                   │
+    │ POST /api/todo-lists                 Создать список                     │
+    │ GET  /api/todo-lists/{id}?user_id=XXX  Получить список + items         │
+    │ PUT  /api/todo-lists/{id}            Обновить название                  │
+    │ DEL  /api/todo-lists/{id}?user_id=XXX Удалить список                   │
+    │ POST /api/todo-lists/{id}/items      Создать задачу                     │
+    │ PUT  /api/todo-items/{id}            Обновить задачу                    │
+    │ DEL  /api/todo-items/{id}            Удалить задачу                     │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ CHAT (веб-интерфейс)                                                    │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ GET  /api/chat/messages?user_id=XXX  История сообщений                  │
+    │ GET  /api/chat/greeting?user_id=XXX  Приветственное сообщение           │
+    │ POST /api/chat/send                  Отправить сообщение → AI ответ     │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ FEEDBACK (только SUPER_USER_ID)                                         │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ GET  /api/feedback?user_id=XXX       Получить все feedback              │
+    │ POST /api/feedback/submit            Отправить feedback + screenshot    │
+    │ PUT  /api/feedback/{id}/status       Изменить статус (new/in_progress)  │
+    │ GET  /feedback/screenshots/{name}    Получить скриншот                  │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ SETTINGS                                                                │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ POST /api/settings                   Обновить настройки пользователя    │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ SYSTEM                                                                  │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ GET  /                               Информация о сервере               │
+    │ GET  /health                         Health check                       │
+    │ POST /api/telegram-proxy             Прокси для Telegram Mini App       │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+CORS:
+    - Разрешены: karchauskas1.github.io, localhost:3000, localhost:3001
+    - Middleware автоматически добавляет CORS заголовки ко всем ответам
+
+ВЕБ-ЧАТ FLOW:
+    1. POST /api/chat/send {user_id, message}
+    2. → Сохранение сообщения пользователя в chat_messages
+    3. → NLPExtractor.extract_intent_and_context()
+    4. → DecisionEngine.process_intent() → выполнение действия
+    5. → Если QA/small_talk → fallback на прямой LLM-ответ
+    6. → Сохранение ответа ассистента в chat_messages
+    7. ← {success, message, action?, event_id?}
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+    1. db_instance - глобальная ссылка на БД, устанавливается через set_database()
+    2. nlp/engine создаются lazy при первом запросе в веб-чат
+    3. Feedback screenshots хранятся в ./data/feedback_uploads/
+    4. Порт по умолчанию 8080, можно изменить через config.PORT
+
+==============================================================================
 """
 import asyncio
 import base64
@@ -1194,27 +1280,11 @@ async def send_chat_message_handler(request: web_request.Request):
         # История чата для контекста (в т.ч. для follow-up команд вроде "перенеси на 16:00")
         chat_history = db.get_chat_messages(user_id, limit=50)
 
-        # If this is a direct question (Q&A) and does not look like an action command,
-        # skip decision_engine entirely for a more precise answer.
-        msg_lower = message.strip().lower()
-        is_question = (
-            "?" in msg_lower
-            or msg_lower.startswith(("как ", "почему ", "что ", "зачем ", "когда ", "где ", "сколько ", "какой ", "какая ", "какие "))
-        )
-        has_action_words = any(
-            w in msg_lower
-            for w in (
-                "создай", "создать", "добавь", "добавить", "перенеси", "перенести",
-                "удали", "удалить", "напомни", "напомин", "покажи", "показать",
-                "список", "задач", "календар", "встреч", "событи",
-            )
-        )
-
-        # 1) Пытаемся обработать через decision_engine (создание/изменение событий, задач и т.д.)
+        # 🔴 УМНЫЙ AI-РОУТИНГ: Пусть AI сам решает, что хочет пользователь
+        # УБРАНЫ захардкоженные списки слов (has_action_words, is_question)
+        # Теперь всегда используем NLP для классификации intent
+        
         try:
-            if is_question and not has_action_words:
-                raise RuntimeError("QA: bypass decision_engine")
-
             nlp, engine = _get_nlp_and_engine(db)
             last_event = db.get_last_event(user_id)
 
@@ -1228,35 +1298,51 @@ async def send_chat_message_handler(request: web_request.Request):
                 chat_history=chat_history,
             )
 
-            # Extra guard: if NLP couldn't detect a clear action for a question, route to QA fallback.
             intent = (extracted_data.get("intent") or "").strip().lower()
-            if is_question and intent in ("unknown", "note") and not has_action_words:
-                raise RuntimeError("QA: route to fallback")
+            logger.info(f"🔴 Web chat AI routing: intent='{intent}' for message: '{message[:50]}...'")
 
-            result = await engine.process_intent(
-                user_id,
-                extracted_data,
-                last_event=last_event,
-                reply_to_event=None,
-            )
+            # Роутинг по intent от AI:
+            # - Команды (event, delete, update, etc.) → decision_engine
+            # - Вопросы/диалог (question, small_talk, unknown) → LLM fallback
+            action_intents = [
+                "event", "delete", "update", "add_reminder", "list_events",
+                "delete_all", "delete_by_period", "delete_many", "delete_by_pattern",
+                "add_note", "create_many", "update_many", "search", "reminder",
+                "note", "list_notes", "delete_note"
+            ]
+            
+            # Если AI определил это как команду → выполняем через decision_engine
+            if intent in action_intents:
+                result = await engine.process_intent(
+                    user_id,
+                    extracted_data,
+                    last_event=last_event,
+                    reply_to_event=None,
+                )
 
-            assistant_message = (result.get('message') or '').strip()
-            action = result.get('action')
+                assistant_message = (result.get('message') or '').strip()
+                action = result.get('action')
 
-            # Логируем только если это НЕ small_talk (бытовые диалоги не нужны в истории)
-            if assistant_message and action != 'small_talk':
-                db.save_chat_message(user_id, 'assistant', assistant_message)
+                # Логируем только если это НЕ small_talk (бытовые диалоги не нужны в истории)
+                if assistant_message and action != 'small_talk':
+                    db.save_chat_message(user_id, 'assistant', assistant_message)
 
-            return json_response({
-                'success': True,
-                'message': assistant_message,
-                'action': result.get('action'),
-                'event_id': result.get('event_id'),
-                'needs_confirmation': result.get('needs_confirmation', False),
-                'confirmation_type': result.get('confirmation_type'),
-            })
+                return json_response({
+                    'success': True,
+                    'message': assistant_message,
+                    'action': result.get('action'),
+                    'event_id': result.get('event_id'),
+                    'needs_confirmation': result.get('needs_confirmation', False),
+                    'confirmation_type': result.get('confirmation_type'),
+                })
+            
+            # Если AI определил это как вопрос/small_talk/unknown → LLM fallback
+            # (question, small_talk, unknown → генерируем ответ через LLM)
+            logger.info(f"🔴 Web chat: intent='{intent}' → route to LLM fallback")
+            raise RuntimeError(f"QA: route to LLM fallback (intent={intent})")
+            
         except Exception as e:
-            logger.error(f"⚠️ Web chat: decision_engine failed, fallback to LLM-only: {e}", exc_info=True)
+            logger.info(f"⚠️ Web chat: routing to LLM fallback: {e}")
 
         # 2) Fallback: обычный LLM-ответ (без действий), как было раньше
 
@@ -1265,8 +1351,11 @@ async def send_chat_message_handler(request: web_request.Request):
         now = datetime.now(tz)
         events = db.get_events(user_id, limit=10, start_from=now, start_to=now + timedelta(days=30))
 
-        # Формируем контекст событий
-        events_context = ""
+        # Формируем контекст событий с текущим временем для понимания "сегодня/завтра"
+        current_time_str = now.strftime('%d.%m.%Y %H:%M')
+        today_str = now.strftime('%d.%m.%Y')
+        events_context = f"\n\n📅 Текущее время: {current_time_str}"
+        
         if events:
             events_list = []
             for event in sorted(events[:5], key=lambda e: e.get('start_time', datetime.min)):
@@ -1276,25 +1365,47 @@ async def send_chat_message_handler(request: web_request.Request):
                 if isinstance(start_time, datetime):
                     if start_time.tzinfo is None:
                         start_time = tz.localize(start_time)
-                    time_str = start_time.strftime('%d.%m.%Y %H:%M')
-                    events_list.append(f"- {time_str}: {title}")
+                    
+                    # Показываем "сегодня" или дату для ясности
+                    event_date = start_time.strftime('%d.%m.%Y')
+                    time_only = start_time.strftime('%H:%M')
+                    if event_date == today_str:
+                        time_str = f"СЕГОДНЯ {time_only}"
+                    else:
+                        time_str = start_time.strftime('%d.%m %H:%M')
+                    events_list.append(f"• {time_str} — {title}")
                 else:
-                    events_list.append(f"- {title}")
+                    events_list.append(f"• {title}")
 
             if events_list:
-                events_context = f"\n\nБлижайшие события пользователя:\n" + "\n".join(events_list)
+                events_context += f"\n\n📋 Ближайшие события:\n" + "\n".join(events_list)
+        else:
+            events_context += "\n\n📋 У пользователя нет запланированных событий."
 
         # Формируем сообщения для AI
         messages = []
 
-        # System prompt
-        system_prompt = """Ты TRACY — AI-ассистент для планирования и ответов на вопросы пользователя.
+        # System prompt - улучшенный для конкретных ответов
+        system_prompt = """Ты TRACY — AI-ассистент для планирования. У тебя есть контекст событий пользователя.
+
+🔴 ГЛАВНОЕ ПРАВИЛО: Давай КОНКРЕТНЫЕ, ПОЛЕЗНЫЕ ответы. Никогда не отвечай "Как могу помочь?" или "Чем помочь?" — это бесполезно.
+
+Примеры ПРАВИЛЬНЫХ ответов:
+- Вопрос: "Как подготовиться к встрече?" → Ответ: "К встрече с Настей в 13:30 советую: 1) За 15 минут просмотри повестку 2) Подготовь вопросы 3) Проверь связь, если онлайн"
+- Вопрос: "Что у меня сегодня?" → Ответ: "Сегодня у тебя: 13:30 — Встреча с Настей, 15:00 — Встреча"
+- Вопрос: "Успею ли я?" → Ответ: "До встречи в 15:00 осталось 2 часа. Судя по расписанию, у тебя есть окно после 13:30"
+
+Примеры НЕПРАВИЛЬНЫХ ответов (НИКОГДА так не отвечай):
+❌ "Как могу помочь?"
+❌ "Чем могу быть полезен?"
+❌ "Что именно хочешь узнать?"
+❌ "Уточни, пожалуйста"
 
 Правила:
-1) Если пользователь задаёт вопрос (как/почему/что/зачем/?) — отвечай прямо и предметно, без общих фраз.
-2) Если пользователь просит действие (создать/перенести/удалить/напомнить) — объясни кратко, что сделал/что нужно уточнить.
-3) Если информации недостаточно — задай 1 уточняющий вопрос.
-4) Пиши по-русски, кратко, с конкретикой. Эмодзи — умеренно."""
+1) На вопросы (как/почему/что/зачем/?) — давай конкретные советы, используя контекст событий
+2) Если вопрос про подготовку — дай 2-3 практических совета
+3) Если неясно к какому событию относится вопрос — ВЫБЕРИ БЛИЖАЙШЕЕ из списка и ответь по нему
+4) Пиши по-русски, кратко, конкретно. Эмодзи — умеренно."""
 
         messages.append({"role": "system", "content": system_prompt + events_context})
 

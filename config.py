@@ -1,4 +1,59 @@
-"""Конфигурация приложения."""
+"""
+==============================================================================
+CONFIG.PY - КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ
+==============================================================================
+
+ОПИСАНИЕ:
+    Центральный файл конфигурации. Загружает переменные окружения из .env
+    и предоставляет их другим модулям.
+
+ЗАВИСИМОСТИ (импортирует):
+    - python-dotenv     → load_dotenv() для загрузки .env файла
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - bot.py            → TELEGRAM_BOT_TOKEN, WEB_APP_URL, PORT, HOST
+    - nlp_extractor.py  → OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_MODEL
+    - decision_engine.py→ OPENROUTER_*, DEFAULT_TIMEZONE
+    - database.py       → DATABASE_URL, DATABASE_PATH
+    - http_server.py    → SUPER_USER_ID, TRACY_API_BASE_URL
+    - calendar_google.py→ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, TOKENS_DIR
+    - reminder_scheduler.py → OPENROUTER_* (для мотивационных цитат)
+
+ОБЯЗАТЕЛЬНЫЕ ПЕРЕМЕННЫЕ (.env):
+    TELEGRAM_BOT_TOKEN       Токен бота от @BotFather
+    OPENROUTER_API_KEY       API ключ OpenRouter (или OpenAI)
+    
+ОПЦИОНАЛЬНЫЕ ПЕРЕМЕННЫЕ (.env):
+    OPENROUTER_BASE_URL      По умолчанию: https://openrouter.ai/api/v1
+    OPENROUTER_MODEL         По умолчанию: gpt-4o-mini
+    DATABASE_URL             PostgreSQL URL (production)
+    DATABASE_PATH            SQLite путь (по умолчанию: ./data/tracy.db)
+    HOST                     По умолчанию: localhost
+    PORT                     По умолчанию: 8080
+    DEFAULT_TIMEZONE         По умолчанию: Europe/Moscow
+    WEB_APP_URL              HTTPS URL веб-приложения (Telegram Mini App)
+    GOOGLE_CLIENT_ID         Для Google Calendar OAuth
+    GOOGLE_CLIENT_SECRET     Для Google Calendar OAuth
+    GOOGLE_REDIRECT_URI      По умолчанию: https://karchauskas1.github.io/TRACY-AI/
+    SUPER_USER_ID            ID суперпользователя (просмотр feedback)
+    TRACY_API_BASE_URL       URL API сервера (по умолчанию: http://localhost:8080)
+
+ПРИМЕР .env ФАЙЛА:
+    TELEGRAM_BOT_TOKEN=123456789:ABCdefGhIjKlMnOpQrStUvWxYz
+    OPENROUTER_API_KEY=sk-or-v1-xxx...
+    DATABASE_URL=postgresql://user:pass@host:5432/tracy
+    WEB_APP_URL=https://tracy-ai.vercel.app
+    SUPER_USER_ID=308477378
+
+ВАЛИДАЦИЯ WEB_APP_URL:
+    is_valid_production_url() проверяет:
+    ✓ HTTPS протокол
+    ✓ Не localhost
+    ✓ Не preview deployment (без -projects.vercel.app)
+    ✓ Домен в ALLOWED_PRODUCTION_DOMAINS
+
+==============================================================================
+"""
 import os
 from dotenv import load_dotenv
 

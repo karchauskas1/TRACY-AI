@@ -1,4 +1,56 @@
-"""Модуль для обработки встреч и создания резюме из аудиозаписей."""
+"""
+==============================================================================
+MEETING_PROCESSOR.PY - РАСШИФРОВКА ВСТРЕЧ И СОЗДАНИЕ РЕЗЮМЕ
+==============================================================================
+
+ОПИСАНИЕ:
+    Обрабатывает аудиозаписи встреч: расшифровка через Whisper API,
+    создание структурированного резюме, извлечение событий.
+
+ЗАВИСИМОСТИ (импортирует):
+    - config.py         → OPENROUTER_API_KEY для Whisper и GPT
+    - speech_recognition → Fallback на Google Speech
+    - pydub             → Конвертация аудиоформатов
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - bot.py            → meeting_processor = MeetingProcessor(nlp_extractor.client)
+                        → handle_meeting_audio() вызывает transcribe_meeting_audio()
+
+КЛЮЧЕВОЙ КЛАСС: MeetingProcessor
+
+КЛЮЧЕВЫЕ МЕТОДЫ:
+    | Метод                      | Описание                              |
+    |----------------------------|---------------------------------------|
+    | transcribe_meeting_audio() | Расшифровка аудио → текст с тайм-кодами|
+    | generate_meeting_summary() | Создание короткого резюме             |
+    | generate_extended_summary()| Создание подробного резюме            |
+    | extract_events_from_meeting()| Извлечение событий из текста        |
+
+FLOW ОБРАБОТКИ ВСТРЕЧИ:
+    1. handle_meeting_audio() (bot.py)
+    2. → transcribe_meeting_audio() → {transcript, raw_text, segments, duration}
+    3. → generate_meeting_summary() → краткое резюме
+    4. → database.save_meeting() → сохранение в БД
+    5. Опционально:
+       - generate_extended_summary() → подробное резюме
+       - extract_events_from_meeting() → события из встречи
+
+ФОРМАТ РЕЗУЛЬТАТА transcribe_meeting_audio():
+    {
+        'transcript': str,      # Текст с тайм-кодами "[00:00] текст..."
+        'raw_text': str,        # Чистый текст без тайм-кодов
+        'segments': list,       # [{start, end, text}, ...]
+        'duration': int         # Длительность в секундах
+    }
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+    1. Whisper API используется через OpenRouter (openai/whisper-1).
+    2. Fallback на Google Speech если Whisper недоступен.
+    3. Аудио конвертируется в MP3 перед отправкой в Whisper.
+    4. Резюме генерируется через GPT с промптом на русском языке.
+
+==============================================================================
+"""
 import io
 import logging
 import base64

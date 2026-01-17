@@ -1,4 +1,92 @@
-"""Модуль для извлечения intent и контекста из текста через OpenRouter."""
+"""
+==============================================================================
+NLP_EXTRACTOR.PY - ИЗВЛЕЧЕНИЕ INTENT И КОНТЕКСТА ЧЕРЕЗ AI (OpenRouter)
+==============================================================================
+
+ОПИСАНИЕ:
+    Модуль для NLP-обработки текста пользователя. Использует OpenRouter API
+    (совместимый с OpenAI) для извлечения структурированных данных из
+    естественного языка: intent, название события, дата/время, место и т.д.
+
+ЗАВИСИМОСТИ (импортирует):
+    - config.py          → OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_MODEL
+    - dateparser         → Парсинг дат из строк (внешняя библиотека)
+    - pytz               → Работа с часовыми поясами
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - bot.py             → nlp_extractor.extract_intent_and_context() для обработки сообщений
+    - conversation_handler.py → для извлечения ответов на уточняющие вопросы
+    - meeting_processor.py → использует self.client для генерации резюме
+
+КЛЮЧЕВОЙ КЛАСС: NLPExtractor
+
+ГЛАВНЫЙ МЕТОД:
+    async extract_intent_and_context(text, user_timezone, user_locale, last_event, is_reply, ...) → Dict
+
+ВОЗВРАЩАЕМЫЕ ПОЛЯ:
+    {
+        'intent': str,              # Тип действия (см. список ниже)
+        'title': str,               # Название события/напоминания
+        'description': str,         # Полное описание
+        'start_time': datetime,     # Время начала
+        'end_time': datetime,       # Время окончания
+        'location': str,            # Место проведения
+        'priority': int,            # Приоритет (0-5)
+        'has_explicit_time': bool,  # Было ли время указано явно
+        'confidence': float,        # Уверенность модели (0.0-1.0)
+        'refers_to_last_event': bool, # Ссылается ли на последнее событие
+        'reminder_intervals': list, # Интервалы напоминаний ["2 hours", "30 minutes"]
+        'is_recurring': bool,       # Повторяющееся событие
+        'recurrence_type': str,     # 'daily'|'weekly'|'monthly'
+        'days_of_week': list,       # ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
+        '_original_text': str       # Оригинальный текст (для fallback в decision_engine)
+    }
+
+ПОДДЕРЖИВАЕМЫЕ INTENT:
+    | Intent            | Описание                              | Пример команды                |
+    |-------------------|---------------------------------------|-------------------------------|
+    | event             | Создание события                      | "встреча завтра в 15:00"      |
+    | reminder          | Создание напоминания                  | "напомни позвонить"           |
+    | note              | Сохранение заметки                    | "заметка: купить молоко"      |
+    | update            | Изменение события                     | "перенеси встречу на 16:00"   |
+    | delete            | Удаление события                      | "удали встречу"               |
+    | delete_all        | Удаление всех событий                 | "удали все события"           |
+    | delete_by_period  | Удаление за период                    | "удали все за сегодня"        |
+    | list_events       | Показать список событий               | "покажи события на неделю"    |
+    | search            | Поиск событий                         | "найди встречу с клиентом"    |
+    | add_reminder      | Добавить напоминание к событию        | "напомни за час"              |
+    | add_note          | Добавить заметку к событию            | (reply) "важная встреча"      |
+    | small_talk        | Приветствия и болтовня                | "привет", "как дела?"         |
+
+SYSTEM_PROMPT (строки ~132-280):
+    Содержит детальные инструкции для AI модели. Это критически важная часть,
+    определяющая качество извлечения данных. Включает:
+    - Правила приоритета (событие > заметка к событию > заметка)
+    - Паттерны для recurring событий
+    - Обработку местоимений ("это", "его", "её")
+    - Примеры для каждого intent
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+    1. Температура модели = 0.3 (низкая для стабильных результатов)
+    2. response_format = json_object (гарантирует JSON ответ)
+    3. Время парсится через dateparser с учётом часового пояса пользователя
+    4. Если время прошло сегодня → автоматический сдвиг на завтра (строки ~391-420)
+    5. has_explicit_time=True только если время указано явно (не 00:00 default)
+
+ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ:
+    - _format_chat_history()      → Форматирование истории диалога для контекста
+    - _detect_missing_fields()    → Определение недостающих полей (для multi-turn)
+    - generate_clarification_question() → Генерация уточняющего вопроса
+    - extract_from_answer()       → Извлечение данных из ответа на уточняющий вопрос
+    - is_command()                → Проверка, является ли текст командой
+
+СВЯЗЬ С DECISION_ENGINE:
+    NLPExtractor возвращает extracted_data → decision_engine.process_intent()
+    Если NLP ошибся в определении intent, decision_engine содержит fallback-логику
+    для исправления типичных ошибок (см. decision_engine.py строки 137-368).
+
+==============================================================================
+"""
 import json
 import logging
 from typing import Dict, Optional, List, Any
@@ -12,7 +100,16 @@ logger = logging.getLogger(__name__)
 
 
 class NLPExtractor:
-    """Класс для NLP обработки и извлечения intent и контекста."""
+    """
+    Класс для NLP обработки и извлечения intent и контекста.
+    
+    Использует OpenRouter API для анализа текста пользователя и извлечения
+    структурированных данных о событиях, напоминаниях и командах.
+    
+    Attributes:
+        client: OpenAI - клиент для работы с API
+        model: str - название используемой модели (из config)
+    """
     
     def __init__(self):
         self.client = OpenAI(
@@ -186,7 +283,16 @@ Intent (проверяй в порядке):
    - Примеры: "привет", "здравствуй", "как дела", "как у тебя дела", "что нового", "спасибо", "пока", "до свидания"
    - ⚠️ ВАЖНО: Если в том же сообщении есть событие, дата, время, команда → это НЕ small_talk!
    - → intent: "small_talk", message_type: "greeting" | "how_are_you" | "thanks" | "goodbye"
-2. "delete_all" - "удали все планы/события"
+
+2. "question" - пользователь задаёт ВОПРОС и НЕ просит выполнить конкретное действие:
+   - Примеры: "Как подготовиться к встрече?", "Что мне делать?", "Почему важно планировать?"
+   - Примеры: "Как лучше организовать время?", "Что посоветуешь?", "Как справиться со стрессом?"
+   - ⚠️ НЕ "question" если есть дата/время + действие → это "event"!
+   - ⚠️ НЕ "question" если просят показать события → это "list_events"!
+   - ⚠️ "Что у меня на завтра?" → это "list_events", НЕ "question"!
+   - → intent: "question"
+
+3. "delete_all" - "удали все планы/события"
 3. "list_events" - "покажи события/планы" (time_period: today/tomorrow/week/month/all)
 4. "delete_by_period" - "удали все за сегодня/неделю"
 5. "delete_many" - "удали X и Y" (titles: ["X", "Y"])
@@ -336,7 +442,7 @@ RECURRING PATTERNS (повторяющиеся события):
 
 Верни JSON:
 {{
-    "intent": "event|reminder|note|list_events|delete_all|delete_by_period|delete_many|delete_by_pattern|add_reminder|add_note|create_many|update|update_many|delete|search|list_notes|delete_note|unknown",
+    "intent": "event|reminder|note|list_events|delete_all|delete_by_period|delete_many|delete_by_pattern|add_reminder|add_note|create_many|update|update_many|delete|search|list_notes|delete_note|small_talk|question|unknown",
     "title": "краткое название или null",
     "titles": ["название1", "название2"] или null (для delete_many, create_many),
     "description": "полное описание или null",
@@ -376,6 +482,9 @@ RECURRING PATTERNS (повторяющиеся события):
             # Сохраняем оригинальный текст для fallback проверок и small_talk генерации
             result['_original_text'] = text
             result['original_text'] = text  # Для доступа из decision_engine
+            
+            # 🔴 ВАЖНО: Сохраняем is_reply флаг для decision_engine
+            result['is_reply'] = is_reply
             
             # Парсинг дат и нормализация
             if result.get("start_time"):

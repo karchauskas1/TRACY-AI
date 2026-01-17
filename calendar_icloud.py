@@ -1,4 +1,68 @@
-"""Интеграция с iCloud Calendar через CalDAV."""
+"""
+==============================================================================
+CALENDAR_ICLOUD.PY - ИНТЕГРАЦИЯ С ICLOUD CALENDAR ЧЕРЕЗ CALDAV
+==============================================================================
+
+ОПИСАНИЕ:
+    Работа с iCloud Calendar через открытый протокол CalDAV.
+    Требует App-Specific Password (не основной пароль iCloud!).
+
+ЗАВИСИМОСТИ (импортирует):
+    - config.py         → (опционально, для общих настроек)
+    - caldav            → CalDAV клиент
+    - icalendar         → Парсинг и создание iCalendar событий
+    - ics               → Генерация ICS файлов
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - decision_engine.py → ICloudCalendar(user_id, url, user, pass).create_event() / delete_event()
+
+КЛЮЧЕВОЙ КЛАСС: ICloudCalendar
+
+ПОДКЛЮЧЕНИЕ К ICLOUD:
+    URL: https://caldav.icloud.com
+    Username: Apple ID (email)
+    Password: App-Specific Password (настраивается в appleid.apple.com)
+
+FLOW ПОДКЛЮЧЕНИЯ (в боте):
+    1. /connect_icloud → Запрос Apple ID
+    2. Пользователь вводит Apple ID
+    3. Бот запрашивает App-Specific Password
+    4. Пользователь вводит пароль
+    5. connect() → Проверка соединения
+    6. Credentials сохраняются в БД (calendar_connections)
+
+КЛЮЧЕВЫЕ МЕТОДЫ:
+    | Метод                   | Описание                              |
+    |-------------------------|---------------------------------------|
+    | connect()               | Проверка подключения к CalDAV         |
+    | create_event()          | Создать событие                       |
+    | update_event()          | Обновить событие по UID               |
+    | delete_event()          | Удалить событие по UID                |
+    | search_events()         | Поиск событий                         |
+    | add_reminders_to_event()| Добавить напоминания (VALARM)         |
+    | get_event_ics()         | Экспорт события в ICS                 |
+
+ОСОБЕННОСТИ CALDAV/ICALENDAR:
+    - События идентифицируются по UID (UUID)
+    - iCalendar формат VEVENT для событий
+    - VALARM для напоминаний (триггер относительно DTSTART)
+    - Поддержка RRULE для повторяющихся событий
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+    1. App-Specific Password создаётся в appleid.apple.com → Security
+    2. Двухфакторная аутентификация должна быть включена в iCloud.
+    3. Используется первый календарь из списка (calendars[0]).
+    4. Удаление события из бота также удаляет его из iCloud!
+
+ПРИМЕР СОЗДАНИЯ APP-SPECIFIC PASSWORD:
+    1. Зайти на appleid.apple.com
+    2. Sign in → Security → App-Specific Passwords
+    3. Generate Password → назвать "TRACY Bot"
+    4. Скопировать сгенерированный пароль
+    5. Использовать его при /connect_icloud
+
+==============================================================================
+"""
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
@@ -9,17 +73,22 @@ logger = logging.getLogger(__name__)
 
 
 class ICloudCalendar:
-    """Класс для работы с iCloud Calendar через CalDAV."""
+    """
+    Класс для работы с iCloud Calendar через CalDAV протокол.
+    
+    Каждый экземпляр привязан к конкретному пользователю с его credentials.
+    Credentials хранятся в БД, не в файловой системе.
+    """
     
     def __init__(self, user_id: int, caldav_url: str, username: str, password: str):
         """
         Инициализация CalDAV клиента.
         
         Args:
-            user_id: ID пользователя
+            user_id: ID пользователя Telegram
             caldav_url: URL CalDAV сервера (для iCloud: https://caldav.icloud.com)
-            username: Apple ID
-            password: App-specific password (не основной пароль!)
+            username: Apple ID (email)
+            password: App-specific password (НЕ основной пароль iCloud!)
         """
         self.user_id = user_id
         self.caldav_url = caldav_url

@@ -40,6 +40,12 @@ export default function ChatPage() {
   const msgTouchRef = useRef<{ y: number; scrollTop: number } | null>(null)
   const suppressAutoScrollUntilRef = useRef(0)
   const lastMsgTouchYRef = useRef<number | null>(null)
+  
+  // 🔴 iOS KEYBOARD FIX: refs для предотвращения дёрганья
+  const sendingRef = useRef(false) // Отслеживаем sending в ref для использования в callback
+  const lastKeyboardInsetRef = useRef(0) // Последнее значение keyboardInset
+  const keyboardInsetTimeoutRef = useRef<NodeJS.Timeout | null>(null) // Debounce timeout
+  const keyboardLockedUntilRef = useRef(0) // Блокировка обновления keyboardInset до этого времени
 
   useEffect(() => {
     // Если пользователь не авторизован, перенаправляем на логин
@@ -60,15 +66,38 @@ export default function ChatPage() {
   }
 
   // Keep input above the on-screen keyboard (iOS/Telegram WebView)
+  // 🔴 iOS KEYBOARD FIX: Debounce + блокировка при отправке
   useEffect(() => {
     if (typeof window === "undefined") return
     const vv = (window as any).visualViewport as VisualViewport | undefined
     if (!vv) return
 
     const computeInset = () => {
-      // How much of the layout viewport is covered by the visual viewport (keyboard)
-      const inset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop))
-      setKeyboardInset(Math.round(inset))
+      // 🔴 Блокируем обновление если идёт отправка сообщения
+      if (sendingRef.current) return
+      
+      // 🔴 Блокируем обновление если ещё не прошло время после отправки
+      if (Date.now() < keyboardLockedUntilRef.current) return
+      
+      const rawInset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop))
+      const inset = Math.round(rawInset)
+      
+      // 🔴 Игнорируем мелкие колебания (< 10px) для предотвращения jitter
+      const diff = Math.abs(inset - lastKeyboardInsetRef.current)
+      if (diff > 0 && diff < 10) return
+      
+      // 🔴 Debounce: откладываем обновление на 50ms, отменяем если пришло новое
+      if (keyboardInsetTimeoutRef.current) {
+        clearTimeout(keyboardInsetTimeoutRef.current)
+      }
+      
+      keyboardInsetTimeoutRef.current = setTimeout(() => {
+        // Повторная проверка перед применением
+        if (sendingRef.current || Date.now() < keyboardLockedUntilRef.current) return
+        
+        lastKeyboardInsetRef.current = inset
+        setKeyboardInset(inset)
+      }, 50)
     }
 
     computeInset()
@@ -77,6 +106,9 @@ export default function ChatPage() {
     return () => {
       vv.removeEventListener("resize", computeInset)
       vv.removeEventListener("scroll", computeInset)
+      if (keyboardInsetTimeoutRef.current) {
+        clearTimeout(keyboardInsetTimeoutRef.current)
+      }
     }
   }, [])
 
@@ -254,10 +286,12 @@ export default function ChatPage() {
     if (!inputMessage.trim() || sending || !userId) return
 
     const clientId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const messageText = inputMessage.trim()
+    
     const userMessage: ChatMessage = {
       id: Date.now(),
       role: "user",
-      content: inputMessage.trim(),
+      content: messageText,
       created_at: new Date().toISOString(),
       clientId,
     }
@@ -271,13 +305,20 @@ export default function ChatPage() {
       pending: true,
     }
 
-    // Добавляем сообщение пользователя и placeholder ответа ассистента сразу
-    setMessages((prev) => [...prev, userMessage, pendingAssistant])
-    const messageText = inputMessage.trim()
-    setInputMessage("")
+    // 🔴 iOS KEYBOARD FIX: Блокируем обновление keyboardInset во время отправки
+    sendingRef.current = true
+    // Блокируем обновления на время отправки + 500ms после
+    keyboardLockedUntilRef.current = Date.now() + 30000 // Будет обновлено в finally
+    
     setSending(true)
     setError(null)
     setErrorDetails(null)
+    
+    // Добавляем сообщение пользователя и placeholder ответа ассистента
+    // Используем requestAnimationFrame для батчинга state updates
+    requestAnimationFrame(() => {
+      setMessages((prev) => [...prev, userMessage, pendingAssistant])
+    })
 
     try {
       const result = await apiPost<{ success?: boolean; message?: string; error?: string }>(
@@ -338,9 +379,21 @@ export default function ChatPage() {
         )
       )
     } finally {
+      // 🔴 iOS KEYBOARD FIX: Разблокируем keyboard updates через 500ms после отправки
+      // Это даёт время iOS стабилизировать viewport
+      sendingRef.current = false
+      keyboardLockedUntilRef.current = Date.now() + 500
+      
       setSending(false)
-      // If user didn't scroll away, keep bottom pinned
-      if (isNearBottom) requestAnimationFrame(() => scrollToBottom("smooth"))
+      
+      // Очищаем input через двойной RAF для максимальной стабильности на iOS
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setInputMessage("")
+          // If user didn't scroll away, keep bottom pinned
+          if (isNearBottom) scrollToBottom("smooth")
+        })
+      })
     }
   }
 
@@ -511,7 +564,18 @@ export default function ChatPage() {
       {/* Input */}
       <div
         className="fixed left-0 right-0 border-t border-border bg-background p-4"
-        style={{ bottom: keyboardInset }}
+        style={{ 
+          // 🔴 iOS KEYBOARD FIX: Используем transform вместо bottom для GPU-ускорения
+          // transform более производительный чем изменение bottom
+          bottom: 0,
+          transform: `translateY(-${keyboardInset}px)`,
+          // Плавная анимация только когда не отправляем (sending блокирует)
+          transition: sending ? 'none' : 'transform 0.15s ease-out',
+          // GPU-ускорение
+          willChange: 'transform',
+          WebkitBackfaceVisibility: 'hidden',
+          backfaceVisibility: 'hidden',
+        }}
         onTouchStart={(e) => {
           if (e.touches.length !== 1) return
           touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() }

@@ -80,12 +80,22 @@
     --radius: 1rem;
 
     /* Calendar colors */
-    --calendar-selected: 25 95% 53%;
+    --calendar-selected: 260 85% 60%;
+    --calendar-selected-glow: 260 85% 65%;
     --calendar-event-dot: 270 70% 60%;
+    --calendar-today: 260 85% 65%;
+    --calendar-day-hover: 260 85% 96%;
 
     /* Glassmorphism variables */
     --glass-bg: rgba(255, 255, 255, 0.7);
     --glass-border: rgba(255, 255, 255, 0.3);
+    
+    /* Calendar glassmorphism - Light theme */
+    --calendar-glass-bg: rgba(255, 255, 255, 0.85);
+    --calendar-glass-border: rgba(200, 200, 220, 0.4);
+    --calendar-glass-shadow: 0 8px 32px rgba(100, 80, 180, 0.1);
+    --calendar-header-bg: linear-gradient(135deg, rgba(147, 112, 219, 0.15) 0%, rgba(186, 85, 211, 0.1) 100%);
+    --calendar-accent-gradient: linear-gradient(135deg, hsl(260, 85%, 60%) 0%, hsl(280, 75%, 55%) 100%);
 
     /* Shadows */
     --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
@@ -137,12 +147,22 @@
     --ring: 260 85% 65%;
 
     /* Calendar colors */
-    --calendar-selected: 25 95% 53%;
-    --calendar-event-dot: 270 70% 60%;
+    --calendar-selected: 260 85% 65%;
+    --calendar-selected-glow: 260 85% 70%;
+    --calendar-event-dot: 270 80% 70%;
+    --calendar-today: 260 85% 70%;
+    --calendar-day-hover: 260 30% 20%;
 
     /* Glassmorphism for dark theme */
     --glass-bg: rgba(30, 35, 48, 0.7);
     --glass-border: rgba(255, 255, 255, 0.1);
+    
+    /* Calendar glassmorphism - Dark theme */
+    --calendar-glass-bg: rgba(25, 28, 40, 0.85);
+    --calendar-glass-border: rgba(140, 100, 200, 0.25);
+    --calendar-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --calendar-header-bg: linear-gradient(135deg, rgba(147, 112, 219, 0.2) 0%, rgba(186, 85, 211, 0.15) 100%);
+    --calendar-accent-gradient: linear-gradient(135deg, hsl(260, 85%, 65%) 0%, hsl(280, 75%, 60%) 100%);
 
     /* Shadows for dark theme */
     --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);

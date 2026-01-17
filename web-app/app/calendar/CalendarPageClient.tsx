@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { format, isSameDay } from "date-fns"
 import { ru } from "date-fns/locale"
-import { Settings, X, MessageCircle, Send, Calendar as CalendarIcon, Clock } from "lucide-react"
+import { Settings, X, MessageCircle, Send, Calendar as CalendarIcon, Clock, ChevronRight } from "lucide-react"
 import { Card, CardContent } from "../../components/ui/card"
 import Link from "next/link"
 import { CalendarGrid } from "../../components/calendar/CalendarGrid"
@@ -323,41 +323,69 @@ export function CalendarPageClient() {
           />
         </div>
 
-        {/* Bottom Panel - Events for selected day */}
+        {/* Bottom Panel - Events for selected day with Glassmorphism */}
         <div className="px-4 pb-4">
-          <div className="bg-card rounded-2xl p-4 border border-border">
-            <h2 className="text-lg font-semibold mb-4">
-              {format(selectedDate, "d MMMM", { locale: ru })}
-            </h2>
+          <div 
+            className="rounded-2xl p-4"
+            style={{
+              background: 'var(--calendar-glass-bg)',
+              backdropFilter: 'blur(16px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+              border: '1px solid var(--calendar-glass-border)',
+              boxShadow: 'var(--calendar-glass-shadow)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">
+                {format(selectedDate, "d MMMM", { locale: ru })}
+              </h2>
+              <span className="text-sm text-muted-foreground">
+                {dayEvents.length > 0 ? `${dayEvents.length} событий` : ''}
+              </span>
+            </div>
             
             {loading ? (
               <div className="text-center text-muted-foreground py-8">
-                Загрузка...
+                <div className="inline-flex items-center gap-2">
+                  <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  Загрузка...
+                </div>
               </div>
             ) : dayEvents.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-muted-foreground mb-2">Сегодня нет событий</p>
+                <div className="mb-3 text-4xl">📭</div>
+                <p className="text-muted-foreground mb-3">Нет событий на этот день</p>
                 <a
                   href={telegramLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline text-sm"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all duration-200 hover:scale-105"
+                  style={{
+                    background: 'var(--calendar-accent-gradient)',
+                    boxShadow: '0 4px 12px rgba(147, 112, 219, 0.3)',
+                  }}
                 >
-                  Чат с TRACY для создания событий
+                  💬 Создать через TRACY
                 </a>
               </div>
             ) : (
               <div className="space-y-2">
-                {dayEvents.map((event) => (
+                {dayEvents.map((event, idx) => (
                   <div
                     key={event.id}
                     onClick={() => setSelectedEvent(event)}
-                    className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors cursor-pointer"
+                    className="flex items-start gap-3 rounded-xl p-3 transition-all duration-200 cursor-pointer hover:scale-[1.02]"
+                    style={{
+                      background: 'var(--calendar-glass-bg)',
+                      border: '1px solid var(--calendar-glass-border)',
+                      animationDelay: `${idx * 50}ms`,
+                    }}
                   >
                     <div
-                      className="mt-1.5 h-2 w-2 rounded-full flex-shrink-0"
+                      className="mt-1 h-3 w-3 rounded-full flex-shrink-0"
                       style={{
                         backgroundColor: event.calendarSource?.color || "hsl(var(--calendar-event-dot))",
+                        boxShadow: `0 0 8px ${event.calendarSource?.color || "hsl(var(--calendar-event-dot))"}40`,
                       }}
                     />
                     <div className="flex-1 min-w-0">
@@ -367,6 +395,9 @@ export function CalendarPageClient() {
                           ? "Весь день"
                           : formatTime(new Date(event.startAt))}
                       </p>
+                    </div>
+                    <div className="text-muted-foreground/50">
+                      <ChevronRight className="h-4 w-4" />
                     </div>
                   </div>
                 ))}

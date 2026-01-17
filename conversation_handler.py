@@ -1,4 +1,48 @@
-"""Обработчик multi-turn диалогов для естественного общения с ботом."""
+"""
+==============================================================================
+CONVERSATION_HANDLER.PY - MULTI-TURN ДИАЛОГИ (УТОЧНЯЮЩИЕ ВОПРОСЫ)
+==============================================================================
+
+ОПИСАНИЕ:
+    Управляет многошаговыми диалогами, когда пользователь не указал все
+    необходимые данные. Задаёт уточняющие вопросы и собирает информацию
+    пошагово перед выполнением действия.
+
+ЗАВИСИМОСТИ (импортирует):
+    - (нет внешних зависимостей, использует переданные объекты)
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - bot.py → conversation_handler.process_message() для обработки сообщений
+
+КЛЮЧЕВОЙ КЛАСС: ConversationHandler
+
+FLOW ДИАЛОГА:
+    1. process_message() → Проверка состояния
+    2. Если есть pending_action → _handle_answer() (ответ на вопрос)
+    3. Если нет pending_action → _handle_new_action() (новый запрос)
+    4. _handle_new_action():
+       a) nlp._detect_missing_fields() → определение недостающих полей
+       b) Если есть недостающие → memory.set_state() + вопрос
+       c) Если всё есть → engine.process_intent()
+    5. _handle_answer():
+       a) nlp.extract_from_answer() → извлечение значения
+       b) Обновление partial_data
+       c) Если ещё есть недостающие → следующий вопрос
+       d) Если всё собрано → engine.process_intent()
+
+СВЯЗЬ С ДРУГИМИ МОДУЛЯМИ:
+    - conversation_memory.py → хранение состояния диалога (pending_action, partial_data)
+    - nlp_extractor.py → _detect_missing_fields(), generate_clarification_question()
+    - decision_engine.py → process_intent() для выполнения действия
+
+ПРИМЕР ДИАЛОГА:
+    User: "Встреча завтра"
+    Bot:  "Во сколько встреча?"        ← missing: start_time
+    User: "В 15:00"
+    Bot:  "Отлично, создал событие..." ← engine.process_intent()
+
+==============================================================================
+"""
 import logging
 from typing import Dict, Optional
 
@@ -7,7 +51,18 @@ logger = logging.getLogger(__name__)
 
 
 class ConversationHandler:
-    """Управление многошаговыми диалогами и сбором информации."""
+    """
+    Управление многошаговыми диалогами и сбором информации.
+    
+    Координирует работу между NLP (определение недостающих полей),
+    ConversationMemory (хранение состояния) и DecisionEngine (выполнение).
+    
+    Attributes:
+        db: Database - инстанс базы данных
+        nlp: NLPExtractor - для извлечения данных и генерации вопросов
+        engine: DecisionEngine - для выполнения действий
+        memory: ConversationMemory - для хранения состояния диалога
+    """
 
     def __init__(self, db, nlp_extractor, decision_engine, conv_memory):
         """
@@ -29,7 +84,8 @@ class ConversationHandler:
         user_id: int,
         text: str,
         extracted_data: Dict,
-        last_event: Optional[Dict] = None
+        last_event: Optional[Dict] = None,
+        reply_to_event: Optional[Dict] = None
     ) -> Dict:
         """
         Основная точка входа для обработки сообщения с учетом контекста диалога.
@@ -39,6 +95,7 @@ class ConversationHandler:
             text: Текст сообщения пользователя
             extracted_data: Данные извлеченные NLP
             last_event: Последнее событие пользователя
+            reply_to_event: Событие из reply (если пользователь ответил на сообщение о событии)
 
         Returns:
             Словарь с результатом:
@@ -52,17 +109,18 @@ class ConversationHandler:
         if state and state.get('pending_action'):
             # Это ответ на наш вопрос
             logger.info(f"💬 Обрабатываем ответ на вопрос: pending={state['pending_action']}, awaiting={state['awaiting_field']}")
-            return await self._handle_answer(user_id, text, state, extracted_data, last_event)
+            return await self._handle_answer(user_id, text, state, extracted_data, last_event, reply_to_event)
         else:
             # Новое действие
-            logger.info(f"🆕 Обрабатываем новое действие: intent={extracted_data.get('intent')}")
-            return await self._handle_new_action(user_id, extracted_data, last_event)
+            logger.info(f"🆕 Обрабатываем новое действие: intent={extracted_data.get('intent')}, reply_to_event={reply_to_event is not None}")
+            return await self._handle_new_action(user_id, extracted_data, last_event, reply_to_event)
 
     async def _handle_new_action(
         self,
         user_id: int,
         extracted_data: Dict,
-        last_event: Optional[Dict]
+        last_event: Optional[Dict],
+        reply_to_event: Optional[Dict] = None
     ) -> Dict:
         """
         Обработка нового действия пользователя.
@@ -71,6 +129,7 @@ class ConversationHandler:
             user_id: ID пользователя
             extracted_data: Извлеченные данные
             last_event: Последнее событие
+            reply_to_event: Событие из reply (для операций удаления/обновления)
 
         Returns:
             Результат обработки
@@ -85,13 +144,13 @@ class ConversationHandler:
 
             logger.info(f"❓ Запрашиваем недостающее поле: {first_missing}")
 
-            # Сохраняем состояние
+            # Сохраняем состояние (включая reply_to_event ID для использования позже)
             self.memory.set_state(
                 user_id,
                 pending_action=extracted_data['intent'],
                 partial_data=extracted_data,
                 awaiting_field=first_missing,
-                context_event_id=last_event['id'] if last_event else None
+                context_event_id=reply_to_event['id'] if reply_to_event else (last_event['id'] if last_event else None)
             )
 
             return {
@@ -101,8 +160,8 @@ class ConversationHandler:
             }
         else:
             # Все данные есть - выполняем действие
-            logger.info(f"✅ Все данные собраны, выполняем действие")
-            return await self.engine.process_intent(user_id, extracted_data, last_event=last_event)
+            logger.info(f"✅ Все данные собраны, выполняем действие (reply_to_event={reply_to_event is not None})")
+            return await self.engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
 
     async def _handle_answer(
         self,
@@ -110,7 +169,8 @@ class ConversationHandler:
         text: str,
         state: Dict,
         extracted_data: Dict,
-        last_event: Optional[Dict]
+        last_event: Optional[Dict],
+        reply_to_event: Optional[Dict] = None
     ) -> Dict:
         """
         Обработка ответа пользователя на уточняющий вопрос.
@@ -121,6 +181,7 @@ class ConversationHandler:
             state: Текущее состояние диалога
             extracted_data: Данные из NLP (могут содержать дополнительную информацию)
             last_event: Последнее событие
+            reply_to_event: Событие из reply (для операций удаления/обновления)
 
         Returns:
             Результат обработки
@@ -182,8 +243,8 @@ class ConversationHandler:
             # Очищаем состояние
             self.memory.clear_state(user_id)
 
-            # Выполняем действие через decision_engine
-            return await self.engine.process_intent(user_id, partial_data, last_event=last_event)
+            # Выполняем действие через decision_engine (передаём reply_to_event для операций с событием)
+            return await self.engine.process_intent(user_id, partial_data, last_event=last_event, reply_to_event=reply_to_event)
 
     async def handle_delete_confirmation(
         self,

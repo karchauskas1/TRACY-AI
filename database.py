@@ -1,4 +1,71 @@
-"""Управление базой данных PostgreSQL/SQLite для хранения пользовательских данных."""
+"""
+==============================================================================
+DATABASE.PY - РАБОТА С БАЗОЙ ДАННЫХ (PostgreSQL / SQLite)
+==============================================================================
+
+ОПИСАНИЕ:
+    Унифицированный интерфейс для работы с базой данных. Поддерживает PostgreSQL
+    (production) и SQLite (локальная разработка) с автоматическим определением типа.
+
+ЗАВИСИМОСТИ (импортирует):
+    - config.py          → DATABASE_URL, DATABASE_PATH для выбора БД
+    - psycopg2           → Драйвер PostgreSQL (опционально)
+    - sqlite3            → Встроенный драйвер SQLite
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - bot.py             → db = Database() - глобальный инстанс
+    - decision_engine.py → сохранение/удаление событий
+    - reminder_scheduler.py → чтение напоминаний
+    - conversation_memory.py → история диалога
+    - http_server.py     → API для веб-приложения
+
+КЛЮЧЕВОЙ КЛАСС: Database
+
+ТАБЛИЦЫ БД:
+    | Таблица               | Описание                          |
+    |-----------------------|-----------------------------------|
+    | users                 | Пользователи и их настройки       |
+    | events                | События календаря                 |
+    | reminders             | Напоминания к событиям            |
+    | notes                 | Заметки пользователей             |
+    | calendar_connections  | Подключения к Google/iCloud       |
+    | meetings              | Расшифровки встреч                |
+    | feedback              | Обратная связь                    |
+    | todo_lists            | Списки задач                      |
+    | todo_items            | Элементы списков задач            |
+    | conversation_sessions | История диалога                   |
+    | conversation_state    | Состояние multi-turn диалога      |
+    | recurring_patterns    | Паттерны повторяющихся событий    |
+    | recurring_instances   | Экземпляры повторяющихся событий  |
+    | chat_messages         | Сообщения чата (для веб-приложения)|
+    | user_last_event       | Последнее событие пользователя    |
+
+КЛЮЧЕВЫЕ МЕТОДЫ:
+    - get_or_create_user(user_id)      → Получить/создать пользователя
+    - save_event(...)                   → Сохранить событие
+    - get_events(user_id, ...)          → Получить события пользователя
+    - update_event(event_id, ...)       → Обновить событие
+    - delete_event(event_id, user_id)   → Удалить событие
+    - save_reminder(...)                → Сохранить напоминание
+    - get_pending_reminders(user_id)    → Получить неотправленные напоминания
+    - save_calendar_connection(...)     → Сохранить подключение к календарю
+    - get_calendar_connections(user_id) → Получить подключения пользователя
+    - get_last_event(user_id)           → Получить последнее событие
+    - find_similar_events(...)          → Поиск похожих событий (дедупликация)
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+    1. Автоматический fallback на SQLite если PostgreSQL недоступен
+    2. Connection pooling для PostgreSQL (1-10 соединений)
+    3. _execute() метод заменяет ? на %s для PostgreSQL
+    4. Миграции колонок выполняются через ALTER TABLE IF NOT EXISTS
+    5. Все даты хранятся в TIMESTAMPTZ (PostgreSQL) или TEXT (SQLite)
+
+ВЫБОР ТИПА БД:
+    - DATABASE_URL указан → PostgreSQL
+    - DATABASE_URL пуст → SQLite (файл data/tracy.db)
+
+==============================================================================
+"""
 import json
 import logging
 from datetime import datetime

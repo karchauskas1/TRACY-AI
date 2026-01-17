@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // SSG/CSR режим для Vercel - НЕ используем export
-  // output: 'export', // УДАЛЕНО - используем серверный режим
+  // Серверный режим (SSR) - не static export
+  // output: 'export', // Отключено - используем SSR
   
   // Корневые роуты - НЕТ basePath
   // basePath: '/TRACY-AI', // УДАЛЕНО - домен будет корневым
@@ -15,7 +15,7 @@ const nextConfig = {
   // Разрешаем изображения с внешних доменов
   images: {
     domains: ['api.pasekaproduction.ru'],
-    unoptimized: false, // Включаем оптимизацию на Vercel
+    unoptimized: false,
   },
   
   // Environment variables доступные на клиенте

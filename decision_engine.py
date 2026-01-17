@@ -1,4 +1,109 @@
-"""Модуль логики принятия решений: создание/обновление событий, reminders, notes."""
+"""
+==============================================================================
+DECISION_ENGINE.PY - ЛОГИКА ПРИНЯТИЯ РЕШЕНИЙ И ВЫПОЛНЕНИЯ ДЕЙСТВИЙ
+==============================================================================
+
+ОПИСАНИЕ:
+    Центральный модуль для обработки intent и выполнения действий с событиями.
+    Получает извлечённые данные от NLP и создаёт/изменяет/удаляет события
+    в базе данных и внешних календарях.
+
+ЗАВИСИМОСТИ (импортирует):
+    - database.py        → Database: CRUD операции с событиями, напоминаниями
+    - calendar_google.py → GoogleCalendar: синхронизация с Google Calendar
+    - calendar_icloud.py → ICloudCalendar: синхронизация с iCloud (CalDAV)
+    - config.py          → Конфигурация (OPENROUTER_API_KEY, модель и т.д.)
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - bot.py             → decision_engine.process_intent() для обработки сообщений
+    - conversation_handler.py → вызывает process_intent() после сбора данных
+    - http_server.py     → для обработки запросов от веб-приложения
+
+КЛЮЧЕВОЙ КЛАСС: DecisionEngine
+
+ГЛАВНЫЙ МЕТОД:
+    async process_intent(user_id, extracted_data, last_event, reply_to_event) → Dict
+    
+    Возвращает:
+    {
+        'action': 'created'|'updated'|'deleted'|'error'|'awaiting_input',
+        'message': str,           # Сообщение пользователю
+        'event_id': int,          # ID созданного/изменённого события
+        'needs_confirmation': bool # Требуется ли подтверждение
+    }
+
+ОБРАБОТЧИКИ ПО INTENT (приватные методы _handle_*):
+    | Intent            | Метод                     | Описание                    |
+    |-------------------|---------------------------|-----------------------------|
+    | event             | _handle_event()           | Создание события            |
+    | reminder          | _handle_reminder()        | Создание напоминания        |
+    | note              | _handle_note()            | Сохранение заметки          |
+    | update            | _handle_update()          | Изменение события           |
+    | update_many       | _handle_update_many()     | Массовое изменение          |
+    | delete            | _handle_delete()          | Удаление события            |
+    | delete_all        | _handle_delete_all()      | Удаление всех событий       |
+    | delete_by_period  | _handle_delete_by_period()| Удаление за период          |
+    | delete_many       | _handle_delete_many()     | Удаление нескольких         |
+    | delete_by_pattern | _handle_delete_by_pattern()| Удаление по паттерну       |
+    | list_events       | _handle_list_events()     | Показ списка событий        |
+    | search            | _handle_search()          | Поиск событий               |
+    | add_reminder      | _handle_add_reminder()    | Добавить напоминание        |
+    | add_note          | _handle_add_note()        | Добавить заметку к событию  |
+    | create_many       | _handle_create_many()     | Создание нескольких событий |
+    | small_talk        | _handle_small_talk()      | Приветствия, болтовня       |
+    | list_notes        | _handle_list_notes()      | Показ заметок               |
+    | delete_note       | _handle_delete_note()     | Удаление заметки            |
+
+КРИТИЧЕСКИ ВАЖНАЯ ЛОГИКА - FALLBACK ПЕРЕОПРЕДЕЛЕНИЯ INTENT (строки 137-368):
+    NLP иногда ошибается в определении intent. Этот модуль содержит fallback-логику,
+    которая переопределяет intent на основе:
+    
+    1. Явных команд в тексте:
+       - "удали все планы" → delete_all
+       - "покажи все события" → list_events
+       - "удали все за сегодня" → delete_by_period
+    
+    2. Времени + действия:
+       - Если есть время + действие, но intent='note' → переопределяем на 'event'
+    
+    3. Reply контекста:
+       - Reply + "удали" → delete
+       - Reply + "перенеси" → update
+       - Reply + "напомни" → add_reminder
+    
+    4. Местоимений:
+       - "это", "его", "её" → refers_to_last_event = True
+
+FLOW ДАННЫХ (создание события):
+    1. process_intent() получает extracted_data от NLP
+    2. Fallback-логика проверяет/исправляет intent
+    3. Роутинг на соответствующий _handle_* метод
+    4. _handle_event():
+       a) Проверка дедупликации (find_similar_events)
+       b) Сохранение в БД (database.save_event)
+       c) Синхронизация с внешними календарями (если подключены)
+       d) Создание напоминаний (reminder_scheduler.create_reminders_for_event)
+       e) Форматирование ответа (_format_event_confirmation)
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+    1. События ВСЕГДА сохраняются в локальную БД, даже если календари не подключены.
+    2. Дедупликация: если похожее событие уже есть (название + время в пределах часа),
+       обновляем его вместо создания нового.
+    3. Draft события: если время не указано явно (has_explicit_time=False),
+       создаётся черновик с status='needs_confirmation'.
+    4. Напоминания извлекаются из текста ("за 2 часа", "за полтора часа") или
+       используется default_reminder_minutes из настроек пользователя.
+
+ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ:
+    - _format_event_confirmation()   → Форматирование сообщения о создании
+    - _format_event_list()           → Форматирование списка событий
+    - _generate_smart_error_message()→ Генерация понятных сообщений об ошибках через AI
+    - _update_existing_event()       → Обновление существующего события
+    - _extract_title_from_text()     → Извлечение названия из текста
+    - _parse_reminder_interval()     → Парсинг интервала напоминания из строки
+
+==============================================================================
+"""
 import logging
 import re
 from typing import Dict, Optional, List, Tuple
@@ -13,7 +118,17 @@ logger = logging.getLogger(__name__)
 
 
 class DecisionEngine:
-    """Движок принятия решений для действий с событиями."""
+    """
+    Движок принятия решений для действий с событиями.
+    
+    Координирует работу между NLP (извлечение данных), БД (хранение)
+    и внешними календарями (синхронизация).
+    
+    Attributes:
+        db: Database - инстанс базы данных
+        reminder_scheduler: ReminderScheduler - планировщик напоминаний
+        ai_client: OpenAI - клиент для генерации сообщений
+    """
     
     def __init__(self, db: Database, reminder_scheduler=None, ai_client=None):
         self.db = db
@@ -117,24 +232,38 @@ class DecisionEngine:
     
     async def process_intent(self, user_id: int, extracted_data: Dict, last_event: Optional[Dict] = None, reply_to_event: Optional[Dict] = None) -> Dict:
         """
-        Обработать intent и выполнить соответствующее действие.
+        ГЛАВНЫЙ МЕТОД - Обработка intent и выполнение действия.
+        
+        Это центральная точка маршрутизации всех действий в боте.
         
         Args:
-            user_id: ID пользователя
-            extracted_data: Извлеченные данные из NLP
-            last_event: Последнее событие пользователя (для контекста)
+            user_id: Telegram ID пользователя
+            extracted_data: Данные от NLP (intent, title, start_time, etc.)
+            last_event: Последнее событие пользователя (для контекста "это", "его")
+            reply_to_event: Событие из reply-сообщения (если пользователь ответил на сообщение бота)
         
         Returns:
-            Словарь с результатом:
-            - action: 'created', 'updated', 'saved_note', 'found', etc.
-            - message: сообщение для пользователя
-            - event_id: ID созданного/обновленного события (если есть)
-            - needs_confirmation: нужно ли подтверждение
+            Dict с результатом:
+            {
+                'action': 'created'|'updated'|'deleted'|'error'|'awaiting_input',
+                'message': str,           # Сообщение для отправки пользователю
+                'event_id': int,          # ID события (если применимо)
+                'needs_confirmation': bool # Нужно ли подтверждение от пользователя
+            }
+        
+        СВЯЗИ:
+            - Вызывается из: bot.py (handle_message), conversation_handler.py
+            - Вызывает: _handle_event(), _handle_delete(), и другие _handle_* методы
         """
         intent = extracted_data.get('intent', 'unknown')
-        original_intent = intent  # Сохраняем для логирования
+        original_intent = intent  # Сохраняем для логирования изменений
         
-        # КРИТИЧЕСКИ ВАЖНЫЙ FALLBACK: переопределяем intent если NLP неправильно распознал
+        # ═══════════════════════════════════════════════════════════════════════
+        # БЛОК 1: FALLBACK-ЛОГИКА ПЕРЕОПРЕДЕЛЕНИЯ INTENT
+        # ═══════════════════════════════════════════════════════════════════════
+        # NLP (nlp_extractor.py) иногда ошибается в определении intent.
+        # Эта логика исправляет типичные ошибки на основе паттернов в тексте.
+        # ВАЖНО: Порядок проверок имеет значение! Более специфичные - первыми.
         # Это нужно потому что NLP иногда возвращает "note" вместо правильного intent
         original_text = extracted_data.get('_original_text', '').lower().strip()
         
@@ -313,8 +442,14 @@ class DecisionEngine:
             extracted_data['refers_to_last_event'] = True
 
         # 🔴 ИСПРАВЛЕНИЕ: Определение типа операции для reply НЕЗАВИСИМО от текущего intent
-        if reply_to_event and original_text:
+        # ВАЖНО: Проверяем ЛИБО reply_to_event (событие из reply), ЛИБО is_reply флаг от NLP
+        is_reply_context = bool(reply_to_event) or extracted_data.get('is_reply', False)
+        
+        if is_reply_context and original_text:
             text_lower = original_text.lower()
+            
+            # Определяем целевое событие: reply_to_event имеет приоритет, иначе last_event
+            target_event = reply_to_event or last_event
             
             # "удали" в reply → это delete события, НЕЗАВИСИМО от текущего intent
             if any(word in text_lower for word in ['удали', 'удалить', 'стереть', 'убрать']):
@@ -323,6 +458,10 @@ class DecisionEngine:
                     intent = 'delete'
                     extracted_data['intent'] = 'delete'
                     extracted_data['refers_to_last_event'] = True
+                    # Если reply_to_event=None, но есть last_event → используем его
+                    if not reply_to_event and last_event:
+                        logger.info(f"🔴 Fallback: используем last_event для delete (reply_to_event=None)")
+                        extracted_data['_target_event'] = last_event
 
             # "перенеси/измени" в reply → это update
             elif any(word in text_lower for word in ['перенеси', 'перенести', 'измени', 'изменить', 'сдвинь', 'передвинь']):
@@ -331,6 +470,9 @@ class DecisionEngine:
                     intent = 'update'
                     extracted_data['intent'] = 'update'
                     extracted_data['refers_to_last_event'] = True
+                    if not reply_to_event and last_event:
+                        logger.info(f"🔴 Fallback: используем last_event для update (reply_to_event=None)")
+                        extracted_data['_target_event'] = last_event
 
             # "напомни" в reply → это add_reminder
             elif any(word in text_lower for word in ['напомни', 'напоминание', 'напомнить']):
@@ -339,6 +481,8 @@ class DecisionEngine:
                     intent = 'add_reminder'
                     extracted_data['intent'] = 'add_reminder'
                     extracted_data['refers_to_last_event'] = True
+                    if not reply_to_event and last_event:
+                        extracted_data['_target_event'] = last_event
             
             # Если есть reply но нет операционных глаголов → add_note (только если intent не определен корректно)
             elif intent not in ['add_note', 'note', 'delete', 'update', 'add_reminder']:
@@ -346,6 +490,8 @@ class DecisionEngine:
                 intent = 'add_note'
                 extracted_data['intent'] = 'add_note'
                 extracted_data['note_text'] = original_text
+                if not reply_to_event and last_event:
+                    extracted_data['_target_event'] = last_event
 
         # FALLBACK: Определение refers_to_last_event по местоимениям
         if original_text and not extracted_data.get('refers_to_last_event', False):
@@ -419,11 +565,20 @@ class DecisionEngine:
         except Exception as e:
             logger.warning(f"Interval reminders parse failed: {e}")
         
-        # Получить подключенные календари
+        # ═══════════════════════════════════════════════════════════════════════
+        # БЛОК 2: РОУТИНГ ПО INTENT
+        # ═══════════════════════════════════════════════════════════════════════
+        # После fallback-логики направляем запрос на соответствующий обработчик.
+        # ВАЖНО: Порядок if-else имеет значение! delete_all должен быть ДО delete.
+        
+        # Получаем подключенные календари (Google, iCloud)
         calendar_connections = self.db.get_calendar_connections(user_id)
         
+        # --- Операции чтения (list, search) ---
         if intent == 'list_events':
             return await self._handle_list_events(user_id, extracted_data, calendar_connections, timezone)
+        
+        # --- Операции удаления (delete_all ПЕРЕД delete!) ---
         elif intent == 'delete_all':
             return await self._handle_delete_all(user_id, calendar_connections)
         elif intent == 'delete_by_period':
@@ -432,36 +587,54 @@ class DecisionEngine:
             return await self._handle_delete_many(user_id, extracted_data, calendar_connections)
         elif intent == 'delete_by_pattern':
             return await self._handle_delete_by_pattern(user_id, extracted_data, calendar_connections)
+        
+        # --- Операции с напоминаниями и заметками ---
         elif intent == 'add_reminder':
             return await self._handle_add_reminder(user_id, extracted_data, calendar_connections, timezone, last_event)
         elif intent == 'add_note':
-            # Используем reply_to_event если есть, иначе last_event
+            # СВЯЗЬ: reply_to_event приходит из bot.py (handle_message) если пользователь ответил на сообщение
             target_event_for_note = reply_to_event if reply_to_event else last_event
             return await self._handle_add_note(user_id, extracted_data, calendar_connections, timezone, target_event_for_note)
+        
+        # --- Операции создания ---
         elif intent == 'create_many':
             return await self._handle_create_many(user_id, extracted_data, calendar_connections, timezone)
         elif intent == 'small_talk':
             return await self._handle_small_talk(user_id, extracted_data)
+        elif intent == 'question':
+            return await self._handle_question(user_id, extracted_data, timezone)
         elif intent == 'event':
+            # ГЛАВНЫЙ ОБРАБОТЧИК: создание события (самый частый случай)
             return await self._handle_event(user_id, extracted_data, calendar_connections, timezone)
         elif intent == 'reminder':
+            # Напоминание обрабатывается как событие с особым форматированием
             return await self._handle_reminder(user_id, extracted_data, calendar_connections, timezone)
         elif intent == 'note':
             return await self._handle_note(user_id, extracted_data)
+        
+        # --- Операции обновления ---
         elif intent == 'update':
             return await self._handle_update(user_id, extracted_data, calendar_connections, timezone)
         elif intent == 'update_many':
             return await self._handle_update_many(user_id, extracted_data, calendar_connections, timezone)
+        
+        # --- Операции удаления одного события ---
         elif intent == 'delete':
             return await self._handle_delete(user_id, extracted_data, calendar_connections)
+        
+        # --- Поиск ---
         elif intent == 'search':
             return await self._handle_search(user_id, extracted_data, calendar_connections)
+        
+        # --- Заметки ---
         elif intent == 'list_notes':
             return await self._handle_list_notes(user_id)
         elif intent == 'delete_note':
             return await self._handle_delete_note(user_id, extracted_data)
+        
+        # --- Fallback: неизвестный intent → сохраняем как заметку ---
         else:
-            # Неизвестный intent - сохраняем как заметку
+            logger.warning(f"Неизвестный intent '{intent}', сохраняю как заметку")
             return await self._handle_note(user_id, extracted_data)
     
     async def _handle_event(self, user_id: int, extracted_data: Dict,
@@ -1380,6 +1553,104 @@ class DecisionEngine:
             'message': response_message,
             'needs_confirmation': False
         }
+
+    async def _handle_question(self, user_id: int, extracted_data: Dict, timezone: str) -> Dict:
+        """
+        Обработать вопрос пользователя (intent='question').
+        
+        Генерирует ответ через AI с учётом контекста событий пользователя.
+        Примеры вопросов:
+        - "Как подготовиться к встрече?"
+        - "Что посоветуешь для продуктивности?"
+        - "Почему важно планировать?"
+        """
+        original_text = extracted_data.get('_original_text', '') or extracted_data.get('original_text', '')
+        
+        # Получаем события пользователя для контекста
+        try:
+            import pytz
+            tz = pytz.timezone(timezone)
+            now = datetime.now(tz)
+            
+            # Получаем события на ближайшие 7 дней
+            upcoming_events = self.db.get_events_in_range(
+                user_id,
+                now,
+                now + timedelta(days=7),
+                limit=10
+            )
+            
+            # Форматируем контекст событий
+            events_context = ""
+            if upcoming_events:
+                events_list = []
+                for event in upcoming_events:
+                    event_title = event.get('title', 'Без названия')
+                    event_start = event.get('start_time')
+                    if event_start:
+                        try:
+                            if isinstance(event_start, str):
+                                event_start_dt = datetime.fromisoformat(event_start.replace('Z', '+00:00'))
+                            else:
+                                event_start_dt = event_start
+                            event_time_str = event_start_dt.strftime("%d.%m в %H:%M")
+                            events_list.append(f"- {event_title} ({event_time_str})")
+                        except:
+                            events_list.append(f"- {event_title}")
+                    else:
+                        events_list.append(f"- {event_title}")
+                
+                events_context = "\n\nБлижайшие события пользователя:\n" + "\n".join(events_list)
+        except Exception as e:
+            logger.warning(f"Ошибка получения событий для контекста: {e}")
+            events_context = ""
+        
+        # Генерируем ответ через AI
+        try:
+            prompt = f"""Пользователь задал вопрос: "{original_text}"
+{events_context}
+
+Дай полезный, дружелюбный ответ на русском языке. 
+- Если вопрос связан с планированием или встречами - дай практические советы
+- Если вопрос личный (про жизнь, мотивацию) - дай поддержку и рекомендации
+- Если вопрос про события пользователя - учитывай контекст их расписания
+- Отвечай кратко (2-4 предложения), но содержательно
+- Не предлагай создать событие, если пользователь не просил
+
+Верни ТОЛЬКО текст ответа."""
+
+            response = self.ai_client.chat.completions.create(
+                model=config.OPENROUTER_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Ты умный ассистент для планирования. Отвечай дружелюбно, кратко и по делу."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.7,
+                max_tokens=300
+            )
+            
+            answer = response.choices[0].message.content.strip()
+            logger.info(f"Question response generated: '{answer[:50]}...'")
+            
+            return {
+                'action': 'question_answered',
+                'message': answer,
+                'needs_confirmation': False
+            }
+            
+        except Exception as e:
+            logger.error(f"Ошибка генерации ответа на вопрос: {e}")
+            return {
+                'action': 'question_answered',
+                'message': "Хороший вопрос! К сожалению, сейчас не могу дать полный ответ. Попробуй переформулировать или спросить позже.",
+                'needs_confirmation': False
+            }
 
     async def _handle_note(self, user_id: int, extracted_data: Dict) -> Dict:
         """Обработать сохранение заметки."""

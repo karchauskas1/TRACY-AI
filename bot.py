@@ -1,4 +1,103 @@
-"""Основной модуль Telegram бота TRACY."""
+"""
+==============================================================================
+BOT.PY - ГЛАВНЫЙ МОДУЛЬ TELEGRAM БОТА TRACY
+==============================================================================
+
+ОПИСАНИЕ:
+    Точка входа в приложение. Обрабатывает все входящие сообщения, команды
+    и callback-кнопки от пользователей Telegram. Координирует работу всех
+    остальных модулей системы.
+
+ЗАВИСИМОСТИ (импортирует):
+    - database.py        → Database: работа с БД (CRUD пользователей, событий)
+    - media_processor.py → MediaProcessor: конвертация голоса/фото в текст
+    - nlp_extractor.py   → NLPExtractor: извлечение intent из текста через AI
+    - decision_engine.py → DecisionEngine: выполнение действий с событиями
+    - calendar_google.py → GoogleCalendar: синхронизация с Google Calendar
+    - calendar_icloud.py → ICloudCalendar: синхронизация с iCloud (CalDAV)
+    - meeting_processor.py → MeetingProcessor: расшифровка аудио встреч
+    - reminder_scheduler.py → ReminderScheduler: фоновая отправка напоминаний
+    - conversation_memory.py → ConversationMemory: история диалога
+    - conversation_handler.py → ConversationHandler: multi-turn диалоги
+    - config.py          → Конфигурация из .env файла
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - api_server.py      → запускает main() как точку входа
+
+КЛЮЧЕВЫЕ ФУНКЦИИ:
+    - main()             → Инициализация и запуск бота (строка ~3637)
+    - handle_message()   → ГЛАВНЫЙ обработчик всех сообщений (строка ~2095)
+    - start_command()    → Обработка /start с онбордингом (строка ~98)
+    - settings_callback() → Обработка inline-кнопок (строка ~415)
+    - handle_meeting_audio() → Обработка аудио встреч (строка ~1685)
+
+FLOW ДАННЫХ (основной сценарий - создание события):
+    1. Пользователь → Telegram → handle_message()
+    2. handle_message() → media_processor.extract_text_from_message()
+    3. Текст → nlp_extractor.extract_intent_and_context() → extracted_data
+    4. extracted_data → conversation_handler.process_message()
+    5. conversation_handler → decision_engine.process_intent()
+    6. decision_engine → database.save_event() + calendar_google.create_event()
+    7. Результат → handle_message() → Ответ пользователю
+
+РЕЖИМЫ РАБОТЫ:
+    1. Режим планировщика (по умолчанию):
+       - Создание событий из текста/голоса/фото
+       - Редактирование и удаление событий
+       - Просмотр расписания
+       - context.user_data['waiting_meeting_audio'] = False
+
+    2. Режим резюмирования встреч:
+       - Расшифровка аудиозаписей встреч (Whisper API)
+       - Создание резюме
+       - Извлечение событий из записи
+       - context.user_data['waiting_meeting_audio'] = True
+
+ГЛОБАЛЬНЫЕ ОБЪЕКТЫ:
+    db                  → Database - инстанс БД (инициализируется сразу)
+    media_processor     → MediaProcessor - обработка медиа (инициализируется сразу)
+    nlp_extractor       → NLPExtractor - NLP модуль (инициализируется сразу)
+    meeting_processor   → MeetingProcessor - расшифровка встреч (инициализируется сразу)
+    reminder_scheduler  → ReminderScheduler - планировщик (инициализируется в main())
+    decision_engine     → DecisionEngine - логика действий (инициализируется в main())
+    conversation_memory → ConversationMemory - память диалога (инициализируется в main())
+    conversation_handler → ConversationHandler - multi-turn (инициализируется в main())
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+    1. Порядок handlers в main() имеет значение! Команды должны быть первыми.
+    2. ReplyKeyboardMarkup и InlineKeyboardMarkup нельзя использовать одновременно
+       в одном сообщении - отправляются отдельными сообщениями.
+    3. Typing action нужно обновлять каждые 4-5 секунд для длительных операций.
+    4. HTTP сервер запускается в отдельном потоке (для веб-приложения).
+    5. Menu Button устанавливается глобально с cache-busting версией.
+
+CALLBACK DATA PATTERNS (для settings_callback):
+    - settings_*        → Настройки календарей и уведомлений
+    - meeting_*         → Действия с расшифровкой встреч
+    - mode_*            → Переключение режимов работы
+    - feedback_*        → Обратная связь
+    - icloud_*          → Процесс подключения iCloud
+    - disconnect_*      → Отключение календарей
+    - notifications_*   → Настройки уведомлений
+    - reminder_set_*    → Установка времени напоминания
+    - reschedule_event_* → Перенос события
+    - list_events_*     → Показ списка событий
+
+CONTEXT.USER_DATA КЛЮЧИ:
+    - waiting_meeting_audio    → bool: режим расшифровки встреч
+    - waiting_google_url       → bool: ожидание OAuth URL от Google
+    - icloud_step              → str: шаг подключения iCloud ('email' или 'password')
+    - icloud_email             → str: Apple ID для iCloud
+    - feedback_type            → str: тип обратной связи ('баг' или 'предложение')
+    - feedback_step            → str: шаг отправки feedback ('text' или 'screenshot')
+    - feedback_text            → str: текст комментария
+    - pending_confirmation     → str: тип ожидаемого подтверждения
+    - waiting_reschedule_event_id → int: ID события для переноса
+    - last_meeting_data        → dict: данные последней расшифрованной встречи
+    - ai_mode                  → str: режим интерпретации ('soft' или 'strict')
+
+==============================================================================
+"""
 import logging
 import asyncio
 import os
@@ -31,15 +130,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация компонентов
-db = Database()
-media_processor = MediaProcessor()
-nlp_extractor = NLPExtractor()
-meeting_processor = MeetingProcessor(nlp_extractor.client)
-reminder_scheduler = None  # Будет инициализирован в main()
-decision_engine = None  # Будет инициализирован в main() после scheduler
-conversation_memory = None  # Будет инициализирован в main()
-conversation_handler = None  # Будет инициализирован в main()
+# ==============================================================================
+# ГЛОБАЛЬНЫЕ ОБЪЕКТЫ
+# ==============================================================================
+# Объекты, инициализируемые сразу при импорте модуля:
+db = Database()                                      # Работа с БД (PostgreSQL/SQLite)
+media_processor = MediaProcessor()                   # STT (голос→текст), OCR (фото→текст)
+nlp_extractor = NLPExtractor()                       # NLP через OpenRouter/OpenAI
+meeting_processor = MeetingProcessor(nlp_extractor.client)  # Расшифровка встреч (Whisper)
+
+# Объекты, инициализируемые в main() (требуют application.bot):
+reminder_scheduler = None   # → ReminderScheduler: фоновая отправка напоминаний
+decision_engine = None      # → DecisionEngine: логика создания/изменения событий
+conversation_memory = None  # → ConversationMemory: история диалога для контекста NLP
+conversation_handler = None # → ConversationHandler: multi-turn диалоги (уточняющие вопросы)
 
 
 async def notify_super_user_about_feedback(user_id: int, feedback_type: str, comment: str):
@@ -2093,10 +2197,38 @@ async def share_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Главный обработчик всех сообщений."""
+    """
+    ГЛАВНЫЙ ОБРАБОТЧИК ВСЕХ СООБЩЕНИЙ.
+    
+    Это центральная функция бота. Все входящие сообщения (текст, голос, фото,
+    документы) проходят через неё.
+    
+    ПОРЯДОК ОБРАБОТКИ (приоритеты):
+    1. web_app_data от Mini App (строка ~2100)
+    2. Команды от ReplyKeyboard (строка ~2274)
+    3. Ожидание переноса события (строка ~2308)
+    4. Процесс подключения iCloud (строка ~2426)
+    5. Режим обратной связи (строка ~2632)
+    6. Режим расшифровки встреч (строка ~2738)
+    7. Ожидание Google OAuth URL (строка ~2839)
+    8. Обычная обработка сообщения (строка ~2933+)
+    
+    СВЯЗИ:
+    - Вызывает: media_processor.extract_text_from_message()
+    - Вызывает: nlp_extractor.extract_intent_and_context()
+    - Вызывает: conversation_handler.process_message()
+    - Вызывает: decision_engine.process_intent() (через conversation_handler)
+    
+    Args:
+        update: Объект Update от Telegram с данными сообщения
+        context: Контекст с user_data, bot и другими данными
+    """
     user_id = update.effective_user.id
     
-    # Проверяем наличие web_app_data от веб-приложения (высший приоритет)
+    # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ 1: Данные от веб-приложения (Telegram Mini App)
+    # СВЯЗЬ: Веб-приложение (web-app/) отправляет данные через tg.sendData()
+    # ─────────────────────────────────────────────────────────────────────────
     if update.message and hasattr(update.message, 'web_app_data') and update.message.web_app_data:
         try:
             import json
@@ -2271,11 +2403,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"Ошибка обработки web_app_data: {e}")
             # Продолжаем обычную обработку
     
-    # Обработка текстовых команд от постоянной клавиатуры (ВЫСШИЙ ПРИОРИТЕТ)
+    # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ 2: Команды от ReplyKeyboard (постоянная клавиатура внизу экрана)
+    # СВЯЗЬ: Клавиатура создаётся в get_reply_keyboard() (строка ~1599)
+    # ─────────────────────────────────────────────────────────────────────────
     if update.message and update.message.text:
         text = update.message.text.strip()
         
-        # Команды от постоянной клавиатуры
+        # Переключение режимов работы через кнопки клавиатуры
         if text == "📅 Режим планировщика" or text.lower() in ['режим планировщика', 'планировщик']:
             context.user_data['waiting_meeting_audio'] = False
             # Устанавливаем постоянную клавиатуру для режима планировщика
@@ -2305,7 +2440,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await menu_command(update, context)
             return
     
-    # Проверяем, ожидаем ли мы переноса события (ВЫСШИЙ ПРИОРИТЕТ после web_app_data)
+    # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ 3: Ожидание ответа для переноса события
+    # СВЯЗЬ: Устанавливается в settings_callback при callback "reschedule_event_*"
+    # ─────────────────────────────────────────────────────────────────────────
     waiting_reschedule_event_id = context.user_data.get('waiting_reschedule_event_id')
     if waiting_reschedule_event_id:
         # Обрабатываем ответ пользователя для переноса события
@@ -2423,8 +2561,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
     
-    # Проверяем процесс подключения iCloud (пошаговый) - САМЫЙ ВЫСШИЙ ПРИОРИТЕТ!
-    # Это должно быть ПЕРВЫМ, чтобы email не обрабатывался как обычное сообщение
+    # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ 4: Пошаговый процесс подключения iCloud Calendar
+    # СВЯЗЬ: Инициируется в settings_callback при callback "icloud_ready"
+    # ШАГИ: 'email' → 'password' → подключение через calendar_icloud.py
+    # ─────────────────────────────────────────────────────────────────────────
     icloud_step = context.user_data.get('icloud_step')
     if icloud_step:
         # Извлекаем текст из сообщения разными способами (для поддержки автозаполнения)
@@ -2629,7 +2770,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             return
     
-    # Проверяем, находимся ли мы в режиме обратной связи (ВЫСШИЙ ПРИОРИТЕТ)
+    # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ 5: Режим отправки обратной связи
+    # СВЯЗЬ: Инициируется в settings_callback при callback "feedback_bug/suggestion"
+    # ШАГИ: 'text' → 'screenshot' → submit_feedback_to_backend()
+    # ─────────────────────────────────────────────────────────────────────────
     if context.user_data.get('feedback_step'):
         feedback_step = context.user_data.get('feedback_step')
         feedback_type = context.user_data.get('feedback_type')
@@ -2735,8 +2880,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
     
-    # Проверяем, находимся ли мы в режиме ожидания аудио для встречи (ВЫСШИЙ ПРИОРИТЕТ)
-    # В этом режиме ВСЕ голосовые сообщения идут на расшифровку встречи, а не на создание событий
+    # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ 6: Режим расшифровки встреч
+    # СВЯЗЬ: Активируется через /start?meeting_transcribe или кнопку режима
+    # ВАЖНО: В этом режиме ВСЕ аудио идёт на расшифровку, а НЕ на создание событий
+    # ─────────────────────────────────────────────────────────────────────────
     if context.user_data.get('waiting_meeting_audio'):
         logger.info(f"🔍 Режим расшифровки встреч активен. Проверяю сообщение: voice={bool(update.message.voice)}, document={bool(update.message.document)}, text={bool(update.message.text)}")
         if update.message.document:
@@ -2834,9 +2982,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
     
-    # Раньше здесь был Google OAuth для feedback (Drive/Sheets). Теперь feedback идет в наш backend.
-    
-    # Проверяем, ожидаем ли мы URL подтверждения Google
+    # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ 7: Ожидание OAuth URL от Google Calendar
+    # СВЯЗЬ: Инициируется в settings_callback при callback "settings_google"
+    # FLOW: Пользователь копирует URL с code= из браузера → calendar_google.handle_callback()
+    # ─────────────────────────────────────────────────────────────────────────
     if context.user_data.get('waiting_google_url'):
         # Это URL с кодом подтверждения для Google OAuth
         auth_response = update.message.text
@@ -2930,7 +3080,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_google_url'] = False
         return
     
-    # Извлекаем текст из сообщения (любого типа)
+    # ─────────────────────────────────────────────────────────────────────────
+    # ОСНОВНАЯ ОБРАБОТКА СООБЩЕНИЯ (если не сработали предыдущие приоритеты)
+    # ШАГ 1: Извлечение текста из любого типа сообщения
+    # СВЯЗЬ: media_processor.extract_text_from_message() обрабатывает голос/фото/текст
+    # ─────────────────────────────────────────────────────────────────────────
     text = None
     try:
         logger.info(f"Начинаю извлечение текста из сообщения типа: {message_type}")
@@ -3152,7 +3306,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # Обрабатываем через conversation_handler
                     if conversation_handler:
-                        result = await conversation_handler.process_message(user_id, text, extracted_data, last_event=last_event)
+                        # 🔴 ВАЖНО: Передаём reply_to_event для корректной обработки Reply + "Удали"
+                        result = await conversation_handler.process_message(user_id, text, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
                     else:
                         # Fallback на обычную обработку
                         result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
@@ -3221,7 +3376,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Обрабатываем через conversation_handler (для multi-turn диалогов)
             if conversation_handler:
-                result = await conversation_handler.process_message(user_id, text, extracted_data, last_event=last_event)
+                # 🔴 ВАЖНО: Передаём reply_to_event для корректной обработки Reply + "Удали"
+                result = await conversation_handler.process_message(user_id, text, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
             else:
                 # Fallback на обычную обработку если conversation_handler не инициализирован
                 result = await decision_engine.process_intent(user_id, extracted_data, last_event=last_event, reply_to_event=reply_to_event)
@@ -3635,14 +3791,40 @@ async def connect_icloud_command(update: Update, context: ContextTypes.DEFAULT_T
 
 
 def main():
-    """Запуск бота."""
+    """
+    ТОЧКА ВХОДА - ЗАПУСК БОТА.
+    
+    Инициализирует все компоненты и запускает бота в режиме polling.
+    
+    ПОРЯДОК ИНИЦИАЛИЗАЦИИ:
+    1. Создание Application (python-telegram-bot)
+    2. Инициализация глобальных объектов (reminder_scheduler, decision_engine, etc.)
+    3. post_init: запуск ReminderScheduler, установка Menu Button и команд
+    4. Регистрация handlers (команды, callback, сообщения)
+    5. Запуск HTTP сервера в отдельном потоке
+    6. Запуск polling
+    
+    ВАЖНО:
+    - Порядок регистрации handlers имеет значение! Команды должны быть первыми.
+    - HTTP сервер запускается в daemon thread (завершается с основным процессом).
+    - application пересоздаётся после добавления post_init хука.
+    
+    СВЯЗИ:
+    - post_init вызывает reminder_scheduler.start()
+    - HTTP сервер использует http_server.start_http_server()
+    """
     if not config.TELEGRAM_BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN не установлен в .env")
     
-    # Создаем приложение
+    # ─────────────────────────────────────────────────────────────────────────
+    # ШАГ 1: Создание Application (первая версия, будет пересоздана)
+    # ─────────────────────────────────────────────────────────────────────────
     application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     
-    # Инициализируем планировщик напоминаний и decision_engine
+    # ─────────────────────────────────────────────────────────────────────────
+    # ШАГ 2: Инициализация глобальных объектов
+    # ВАЖНО: Эти объекты используются во всём приложении
+    # ─────────────────────────────────────────────────────────────────────────
     global reminder_scheduler, decision_engine, conversation_memory, conversation_handler
     # Инициализируем AI клиент для reminder_scheduler
     from openai import OpenAI

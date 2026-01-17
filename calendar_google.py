@@ -1,4 +1,67 @@
-"""Интеграция с Google Calendar через OAuth."""
+"""
+==============================================================================
+CALENDAR_GOOGLE.PY - ИНТЕГРАЦИЯ С GOOGLE CALENDAR ЧЕРЕЗ OAUTH 2.0
+==============================================================================
+
+ОПИСАНИЕ:
+    Работа с Google Calendar через официальный Google Calendar API.
+    Использует OAuth 2.0 для авторизации, хранит токены в файловой системе.
+
+ЗАВИСИМОСТИ (импортирует):
+    - config.py         → GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, TOKENS_DIR
+    - google-api-python-client → Google Calendar API
+    - google-auth-oauthlib    → OAuth 2.0 flow
+
+ИСПОЛЬЗУЕТСЯ В (импортируется в):
+    - decision_engine.py → GoogleCalendar(user_id).create_event() / update_event() / delete_event()
+    - http_server.py     → google_callback() - обработка OAuth callback
+
+КЛЮЧЕВОЙ КЛАСС: GoogleCalendar
+
+OAUTH FLOW:
+    1. get_authorization_url() → Пользователю отправляется URL для авторизации
+    2. Пользователь авторизуется на accounts.google.com
+    3. Google редиректит на GOOGLE_REDIRECT_URI с кодом
+    4. handle_callback(url_with_code) → Обмен кода на токен
+    5. Токен сохраняется в TOKENS_DIR/google_token_{user_id}.json
+    6. Последующие вызовы используют сохранённый токен
+
+ХРАНЕНИЕ ТОКЕНОВ:
+    - Путь: TOKENS_DIR/google_token_{user_id}.json
+    - Автоматическое обновление просроченных токенов через refresh_token
+    - Токены хранятся в открытом виде (требует защиты на уровне ОС)
+
+КЛЮЧЕВЫЕ МЕТОДЫ:
+    | Метод                 | Описание                              |
+    |-----------------------|---------------------------------------|
+    | get_authorization_url()| Получить URL для OAuth авторизации   |
+    | handle_callback()     | Обменять код на токен                 |
+    | create_event()        | Создать событие в Google Calendar     |
+    | update_event()        | Обновить событие                      |
+    | delete_event()        | Удалить событие                       |
+    | search_events()       | Поиск событий по запросу              |
+    | get_event_ics()       | Экспорт события в ICS                 |
+
+ОСОБЕННОСТИ СОБЫТИЙ:
+    - Если есть start_time и end_time → событие со временем
+    - Если только start_time → событие на весь день (date, не dateTime)
+    - Напоминание 15 минут по умолчанию (popup)
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+    1. GOOGLE_CLIENT_ID/SECRET обязательны для работы.
+    2. GOOGLE_REDIRECT_URI должен быть зарегистрирован в Google Cloud Console.
+    3. Для refresh токенов требуется access_type='offline'.
+    4. calendarId='primary' → используется основной календарь пользователя.
+
+SETUP В GOOGLE CLOUD CONSOLE:
+    1. Создать проект в console.cloud.google.com
+    2. Включить Google Calendar API
+    3. Создать OAuth 2.0 credentials (Web application)
+    4. Добавить redirect_uri в настройках
+    5. Скопировать Client ID и Client Secret в .env
+
+==============================================================================
+"""
 import os
 import json
 import logging
@@ -18,7 +81,12 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 
 class GoogleCalendar:
-    """Класс для работы с Google Calendar."""
+    """
+    Класс для работы с Google Calendar через OAuth 2.0.
+    
+    Каждый экземпляр привязан к конкретному пользователю (user_id).
+    Токены хранятся в файле google_token_{user_id}.json.
+    """
     
     def __init__(self, user_id: int):
         self.user_id = user_id
