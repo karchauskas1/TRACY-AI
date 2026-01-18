@@ -60,55 +60,89 @@ export default function HomePage() {
   }, [router])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-900 to-slate-800">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       <div className="text-center">
-        {/* Анимированный логотип */}
-        <div className="relative mb-8">
-          <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25 animate-pulse">
-            <span className="text-3xl font-bold text-white">T</span>
-          </div>
-          {/* Кольцо загрузки */}
-          <div className="absolute inset-0 w-20 h-20 mx-auto">
-            <svg className="w-full h-full animate-spin" style={{ animationDuration: '2s' }} viewBox="0 0 100 100">
-              <circle
-                cx="50"
-                cy="50"
-                r="45"
-                fill="none"
-                stroke="rgba(59, 130, 246, 0.2)"
-                strokeWidth="4"
-              />
-              <circle
-                cx="50"
-                cy="50"
-                r="45"
-                fill="none"
-                stroke="url(#gradient)"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray="70 200"
-              />
-              <defs>
-                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#3B82F6" />
-                  <stop offset="100%" stopColor="#8B5CF6" />
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
-        </div>
+        {/* Буква T с эффектом заполнения цветом */}
+        <div className="relative inline-block">
+          <svg
+            viewBox="0 0 100 120"
+            className="w-32 h-40"
+            style={{ filter: 'drop-shadow(0 0 30px rgba(139, 92, 246, 0.4))' }}
+          >
+            <defs>
+              {/* Градиент для заполнения */}
+              <linearGradient id="fillGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                <stop offset="0%" stopColor="#3B82F6" />
+                <stop offset="50%" stopColor="#8B5CF6" />
+                <stop offset="100%" stopColor="#EC4899" />
+              </linearGradient>
 
-        {/* Название */}
-        <h1 className="text-3xl font-bold text-white tracking-wider mb-3">TRACY</h1>
-        <p className="text-slate-400 text-sm">Личный ассистент</p>
+              {/* Маска для анимации заполнения */}
+              <mask id="fillMask">
+                <rect x="0" y="0" width="100" height="120" fill="white" />
+                <rect
+                  x="0"
+                  y="0"
+                  width="100"
+                  height="120"
+                  fill="black"
+                  className="animate-fill-up"
+                />
+              </mask>
 
-        {/* Точки загрузки */}
-        <div className="flex justify-center gap-1.5 mt-6">
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              {/* Форма буквы T */}
+              <clipPath id="letterT">
+                <path d="M10 0 H90 V20 H58 V120 H42 V20 H10 Z" />
+              </clipPath>
+            </defs>
+
+            {/* Контур буквы T (пустой) */}
+            <path
+              d="M10 0 H90 V20 H58 V120 H42 V20 H10 Z"
+              fill="none"
+              stroke="rgba(148, 163, 184, 0.3)"
+              strokeWidth="2"
+            />
+
+            {/* Заполняющийся градиент */}
+            <g clipPath="url(#letterT)">
+              <rect
+                x="0"
+                y="0"
+                width="100"
+                height="120"
+                fill="url(#fillGradient)"
+                mask="url(#fillMask)"
+              />
+            </g>
+
+            {/* Блик/свечение сверху */}
+            <path
+              d="M10 0 H90 V20 H58 V120 H42 V20 H10 Z"
+              fill="none"
+              stroke="url(#fillGradient)"
+              strokeWidth="1"
+              opacity="0.5"
+              className="animate-pulse"
+            />
+          </svg>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes fill-up {
+          0% {
+            transform: translateY(0);
+          }
+          100% {
+            transform: translateY(-120px);
+          }
+        }
+
+        .animate-fill-up {
+          animation: fill-up 2s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   )
 }

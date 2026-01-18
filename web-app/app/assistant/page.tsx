@@ -20,9 +20,10 @@ interface TileConfig {
   gradient: string
   gradientLine: string
   hoverColor: string
+  superUserOnly?: boolean
 }
 
-const DEFAULT_TILE_ORDER = ['chat', 'calendar', 'history', 'todos']
+const DEFAULT_TILE_ORDER = ['chat', 'calendar', 'history', 'todos', 'feedback', 'debug']
 
 declare global {
   interface Window {
@@ -124,11 +125,15 @@ function AssistantPageContent() {
     setDragOverTile(null)
   }, [])
 
+  // Track if drag happened to prevent click
+  const didDragRef = useRef(false)
+
   // Touch handlers for mobile drag-and-drop
   const handleTouchStart = useCallback((e: React.TouchEvent, tileId: string) => {
     const touch = e.touches[0]
     touchStartRef.current = { x: touch.clientX, y: touch.clientY, tileId }
     touchDragActiveRef.current = false
+    didDragRef.current = false
   }, [])
 
   const handleTouchMove = useCallback((e: React.TouchEvent, tileId: string) => {
@@ -141,8 +146,8 @@ function AssistantPageContent() {
     // Activate drag after small movement threshold
     if (!touchDragActiveRef.current && (deltaX > 10 || deltaY > 10)) {
       touchDragActiveRef.current = true
+      didDragRef.current = true
       setDraggedTile(tileId)
-      // Prevent scrolling while dragging
       e.preventDefault()
     }
 
@@ -191,6 +196,11 @@ function AssistantPageContent() {
     touchDragActiveRef.current = false
     setDraggedTile(null)
     setDragOverTile(null)
+
+    // Keep didDragRef true for a moment to block the click
+    setTimeout(() => {
+      didDragRef.current = false
+    }, 100)
   }, [draggedTile, dragOverTile])
 
   // Конфигурация плиток
@@ -235,12 +245,37 @@ function AssistantPageContent() {
       gradientLine: 'from-green-500 via-emerald-500 to-teal-500',
       hoverColor: 'text-green-500',
     },
+    feedback: {
+      id: 'feedback',
+      href: '/settings/feedback',
+      title: 'Обратная связь',
+      description: 'Просмотр всех сообщений об ошибках и предложениях',
+      icon: <MessageSquare className="h-7 w-7 text-white" />,
+      gradient: 'from-indigo-500 to-purple-500',
+      gradientLine: 'from-indigo-500 via-purple-500 to-pink-500',
+      hoverColor: 'text-indigo-500',
+      superUserOnly: true,
+    },
+    debug: {
+      id: 'debug',
+      href: '/debug',
+      title: 'Debug: Network',
+      description: 'Мониторинг сетевых запросов и диагностика ошибок',
+      icon: <Bug className="h-7 w-7 text-white" />,
+      gradient: 'from-slate-500 to-gray-600',
+      gradientLine: 'from-slate-500 via-gray-500 to-zinc-500',
+      hoverColor: 'text-slate-500',
+      superUserOnly: true,
+    },
   }
 
   // Рендер одной плитки
   const renderTile = (tileId: string) => {
     const tile = tilesConfig[tileId]
     if (!tile) return null
+
+    // Skip superUser-only tiles for regular users
+    if (tile.superUserOnly && !isSuperUser) return null
 
     const isDragging = draggedTile === tileId
     const isDragOver = dragOverTile === tileId
@@ -262,8 +297,9 @@ function AssistantPageContent() {
           className="block group"
           onClick={(e) => {
             // Prevent navigation if we just finished dragging
-            if (touchDragActiveRef.current) {
+            if (touchDragActiveRef.current || didDragRef.current) {
               e.preventDefault()
+              e.stopPropagation()
               return
             }
             logger.info('AssistantPage', `Card clicked: ${tile.href}`)
@@ -536,93 +572,6 @@ function AssistantPageContent() {
             
             {/* Render tiles in user-defined order */}
             {tileOrder.map(tileId => renderTile(tileId))}
-
-            {/* Обратная связь (только для супер-пользователя) */}
-            {isSuperUser && (
-              <>
-                <Link
-                  href="/settings/feedback"
-                  className="block group"
-                  onClick={() => {
-                    logger.info('AssistantPage', 'Card clicked: /settings/feedback')
-                    if (debugMode) {
-                      lastNavAttemptRef.current = '/settings/feedback'
-                    }
-                  }}
-                >
-                  <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-                    <div className="h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
-
-                    <div className="p-6">
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-                          <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                            <MessageSquare className="h-7 w-7 text-white" />
-                          </div>
-                        </div>
-
-                        <div className="flex-1">
-                          <h3 className="text-xl font-bold mb-1 group-hover:text-indigo-500 transition-colors">
-                            Обратная связь
-                          </h3>
-                          <p className="text-sm text-muted-foreground leading-relaxed">
-                            Просмотр всех сообщений об ошибках и предложениях
-                          </p>
-                        </div>
-
-                        <div className="text-muted-foreground group-hover:text-indigo-500 group-hover:translate-x-1 transition-all">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-
-                <Link
-                  href="/debug"
-                  className="block group"
-                  onClick={() => {
-                    logger.info('AssistantPage', 'Card clicked: /debug')
-                    if (debugMode) {
-                      lastNavAttemptRef.current = '/debug'
-                    }
-                  }}
-                >
-                  <div className="relative overflow-hidden rounded-3xl border-0 bg-card shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-                    <div className="h-1 bg-gradient-to-r from-slate-500 via-gray-500 to-zinc-500" />
-
-                    <div className="p-6">
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-br from-slate-500 to-gray-600 rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-                          <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-slate-500 to-gray-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                            <Bug className="h-7 w-7 text-white" />
-                          </div>
-                        </div>
-
-                        <div className="flex-1">
-                          <h3 className="text-xl font-bold mb-1 group-hover:text-slate-500 transition-colors">
-                            Debug: Network
-                          </h3>
-                          <p className="text-sm text-muted-foreground leading-relaxed">
-                            Мониторинг сетевых запросов и диагностика ошибок
-                          </p>
-                        </div>
-
-                        <div className="text-muted-foreground group-hover:text-slate-500 group-hover:translate-x-1 transition-all">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              </>
-            )}
           </div>
         </div>
       </div>
