@@ -1,48 +1,29 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 export default function HomePage() {
   const router = useRouter()
-  const [debug, setDebug] = useState<string[]>([])
 
   useEffect(() => {
-    const log = (msg: string) => {
-      console.log(`[HomePage] ${msg}`)
-      setDebug(prev => [...prev, msg])
-    }
-
     const navigate = (path: string) => {
       try {
-        log(`Navigating to ${path}`)
         router.push(path)
       } catch (error) {
-        log(`Navigation error: ${error}`)
-        // Fallback: используем window.location только в крайнем случае
-        // В Telegram Mini App это может вызвать проблемы, но это последний резерв
         if (typeof window !== 'undefined') {
           window.location.href = path
         }
       }
     }
 
-    log("Initializing...")
-    log(`URL: ${window.location.href}`)
-
     // Проверяем, открыто ли приложение через Telegram Web App
-    // Примечание: Telegram WebApp уже инициализирован через TelegramBootstrap
     if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp
-      log("Telegram WebApp detected")
-      
-      // Дополнительные настройки (если нужно)
       tg.enableClosingConfirmation()
-      
-      // Сохраняем данные пользователя из Telegram Web App
+
       const user = tg.initDataUnsafe?.user
       if (user) {
-        log(`User found: ${user.first_name}`)
         localStorage.setItem("telegram_user", JSON.stringify({
           id: user.id.toString(),
           first_name: user.first_name,
@@ -50,56 +31,83 @@ export default function HomePage() {
           username: user.username,
           photo_url: user.photo_url,
         }))
-        // Сразу переходим на главный экран "Личный ассистент"
         setTimeout(() => navigate("/assistant"), 100)
       } else {
-        // Если нет пользователя в WebApp, проверяем localStorage
         const savedUser = localStorage.getItem("telegram_user")
         if (savedUser) {
-          log("Saved user found, navigating to /assistant")
           setTimeout(() => navigate("/assistant"), 100)
         } else {
-          log("No user, navigating to /login")
           setTimeout(() => navigate("/login"), 100)
         }
       }
     } else {
-      log("Regular browser detected")
-      // Проверяем, есть ли сохраненный пользователь
       const savedUser = localStorage.getItem("telegram_user")
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser)
-          log(`Saved user: ${parsed.first_name || parsed.id}`)
           if (parsed.id && parsed.id !== "demo") {
             setTimeout(() => navigate("/assistant"), 100)
           } else {
-            log("Demo user, navigating to /login")
             setTimeout(() => navigate("/login"), 100)
           }
         } catch (e) {
-          log("Error parsing user, navigating to /login")
           setTimeout(() => navigate("/login"), 100)
         }
       } else {
-        log("No saved user, navigating to /login")
         setTimeout(() => navigate("/login"), 100)
       }
     }
   }, [router])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="text-center max-w-md">
-        <h1 className="text-2xl font-semibold text-foreground">TRACY</h1>
-        <p className="mt-2 text-muted-foreground">Загрузка...</p>
-        {debug.length > 0 && (
-          <div className="mt-4 p-4 bg-muted rounded text-left text-xs">
-            {debug.map((msg, i) => (
-              <div key={i} className="text-muted-foreground">{msg}</div>
-            ))}
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-900 to-slate-800">
+      <div className="text-center">
+        {/* Анимированный логотип */}
+        <div className="relative mb-8">
+          <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25 animate-pulse">
+            <span className="text-3xl font-bold text-white">T</span>
           </div>
-        )}
+          {/* Кольцо загрузки */}
+          <div className="absolute inset-0 w-20 h-20 mx-auto">
+            <svg className="w-full h-full animate-spin" style={{ animationDuration: '2s' }} viewBox="0 0 100 100">
+              <circle
+                cx="50"
+                cy="50"
+                r="45"
+                fill="none"
+                stroke="rgba(59, 130, 246, 0.2)"
+                strokeWidth="4"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r="45"
+                fill="none"
+                stroke="url(#gradient)"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray="70 200"
+              />
+              <defs>
+                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#3B82F6" />
+                  <stop offset="100%" stopColor="#8B5CF6" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+        </div>
+
+        {/* Название */}
+        <h1 className="text-3xl font-bold text-white tracking-wider mb-3">TRACY</h1>
+        <p className="text-slate-400 text-sm">Личный ассистент</p>
+
+        {/* Точки загрузки */}
+        <div className="flex justify-center gap-1.5 mt-6">
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '150ms' }}></div>
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        </div>
       </div>
     </div>
   )

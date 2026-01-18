@@ -50,6 +50,11 @@ function AssistantPageContent() {
   const [draggedTile, setDraggedTile] = useState<string | null>(null)
   const [dragOverTile, setDragOverTile] = useState<string | null>(null)
 
+  // Touch drag state
+  const touchStartRef = useRef<{ x: number; y: number; tileId: string } | null>(null)
+  const touchDragActiveRef = useRef(false)
+  const tileRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
+
   // Загрузка порядка плиток из localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -67,12 +72,11 @@ function AssistantPageContent() {
     }
   }, [])
 
-  // Обработчики drag-and-drop
+  // Обработчики drag-and-drop (Desktop)
   const handleDragStart = useCallback((e: React.DragEvent, tileId: string) => {
     setDraggedTile(tileId)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', tileId)
-    // Добавляем небольшую задержку для визуального эффекта
     setTimeout(() => {
       (e.target as HTMLElement).style.opacity = '0.5'
     }, 0)
@@ -99,29 +103,95 @@ function AssistantPageContent() {
   const handleDrop = useCallback((e: React.DragEvent, targetTileId: string) => {
     e.preventDefault()
     const sourceTileId = e.dataTransfer.getData('text/plain')
-    
+
     if (sourceTileId && sourceTileId !== targetTileId) {
       setTileOrder(prevOrder => {
         const newOrder = [...prevOrder]
         const sourceIndex = newOrder.indexOf(sourceTileId)
         const targetIndex = newOrder.indexOf(targetTileId)
-        
+
         if (sourceIndex !== -1 && targetIndex !== -1) {
-          // Удаляем элемент из исходной позиции и вставляем в целевую
           newOrder.splice(sourceIndex, 1)
           newOrder.splice(targetIndex, 0, sourceTileId)
-          
-          // Сохраняем в localStorage
           localStorage.setItem('tile_order', JSON.stringify(newOrder))
         }
-        
+
         return newOrder
       })
     }
-    
+
     setDraggedTile(null)
     setDragOverTile(null)
   }, [])
+
+  // Touch handlers for mobile drag-and-drop
+  const handleTouchStart = useCallback((e: React.TouchEvent, tileId: string) => {
+    const touch = e.touches[0]
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, tileId }
+    touchDragActiveRef.current = false
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent, tileId: string) => {
+    if (!touchStartRef.current || touchStartRef.current.tileId !== tileId) return
+
+    const touch = e.touches[0]
+    const deltaX = Math.abs(touch.clientX - touchStartRef.current.x)
+    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y)
+
+    // Activate drag after small movement threshold
+    if (!touchDragActiveRef.current && (deltaX > 10 || deltaY > 10)) {
+      touchDragActiveRef.current = true
+      setDraggedTile(tileId)
+      // Prevent scrolling while dragging
+      e.preventDefault()
+    }
+
+    if (touchDragActiveRef.current) {
+      e.preventDefault()
+
+      // Find which tile we're over
+      const elementsAtPoint = document.elementsFromPoint(touch.clientX, touch.clientY)
+      let foundTileId: string | null = null
+
+      for (const el of elementsAtPoint) {
+        const tileEl = el.closest('[data-tile-id]') as HTMLElement
+        if (tileEl && tileEl.dataset.tileId) {
+          foundTileId = tileEl.dataset.tileId
+          break
+        }
+      }
+
+      if (foundTileId && foundTileId !== tileId) {
+        setDragOverTile(foundTileId)
+      } else {
+        setDragOverTile(null)
+      }
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchDragActiveRef.current && draggedTile && dragOverTile) {
+      // Perform the swap
+      setTileOrder(prevOrder => {
+        const newOrder = [...prevOrder]
+        const sourceIndex = newOrder.indexOf(draggedTile)
+        const targetIndex = newOrder.indexOf(dragOverTile)
+
+        if (sourceIndex !== -1 && targetIndex !== -1) {
+          newOrder.splice(sourceIndex, 1)
+          newOrder.splice(targetIndex, 0, draggedTile)
+          localStorage.setItem('tile_order', JSON.stringify(newOrder))
+        }
+
+        return newOrder
+      })
+    }
+
+    touchStartRef.current = null
+    touchDragActiveRef.current = false
+    setDraggedTile(null)
+    setDragOverTile(null)
+  }, [draggedTile, dragOverTile])
 
   // Конфигурация плиток
   const tilesConfig: Record<string, TileConfig> = {
@@ -178,18 +248,24 @@ function AssistantPageContent() {
     return (
       <div
         key={tile.id}
+        data-tile-id={tile.id}
         draggable
         onDragStart={(e) => handleDragStart(e, tile.id)}
         onDragEnd={handleDragEnd}
         onDragOver={(e) => handleDragOver(e, tile.id)}
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e, tile.id)}
-        className={`relative ${isDragOver ? 'scale-105' : ''} transition-transform duration-200`}
+        className={`relative ${isDragOver ? 'scale-105' : ''} ${isDragging ? 'opacity-50' : ''} transition-all duration-200`}
       >
         <Link
           href={tile.href}
           className="block group"
-          onClick={() => {
+          onClick={(e) => {
+            // Prevent navigation if we just finished dragging
+            if (touchDragActiveRef.current) {
+              e.preventDefault()
+              return
+            }
             logger.info('AssistantPage', `Card clicked: ${tile.href}`)
             if (debugMode) {
               lastNavAttemptRef.current = tile.href
@@ -202,10 +278,20 @@ function AssistantPageContent() {
 
             <div className="p-6">
               <div className="flex items-center gap-4">
-                {/* Drag handle */}
-                <div 
-                  className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                {/* Drag handle - supports both mouse and touch */}
+                <div
+                  className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors touch-none select-none"
                   onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => {
+                    e.stopPropagation()
+                    handleTouchStart(e, tile.id)
+                  }}
+                  onTouchMove={(e) => {
+                    handleTouchMove(e, tile.id)
+                  }}
+                  onTouchEnd={(e) => {
+                    handleTouchEnd(e)
+                  }}
                 >
                   <GripVertical className="h-5 w-5" />
                 </div>

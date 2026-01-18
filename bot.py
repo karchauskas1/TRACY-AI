@@ -192,10 +192,7 @@ async def submit_feedback_to_backend(
         resp = await client.post(url, json=payload)
         resp.raise_for_status()
         result = resp.json()
-        
-        # Отправляем уведомление суперпользователю о новом фидбэке
-        await notify_super_user_about_feedback(user_id, feedback_type, comment)
-        
+        # Уведомление суперпользователю отправляется в http_server.py
         return result
 
 
@@ -1835,16 +1832,99 @@ async def handle_meeting_audio(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.info(f"Получено голосовое сообщение, длительность: {voice.duration} сек")
         elif update.message.audio:
             audio = update.message.audio
-            audio_file = await context.bot.get_file(audio.file_id)
+            logger.info(f"Получен audio: file_name={audio.file_name}, mime_type={audio.mime_type}, file_size={audio.file_size}")
+
+            # Проверка размера файла - Telegram Bot API ограничен 20 MB
+            MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
+            if audio.file_size and audio.file_size > MAX_FILE_SIZE:
+                file_size_mb = audio.file_size / (1024 * 1024)
+                logger.warning(f"❌ Аудиофайл слишком большой: {file_size_mb:.1f} MB (лимит: 20 MB)")
+                reply_keyboard = get_reply_keyboard(context)
+                await update.message.reply_text(
+                    f"❌ Файл слишком большой: {file_size_mb:.1f} MB\n\n"
+                    "⚠️ Telegram ограничивает размер файлов для ботов до 20 MB.\n\n"
+                    "💡 *Как уменьшить размер файла:*\n"
+                    "• Сожми аудио в формат MP3 с битрейтом 128 kbps\n"
+                    "• Раздели запись на несколько частей\n"
+                    "• Используй приложения типа Audio Compressor\n\n"
+                    "Режим расшифровки встреч всё ещё активен.",
+                    reply_markup=reply_keyboard,
+                    parse_mode="Markdown"
+                )
+                stop_typing = True
+                return
+
+            try:
+                audio_file = await context.bot.get_file(audio.file_id)
+            except Exception as e:
+                logger.error(f"Ошибка получения аудиофайла: {e}", exc_info=True)
+                file_size_mb = (audio.file_size or 0) / (1024 * 1024)
+                reply_keyboard = get_reply_keyboard(context)
+                await update.message.reply_text(
+                    f"❌ Не удалось загрузить файл ({file_size_mb:.1f} MB)\n\n"
+                    "⚠️ Возможно файл слишком большой (лимит: 20 MB).\n\n"
+                    "💡 Сожми аудио или раздели на части.\n\n"
+                    "Режим расшифровки встреч всё ещё активен.",
+                    reply_markup=reply_keyboard,
+                    parse_mode="Markdown"
+                )
+                stop_typing = True
+                return
             file_type = "audio"
             file_name = audio.file_name or "audio_file"
-            logger.info(f"Получен audio: file_name={audio.file_name}, mime_type={audio.mime_type}, file_size={audio.file_size}")
         elif update.message.document:
             doc = update.message.document
             logger.info(f"Получен документ: file_name={doc.file_name}, mime_type={doc.mime_type}, file_size={doc.file_size}")
-            
+
+            # Проверка размера файла - Telegram Bot API ограничен 20 MB
+            MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
+            if doc.file_size and doc.file_size > MAX_FILE_SIZE:
+                file_size_mb = doc.file_size / (1024 * 1024)
+                logger.warning(f"❌ Файл слишком большой: {file_size_mb:.1f} MB (лимит: 20 MB)")
+                reply_keyboard = get_reply_keyboard(context)
+                await update.message.reply_text(
+                    f"❌ Файл слишком большой: {file_size_mb:.1f} MB\n\n"
+                    "⚠️ Telegram ограничивает размер файлов для ботов до 20 MB.\n\n"
+                    "💡 *Как уменьшить размер файла:*\n"
+                    "• Сожми аудио в формат MP3 с битрейтом 128 kbps\n"
+                    "• Раздели запись на несколько частей\n"
+                    "• Используй приложения типа Audio Compressor\n\n"
+                    "Режим расшифровки встреч всё ещё активен.",
+                    reply_markup=reply_keyboard,
+                    parse_mode="Markdown"
+                )
+                stop_typing = True
+                return
+
             if is_audio_file(update.message):
-                audio_file = await context.bot.get_file(doc.file_id)
+                try:
+                    audio_file = await context.bot.get_file(doc.file_id)
+                except Exception as e:
+                    logger.error(f"Ошибка получения файла: {e}", exc_info=True)
+                    # Дополнительная проверка на ошибки размера
+                    error_str = str(e).lower()
+                    if 'file is too big' in error_str or 'too large' in error_str:
+                        file_size_mb = (doc.file_size or 0) / (1024 * 1024)
+                        reply_keyboard = get_reply_keyboard(context)
+                        await update.message.reply_text(
+                            f"❌ Файл слишком большой: {file_size_mb:.1f} MB\n\n"
+                            "⚠️ Telegram ограничивает размер файлов для ботов до 20 MB.\n\n"
+                            "💡 Сожми аудио или раздели на части.\n\n"
+                            "Режим расшифровки встреч всё ещё активен.",
+                            reply_markup=reply_keyboard,
+                            parse_mode="Markdown"
+                        )
+                    else:
+                        reply_keyboard = get_reply_keyboard(context)
+                        await update.message.reply_text(
+                            f"❌ Не удалось загрузить файл: {str(e)[:100]}\n\n"
+                            "Попробуй отправить файл ещё раз или в другом формате.\n\n"
+                            "Режим расшифровки встреч всё ещё активен.",
+                            reply_markup=reply_keyboard,
+                            parse_mode="Markdown"
+                        )
+                    stop_typing = True
+                    return
                 file_type = "document"
                 file_name = doc.file_name or "audio_file"
                 logger.info(f"✅ Аудиофайл определен: {file_name}, размер: {doc.file_size} bytes, mime_type: {doc.mime_type}")
@@ -2224,7 +2304,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context: Контекст с user_data, bot и другими данными
     """
     user_id = update.effective_user.id
-    
+
+    # Диагностический лог для отладки обработки сообщений
+    msg = update.message
+    if msg:
+        logger.info(f"📥 ВХОДЯЩЕЕ СООБЩЕНИЕ от {user_id}: voice={bool(msg.voice)}, audio={bool(getattr(msg, 'audio', None))}, document={bool(msg.document)}, text={bool(msg.text)}, photo={bool(msg.photo)}")
+        if msg.document:
+            doc = msg.document
+            logger.info(f"📄 DOCUMENT: file_name={doc.file_name}, mime_type={doc.mime_type}, file_size={doc.file_size}")
+        if msg.text:
+            logger.info(f"📝 TEXT: {msg.text[:100] if len(msg.text) > 100 else msg.text}")
+
     # ─────────────────────────────────────────────────────────────────────────
     # ПРИОРИТЕТ 1: Данные от веб-приложения (Telegram Mini App)
     # СВЯЗЬ: Веб-приложение (web-app/) отправляет данные через tg.sendData()
@@ -2885,6 +2975,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # СВЯЗЬ: Активируется через /start?meeting_transcribe или кнопку режима
     # ВАЖНО: В этом режиме ВСЕ аудио идёт на расшифровку, а НЕ на создание событий
     # ─────────────────────────────────────────────────────────────────────────
+    logger.info(f"🔍 Проверка режима расшифровки: waiting_meeting_audio={context.user_data.get('waiting_meeting_audio')}")
     if context.user_data.get('waiting_meeting_audio'):
         logger.info(f"🔍 Режим расшифровки встреч активен. Проверяю сообщение: voice={bool(update.message.voice)}, document={bool(update.message.document)}, text={bool(update.message.text)}")
         if update.message.document:

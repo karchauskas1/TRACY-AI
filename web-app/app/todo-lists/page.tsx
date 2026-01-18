@@ -18,6 +18,8 @@ interface TodoList {
   title: string
   created_at: string
   updated_at: string
+  _isNew?: boolean
+  _isRemoving?: boolean
 }
 
 interface TodoItem {
@@ -118,34 +120,55 @@ export default function TodoListsPage() {
   const createList = async () => {
     if (!newListTitle.trim() || !userId) return
 
-    try {
-      setCreating(true)
-      setError(null)
+    const tempId = Date.now()
+    const optimisticList: TodoList = {
+      id: tempId,
+      user_id: parseInt(userId),
+      title: newListTitle.trim(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      _isNew: true
+    }
 
-      const result = await apiPost<{ success?: boolean; list?: TodoList; error?: string }>(
+    // Optimistic update
+    setLists(prev => [optimisticList, ...prev])
+    setNewListTitle("")
+    setShowCreateForm(false)
+    setCreating(true)
+
+    try {
+      setError(null)
+      const result = await apiPost<{ success?: boolean; list?: TodoList; list_id?: number; error?: string }>(
         `/api/todo-lists`,
         {
           user_id: parseInt(userId),
-          title: newListTitle.trim(),
+          title: optimisticList.title,
         },
         { timeout: 15000 }
       )
 
-      if (result.success && result.list) {
-        setNewListTitle("")
-        setShowCreateForm(false)
-        await loadLists(true)
-      } else if (result.error) {
-        setError(result.error)
-      } else {
-        // Если нет ошибки, но и нет success, все равно обновляем список
-        setNewListTitle("")
-        setShowCreateForm(false)
-        await loadLists(true)
+      if (result.error) throw new Error(result.error)
+
+      // Update with real data
+      if (result.list) {
+        setLists(prev => prev.map(l =>
+          l.id === tempId ? { ...result.list!, _isNew: false } : l
+        ))
+      } else if (result.list_id) {
+        setLists(prev => prev.map(l =>
+          l.id === tempId ? { ...l, id: result.list_id!, _isNew: false } : l
+        ))
       }
+
+      // Remove animation after delay
+      setTimeout(() => {
+        setLists(prev => prev.map(l => ({ ...l, _isNew: false })))
+      }, 300)
     } catch (e: any) {
       console.error("Ошибка создания списка:", e)
-      const errorMessage = e.type 
+      // Rollback
+      setLists(prev => prev.filter(l => l.id !== tempId))
+      const errorMessage = e.type
         ? formatApiError(e)
         : (e.message || "Не удалось создать список")
       setError(errorMessage)
@@ -195,7 +218,7 @@ export default function TodoListsPage() {
 
           {/* Форма создания списка */}
           {showCreateForm && (
-            <Card className="mb-4 border-border">
+            <Card className="mb-4 border-border glass-card halation animate-appear">
               <CardContent className="pt-6">
                 <div className="space-y-4">
                   <Input
@@ -257,7 +280,7 @@ export default function TodoListsPage() {
                   </CardContent>
                 </Card>
               ) : lists.length === 0 ? (
-            <Card className="border-border">
+            <Card className="border-border glass-card">
               <CardContent className="pt-6">
                 <div className="text-center space-y-4">
                   <ListTodo className="h-12 w-12 mx-auto opacity-50 text-muted-foreground" />
@@ -274,7 +297,9 @@ export default function TodoListsPage() {
               {lists.map((list) => (
                 <Card
                   key={list.id}
-                  className="border-border hover:bg-accent/50 transition-colors"
+                  className={`border-border glass-card hover:bg-accent/30 transition-all duration-300 ${
+                    list._isNew ? 'animate-slide-in' : ''
+                  } ${list._isRemoving ? 'animate-fade-out' : ''}`}
                 >
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
@@ -336,18 +361,34 @@ export default function TodoListsPage() {
                 onClick={async () => {
                   const listId = deleteConfirmId
                   if (listId === null) return
+
+                  const listToDelete = lists.find(l => l.id === listId)
+                  if (!listToDelete) return
+
+                  // Start fade out animation
+                  setLists(prev => prev.map(l =>
+                    l.id === listId ? { ...l, _isRemoving: true } : l
+                  ))
+                  setDeleteConfirmId(null)
+
+                  // Wait for animation
+                  await new Promise(resolve => setTimeout(resolve, 250))
+
+                  // Optimistic remove
+                  setLists(prev => prev.filter(l => l.id !== listId))
+                  setDeleting(listId)
+
                   try {
-                    setDeleting(listId)
                     setError(null)
                     await apiDelete(`/api/todo-lists/${listId}?user_id=${parseInt(userId!)}`, { timeout: 15000 })
-                    await loadLists(true)
-                    setDeleteConfirmId(null)
                     toast({
                       title: "Список удален",
                       description: "Список задач успешно удален",
                     })
                   } catch (e: any) {
                     console.error("Ошибка удаления списка:", e)
+                    // Rollback
+                    setLists(prev => [...prev, { ...listToDelete, _isRemoving: false }])
                     const errorMessage = e.type ? formatApiError(e) : (e.message || "Не удалось удалить список")
                     setError(errorMessage)
                     toast({

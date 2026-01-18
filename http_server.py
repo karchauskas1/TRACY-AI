@@ -277,11 +277,17 @@ async def get_meetings_handler(request: web_request.Request):
             meetings = db_instance.get_meetings(user_id, limit=100)
             web_meetings = []
             for meeting in meetings:
+                # Логируем длину transcript для диагностики
+                transcript = meeting.get('transcript', '')
+                transcript_len = len(transcript) if transcript else 0
+                meeting_id = meeting.get('id', 'N/A')
+                logger.info(f"📊 HTTP API: Встреча {meeting_id} - transcript длина: {transcript_len} символов")
+
                 web_meetings.append({
                     'id': str(meeting.get('id', '')),
                     'title': meeting.get('title') or meeting.get('summary', '')[:100] or 'Встреча',
                     'summary': meeting.get('summary'),
-                    'transcript': meeting.get('transcript'),
+                    'transcript': transcript,
                     'summaryExtended': meeting.get('summary_extended'),
                     'createdAt': meeting.get('created_at').isoformat() if isinstance(meeting.get('created_at'), datetime) else meeting.get('created_at'),
                 })
@@ -321,14 +327,21 @@ async def get_meeting_handler(request: web_request.Request):
             meeting = db_instance.get_meeting(meeting_id, user_id)
             if not meeting:
                 return json_response({'error': 'Meeting not found'}, status=404)
-            
+
+            # Логируем длину transcript для диагностики
+            transcript = meeting.get('transcript', '')
+            raw_text = meeting.get('raw_text', '')
+            transcript_len = len(transcript) if transcript else 0
+            raw_text_len = len(raw_text) if raw_text else 0
+            logger.info(f"📊 HTTP API: Отправка встречи {meeting_id} - transcript: {transcript_len} символов, raw_text: {raw_text_len} символов")
+
             return json_response({
                 'success': True,
                 'meeting': {
                     'id': str(meeting.get('id', '')),
                     'title': meeting.get('title') or meeting.get('summary', '')[:100] or 'Встреча',
                     'summary': meeting.get('summary'),
-                    'transcript': meeting.get('transcript'),
+                    'transcript': transcript,
                     'summaryExtended': meeting.get('summary_extended'),
                     'createdAt': meeting.get('created_at').isoformat() if isinstance(meeting.get('created_at'), datetime) else meeting.get('created_at'),
                 }
@@ -636,7 +649,7 @@ async def notify_super_user_about_feedback(user_id: int, feedback_type: str, com
             logger.warning("SUPER_USER_ID не настроен, уведомление не отправлено")
             return
         
-        type_label = "🐛 Баг" if feedback_type == "bug" else "💡 Предложение"
+        type_label = "🐛 Баг" if feedback_type.lower() in ["bug", "баг"] else "💡 Предложение"
         message = (
             f"📬 Новая обратная связь!\n\n"
             f"Тип: {type_label}\n"
@@ -1452,8 +1465,8 @@ async def send_chat_message_handler(request: web_request.Request):
 
 def create_app():
     """Создает и настраивает aiohttp приложение."""
-    # Allow larger payloads for screenshots
-    app = web.Application(client_max_size=12 * 1024 * 1024)  # 12MB
+    # Allow larger payloads for screenshots and long meeting transcripts
+    app = web.Application(client_max_size=100 * 1024 * 1024)  # 100MB
     
     # CORS middleware для разрешения запросов из веб-приложения
     @web.middleware
