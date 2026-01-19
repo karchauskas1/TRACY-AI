@@ -175,7 +175,9 @@ function AssistantPageContent() {
   }, [])
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchDragActiveRef.current && draggedTile && dragOverTile) {
+    const wasDragging = touchDragActiveRef.current
+
+    if (wasDragging && draggedTile && dragOverTile) {
       // Perform the swap
       setTileOrder(prevOrder => {
         const newOrder = [...prevOrder]
@@ -197,10 +199,12 @@ function AssistantPageContent() {
     setDraggedTile(null)
     setDragOverTile(null)
 
-    // Keep didDragRef true for a moment to block the click
-    setTimeout(() => {
-      didDragRef.current = false
-    }, 100)
+    // Keep didDragRef true longer to block the click that follows touchend
+    if (wasDragging) {
+      setTimeout(() => {
+        didDragRef.current = false
+      }, 300)
+    }
   }, [draggedTile, dragOverTile])
 
   // Конфигурация плиток
