@@ -596,11 +596,15 @@ function AssistantPageContent() {
 
           {/* Main Features - Draggable Tiles */}
           <div className="space-y-4">
-            {/* Hint about drag-and-drop */}
-            <p className="text-xs text-muted-foreground text-center mb-2">
-              Перетащите плитки для изменения порядка
-            </p>
-            
+            {/* Hint about drag-and-drop - only in edit mode */}
+            {isEditMode && (
+              <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 mb-4 animate-slide-in">
+                <p className="text-sm text-primary font-medium text-center">
+                  Перетащите плитки для изменения порядка
+                </p>
+              </div>
+            )}
+
             {/* Render tiles in user-defined order */}
             {tileOrder.map(tileId => renderTile(tileId))}
           </div>
