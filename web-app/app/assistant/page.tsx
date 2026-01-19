@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, Suspense, useCallback } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { logger } from "../../lib/logger"
-import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug, GripVertical } from "lucide-react"
+import { Calendar, Settings, Mic, FileAudio, History, Sparkles, MessageSquare, ListTodo, MessageCircle, Bug, ArrowDownUp, Check } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
@@ -50,6 +50,7 @@ function AssistantPageContent() {
   const [tileOrder, setTileOrder] = useState<string[]>(DEFAULT_TILE_ORDER)
   const [draggedTile, setDraggedTile] = useState<string | null>(null)
   const [dragOverTile, setDragOverTile] = useState<string | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
 
   // Touch drag state
   const touchStartRef = useRef<{ x: number; y: number; tileId: string; time: number } | null>(null)
@@ -292,21 +293,27 @@ function AssistantPageContent() {
       <div
         key={tile.id}
         data-tile-id={tile.id}
-        draggable
-        onDragStart={(e) => handleDragStart(e, tile.id)}
-        onDragEnd={handleDragEnd}
-        onDragOver={(e) => handleDragOver(e, tile.id)}
-        onDragLeave={handleDragLeave}
-        onDrop={(e) => handleDrop(e, tile.id)}
-        onTouchStart={(e) => handleTileTouchStart(e, tile.id)}
-        onTouchMove={(e) => handleTileTouchMove(e, tile.id)}
-        onTouchEnd={(e) => handleTileTouchEnd(e)}
-        className={`relative ${isDragOver ? 'scale-105' : ''} ${isDragging ? 'opacity-50' : ''} transition-all duration-200`}
+        draggable={isEditMode}
+        onDragStart={isEditMode ? (e) => handleDragStart(e, tile.id) : undefined}
+        onDragEnd={isEditMode ? handleDragEnd : undefined}
+        onDragOver={isEditMode ? (e) => handleDragOver(e, tile.id) : undefined}
+        onDragLeave={isEditMode ? handleDragLeave : undefined}
+        onDrop={isEditMode ? (e) => handleDrop(e, tile.id) : undefined}
+        onTouchStart={isEditMode ? (e) => handleTileTouchStart(e, tile.id) : undefined}
+        onTouchMove={isEditMode ? (e) => handleTileTouchMove(e, tile.id) : undefined}
+        onTouchEnd={isEditMode ? (e) => handleTileTouchEnd(e) : undefined}
+        className={`relative ${isDragOver ? 'scale-105' : ''} ${isDragging ? 'opacity-50' : ''} transition-all duration-200 ${isEditMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
       >
         <Link
           href={tile.href}
-          className="block group"
+          className={`block group ${isEditMode ? 'pointer-events-none' : ''}`}
           onClick={(e) => {
+            // In edit mode, prevent navigation
+            if (isEditMode) {
+              e.preventDefault()
+              e.stopPropagation()
+              return
+            }
             // Prevent navigation if there was any touch movement
             if (didDragRef.current) {
               e.preventDefault()
@@ -327,14 +334,6 @@ function AssistantPageContent() {
 
             <div className="p-6">
               <div className="flex items-center gap-4">
-                {/* Drag handle */}
-                <div
-                  className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors select-none"
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <GripVertical className="h-5 w-5" />
-                </div>
-
                 {/* Icon with gradient and glow */}
                 <div className="relative">
                   <div className={`absolute inset-0 bg-gradient-to-br ${tile.gradient} rounded-2xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity`} />
@@ -352,12 +351,18 @@ function AssistantPageContent() {
                   </p>
                 </div>
 
-                {/* Arrow */}
-                <div className={`text-muted-foreground group-hover:${tile.hoverColor} group-hover:translate-x-1 transition-all`}>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
+                {/* Arrow or Edit mode indicator */}
+                {isEditMode ? (
+                  <div className="text-muted-foreground">
+                    <ArrowDownUp className="h-5 w-5" />
+                  </div>
+                ) : (
+                  <div className={`text-muted-foreground group-hover:${tile.hoverColor} group-hover:translate-x-1 transition-all`}>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -482,13 +487,30 @@ function AssistantPageContent() {
             </div>
             <span className="text-sm font-medium">TRACY</span>
           </div>
-          <Link
-            href="/settings"
-            aria-label="Settings"
-            className="text-foreground hover:text-muted-foreground transition-colors"
-          >
-            <Settings className="h-5 w-5" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsEditMode(!isEditMode)}
+              aria-label={isEditMode ? "Готово" : "Изменить порядок"}
+              className={`text-foreground transition-colors p-2 rounded-lg ${
+                isEditMode
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'hover:text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {isEditMode ? (
+                <Check className="h-5 w-5" />
+              ) : (
+                <ArrowDownUp className="h-5 w-5" />
+              )}
+            </button>
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              className="text-foreground hover:text-muted-foreground transition-colors p-2 rounded-lg hover:bg-muted"
+            >
+              <Settings className="h-5 w-5" />
+            </Link>
+          </div>
         </div>
       </header>
 
