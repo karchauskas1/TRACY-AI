@@ -131,14 +131,22 @@ function AssistantPageContent() {
 
   // Touch handlers for mobile drag-and-drop - now on entire tile
   const handleTileTouchStart = useCallback((e: React.TouchEvent, tileId: string) => {
+    if (!isEditMode) return
+
+    // Prevent scrolling in edit mode
+    e.preventDefault()
+
     const touch = e.touches[0]
     touchStartRef.current = { x: touch.clientX, y: touch.clientY, tileId, time: Date.now() }
     touchDragActiveRef.current = false
     didDragRef.current = false
-  }, [])
+  }, [isEditMode])
 
   const handleTileTouchMove = useCallback((e: React.TouchEvent, tileId: string) => {
-    if (!touchStartRef.current || touchStartRef.current.tileId !== tileId) return
+    if (!isEditMode || !touchStartRef.current || touchStartRef.current.tileId !== tileId) return
+
+    // Always prevent default in edit mode to stop scrolling
+    e.preventDefault()
 
     const touch = e.touches[0]
     const deltaX = Math.abs(touch.clientX - touchStartRef.current.x)
@@ -150,15 +158,12 @@ function AssistantPageContent() {
     }
 
     // Activate drag after larger movement threshold
-    if (!touchDragActiveRef.current && (deltaX > 15 || deltaY > 15)) {
+    if (!touchDragActiveRef.current && (deltaX > 10 || deltaY > 10)) {
       touchDragActiveRef.current = true
       setDraggedTile(tileId)
-      e.preventDefault()
     }
 
     if (touchDragActiveRef.current) {
-      e.preventDefault()
-
       // Find which tile we're over
       const elementsAtPoint = document.elementsFromPoint(touch.clientX, touch.clientY)
       let foundTileId: string | null = null
@@ -177,7 +182,7 @@ function AssistantPageContent() {
         setDragOverTile(null)
       }
     }
-  }, [])
+  }, [isEditMode])
 
   const handleTileTouchEnd = useCallback((e: React.TouchEvent) => {
     const wasDragging = touchDragActiveRef.current
@@ -302,6 +307,7 @@ function AssistantPageContent() {
         onTouchStart={isEditMode ? (e) => handleTileTouchStart(e, tile.id) : undefined}
         onTouchMove={isEditMode ? (e) => handleTileTouchMove(e, tile.id) : undefined}
         onTouchEnd={isEditMode ? (e) => handleTileTouchEnd(e) : undefined}
+        style={isEditMode ? { touchAction: 'none' } : undefined}
         className={`relative ${isDragOver ? 'scale-105' : ''} ${isDragging ? 'opacity-50' : ''} transition-all duration-200 ${isEditMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
       >
         <Link
