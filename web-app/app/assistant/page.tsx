@@ -597,13 +597,17 @@ function AssistantPageContent() {
           {/* Main Features - Draggable Tiles */}
           <div className="space-y-4">
             {/* Hint about drag-and-drop - only in edit mode */}
-            {isEditMode && (
-              <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 mb-4 animate-slide-in">
-                <p className="text-sm text-primary font-medium text-center">
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                isEditMode ? 'max-h-20 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0'
+              }`}
+            >
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-xs text-muted-foreground text-center">
                   Перетащите плитки для изменения порядка
                 </p>
               </div>
-            )}
+            </div>
 
             {/* Render tiles in user-defined order */}
             {tileOrder.map(tileId => renderTile(tileId))}
