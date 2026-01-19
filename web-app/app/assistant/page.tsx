@@ -52,7 +52,7 @@ function AssistantPageContent() {
   const [dragOverTile, setDragOverTile] = useState<string | null>(null)
 
   // Touch drag state
-  const touchStartRef = useRef<{ x: number; y: number; tileId: string } | null>(null)
+  const touchStartRef = useRef<{ x: number; y: number; tileId: string; time: number } | null>(null)
   const touchDragActiveRef = useRef(false)
   const tileRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
 
@@ -128,25 +128,29 @@ function AssistantPageContent() {
   // Track if drag happened to prevent click
   const didDragRef = useRef(false)
 
-  // Touch handlers for mobile drag-and-drop
-  const handleTouchStart = useCallback((e: React.TouchEvent, tileId: string) => {
+  // Touch handlers for mobile drag-and-drop - now on entire tile
+  const handleTileTouchStart = useCallback((e: React.TouchEvent, tileId: string) => {
     const touch = e.touches[0]
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY, tileId }
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, tileId, time: Date.now() }
     touchDragActiveRef.current = false
     didDragRef.current = false
   }, [])
 
-  const handleTouchMove = useCallback((e: React.TouchEvent, tileId: string) => {
+  const handleTileTouchMove = useCallback((e: React.TouchEvent, tileId: string) => {
     if (!touchStartRef.current || touchStartRef.current.tileId !== tileId) return
 
     const touch = e.touches[0]
     const deltaX = Math.abs(touch.clientX - touchStartRef.current.x)
     const deltaY = Math.abs(touch.clientY - touchStartRef.current.y)
 
-    // Activate drag after small movement threshold
-    if (!touchDragActiveRef.current && (deltaX > 10 || deltaY > 10)) {
-      touchDragActiveRef.current = true
+    // Mark as drag even with small movement to prevent accidental clicks
+    if (deltaX > 5 || deltaY > 5) {
       didDragRef.current = true
+    }
+
+    // Activate drag after larger movement threshold
+    if (!touchDragActiveRef.current && (deltaX > 15 || deltaY > 15)) {
+      touchDragActiveRef.current = true
       setDraggedTile(tileId)
       e.preventDefault()
     }
@@ -174,8 +178,9 @@ function AssistantPageContent() {
     }
   }, [])
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+  const handleTileTouchEnd = useCallback((e: React.TouchEvent) => {
     const wasDragging = touchDragActiveRef.current
+    const hadMovement = didDragRef.current
 
     if (wasDragging && draggedTile && dragOverTile) {
       // Perform the swap
@@ -199,11 +204,10 @@ function AssistantPageContent() {
     setDraggedTile(null)
     setDragOverTile(null)
 
-    // Keep didDragRef true longer to block the click that follows touchend
-    if (wasDragging) {
-      setTimeout(() => {
-        didDragRef.current = false
-      }, 300)
+    // Keep didDragRef true if there was any movement to block click
+    // Don't reset immediately - let the onClick handler check it first
+    if (!hadMovement) {
+      didDragRef.current = false
     }
   }, [draggedTile, dragOverTile])
 
@@ -294,16 +298,21 @@ function AssistantPageContent() {
         onDragOver={(e) => handleDragOver(e, tile.id)}
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e, tile.id)}
+        onTouchStart={(e) => handleTileTouchStart(e, tile.id)}
+        onTouchMove={(e) => handleTileTouchMove(e, tile.id)}
+        onTouchEnd={(e) => handleTileTouchEnd(e)}
         className={`relative ${isDragOver ? 'scale-105' : ''} ${isDragging ? 'opacity-50' : ''} transition-all duration-200`}
       >
         <Link
           href={tile.href}
           className="block group"
           onClick={(e) => {
-            // Prevent navigation if we just finished dragging
-            if (touchDragActiveRef.current || didDragRef.current) {
+            // Prevent navigation if there was any touch movement
+            if (didDragRef.current) {
               e.preventDefault()
               e.stopPropagation()
+              // Reset after blocking the click
+              didDragRef.current = false
               return
             }
             logger.info('AssistantPage', `Card clicked: ${tile.href}`)
@@ -318,20 +327,10 @@ function AssistantPageContent() {
 
             <div className="p-6">
               <div className="flex items-center gap-4">
-                {/* Drag handle - supports both mouse and touch */}
+                {/* Drag handle */}
                 <div
-                  className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors touch-none select-none"
+                  className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors select-none"
                   onMouseDown={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => {
-                    e.stopPropagation()
-                    handleTouchStart(e, tile.id)
-                  }}
-                  onTouchMove={(e) => {
-                    handleTouchMove(e, tile.id)
-                  }}
-                  onTouchEnd={(e) => {
-                    handleTouchEnd(e)
-                  }}
                 >
                   <GripVertical className="h-5 w-5" />
                 </div>
