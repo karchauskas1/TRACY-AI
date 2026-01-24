@@ -392,19 +392,34 @@ RECURRING PATTERNS (повторяющиеся события):
             
             user_prompt = f"""Извлеки информацию из сообщения: "{text}"
 
+КРИТИЧЕСКИ ВАЖНО для ДАТ - используй ОТНОСИТЕЛЬНЫЕ даты для дней недели:
+- Для "понедельник/вторник/среда/четверг/пятница/суббота/воскресенье" → возвращай "понедельник HH:MM", "вторник HH:MM" и т.д.
+- НЕ вычисляй абсолютную дату самостоятельно! Просто верни день недели.
+- Примеры:
+  * "в понедельник в 11:30" → start_time="понедельник 11:30" (НЕ вычисляй дату!)
+  * "во вторник в 10:00" → start_time="вторник 10:00"
+  * "в пятницу вечером" → start_time="пятница 18:00"
+  * "в субботу" → start_time="суббота" (без времени)
+
 ВАЖНО для дат и времени:
-- Распознавай даты в формате "N-го месяца": "19-го января", "3-е февраля", "1-го марта" и т.д.
-- Примеры событий с датами:
-  * "фотосессия в 17:00 19-го января" → intent="event", title="Фотосессия", start_time="2026-01-19T17:00:00"
-  * "встреча с Настей 3-е февраля в 14:00" → intent="event", title="Встреча с Настей", start_time="2026-02-03T14:00:00"
-  * "зарядка 15 января в 7 утра" → intent="event", title="Зарядка", start_time="2026-01-15T07:00:00"
+- "завтра", "послезавтра", "сегодня" → возвращай как есть: "завтра 15:00", "послезавтра 10:00"
+- Только для КОНКРЕТНЫХ дат (19 января, 3 февраля) используй формат YYYY-MM-DDTHH:MM:SS
+- Примеры событий с конкретными датами:
+  * "фотосессия в 17:00 19-го января" → start_time="2026-01-19T17:00:00"
+  * "встреча 3-е февраля в 14:00" → start_time="2026-02-03T14:00:00"
+
+ВАЖНО для ДИАПАЗОНОВ времени (start_time И end_time):
+- Оба времени должны быть на ОДНОЙ дате!
+- "в понедельник с 11:30 до 12:30" → start_time="понедельник 11:30", end_time="понедельник 12:30"
+- "завтра с 10 до 14" → start_time="завтра 10:00", end_time="завтра 14:00"
+- Если указан только день недели, end_time тоже должен быть с этим днём!
 
 ВАЖНО для нестандартных действий (принимай ЛЮБЫЕ действия как валидные):
 - Примеры с нестандартными/разговорными действиями:
-  * "в 10 утра почесать яйца" → intent="event", title="почесать яйца", start_time="10:00"
+  * "в 10 утра почесать яйца" → intent="event", title="почесать яйца", start_time="сегодня 10:00"
   * "завтра попить пивка с друзьями" → intent="event", title="попить пивка с друзьями", start_time="завтра"
   * "в пятницу поспать" → intent="event", title="поспать", start_time="пятница"
-  * "сегодня в 20:00 ничего не делать" → intent="event", title="ничего не делать", start_time="20:00"
+  * "сегодня в 20:00 ничего не делать" → intent="event", title="ничего не делать", start_time="сегодня 20:00"
 
 ВАЖНО для диапазонов времени:
 - Если есть "с X до Y" / "X-Y" / "X до Y часов" / "от X до Y" / "с X часов до Y" → извлекай оба: start_time (начало) и end_time (окончание)
@@ -446,8 +461,8 @@ RECURRING PATTERNS (повторяющиеся события):
     "title": "краткое название или null",
     "titles": ["название1", "название2"] или null (для delete_many, create_many),
     "description": "полное описание или null",
-    "start_time": "YYYY-MM-DDTHH:MM:SS или null (время начала события, если указан диапазон - это начало)",
-    "end_time": "YYYY-MM-DDTHH:MM:SS или null (время окончания события, если указан диапазон - это окончание)",
+    "start_time": "относительная дата ('понедельник 11:30', 'завтра 15:00', 'сегодня 10:00') или абсолютная YYYY-MM-DDTHH:MM:SS для конкретных дат (19 января), или null",
+    "end_time": "такой же формат как start_time, ОБЯЗАТЕЛЬНО та же дата что и start_time! ('понедельник 12:30' если start_time='понедельник 11:30'), или null",
     "location": "место или null",
     "priority": 0-5,
     "has_explicit_time": true/false,
@@ -490,49 +505,41 @@ RECURRING PATTERNS (повторяющиеся события):
             if result.get("start_time"):
                 try:
                     # Парсим дату из строки
+                    # 🔴 КРИТИЧНО: PREFER_DATES_FROM='future' чтобы "понедельник" был СЛЕДУЮЩИЙ, а не прошлый
                     parsed_date = dateparser.parse(
                         result["start_time"],
                         settings={
                             'TIMEZONE': user_timezone,
                             'RETURN_AS_TIMEZONE_AWARE': True,
-                            'RELATIVE_BASE': now
+                            'RELATIVE_BASE': now,
+                            'PREFER_DATES_FROM': 'future'  # ВСЕГДА предпочитать будущие даты!
                         }
                     )
                     if parsed_date:
                         # Если время 00:00:00 (только дата без времени), устанавливаем 12:00
                         if parsed_date.hour == 0 and parsed_date.minute == 0 and parsed_date.second == 0:
                             parsed_date = parsed_date.replace(hour=12, minute=0, second=0)
-                        
-                        # 🔴 КРИТИЧНО: Если указано только время (без явной даты) и оно уже прошло → сдвигаем на следующий день
+
                         original_time_str = result.get("start_time", "").lower()
-                        
-                        # Проверяем была ли указана явная дата (день недели, число месяца, относительная дата)
-                        date_indicators = [
-                            'завтра', 'послезавтра', 'сегодня', 'вчера',
-                            'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье',
-                            'пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс',
-                            'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
-                            'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-                            'january', 'february', 'march', 'april', 'may', 'june',
-                            'july', 'august', 'september', 'october', 'november', 'december',
-                            'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
-                            '-', '/'  # Разделители в датах (2026-01-19, 19/01/2026)
-                        ]
-                        
-                        has_explicit_date = any(indicator in original_time_str for indicator in date_indicators)
-                        # Также проверяем есть ли числа (возможно это дата в формате DD.MM или DD/MM)
-                        if not has_explicit_date and any(char.isdigit() for char in original_time_str):
-                            # Если есть два и более числа через точку/слэш - это дата
-                            import re
-                            date_pattern = r'\d{1,2}[\./]\d{1,2}|\d{1,2}\s+\w+'  # 19.01, 19/01, или "19 января"
-                            if re.search(date_pattern, original_time_str):
-                                has_explicit_date = True
-                        
-                        # Если НЕТ явной даты И время уже прошло → добавляем 1 день
-                        if not has_explicit_date and parsed_date < now:
-                            parsed_date = parsed_date + timedelta(days=1)
-                            logger.info(f"⏰ Время '{original_time_str}' уже прошло сегодня, переносим на завтра: {parsed_date}")
-                        
+
+                        # 🔴 ЖЁСТКИЙ ЗАПРЕТ: Никогда не создаём события в прошлом!
+                        # Если дата всё равно в прошлом - сдвигаем на будущее
+                        if parsed_date < now:
+                            # Проверяем это день недели?
+                            weekdays = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье',
+                                       'пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс', 'monday', 'tuesday', 'wednesday',
+                                       'thursday', 'friday', 'saturday', 'sunday']
+                            is_weekday = any(wd in original_time_str for wd in weekdays)
+
+                            if is_weekday:
+                                # День недели в прошлом → сдвигаем на неделю вперёд
+                                parsed_date = parsed_date + timedelta(days=7)
+                                logger.info(f"⏰ День недели '{original_time_str}' был в прошлом, переносим на +7 дней: {parsed_date}")
+                            else:
+                                # Просто время или дата в прошлом → на следующий день
+                                parsed_date = parsed_date + timedelta(days=1)
+                                logger.info(f"⏰ Дата '{original_time_str}' в прошлом, переносим на завтра: {parsed_date}")
+
                         result["start_time"] = parsed_date.astimezone(tz)
                     else:
                         result["start_time"] = None
@@ -542,14 +549,18 @@ RECURRING PATTERNS (повторяющиеся события):
             else:
                 result["start_time"] = None
             
+            # Парсим end_time с использованием start_time как базы (если доступен)
             if result.get("end_time"):
                 try:
+                    # Используем start_time как RELATIVE_BASE если он уже распарсен
+                    relative_base = result.get("start_time") if result.get("start_time") else now
                     parsed_date = dateparser.parse(
                         result["end_time"],
                         settings={
                             'TIMEZONE': user_timezone,
                             'RETURN_AS_TIMEZONE_AWARE': True,
-                            'RELATIVE_BASE': now
+                            'RELATIVE_BASE': relative_base,
+                            'PREFER_DATES_FROM': 'future'
                         }
                     )
                     if parsed_date:
@@ -561,37 +572,31 @@ RECURRING PATTERNS (повторяющиеся события):
                     result["end_time"] = None
             else:
                 result["end_time"] = None
-            
+
             # Капитализируем первую букву названия
             if result.get("title"):
                 title = result["title"]
                 if title:
                     result["title"] = title[0].upper() + title[1:] if len(title) > 1 else title.upper()
-            
-            # Обработка диапазонов времени
+
+            # Обработка диапазонов времени - синхронизация дат start_time и end_time
             start_time = result.get("start_time")
             end_time = result.get("end_time")
-            
+
             if start_time and end_time:
-                # Если оба времени указаны, убеждаемся, что end_time >= start_time
-                # Если end_time раньше start_time (например, разница в дате не учтена), корректируем
-                if end_time < start_time:
-                    # Предполагаем, что end_time должен быть в тот же день, что и start_time
-                    # Используем ту же дату что и start_time, но с временем из end_time
+                # ВСЕГДА синхронизируем даты: end_time должен быть в тот же день что и start_time
+                # (или на следующий день, если время окончания раньше времени начала)
+                if start_time.date() != end_time.date():
+                    # Переносим end_time на дату start_time, сохраняя время
                     end_time = start_time.replace(hour=end_time.hour, minute=end_time.minute, second=end_time.second, microsecond=end_time.microsecond)
-                    # Если все равно меньше (например, 02:00 < 23:00 предыдущего дня), добавляем день
-                    if end_time < start_time:
-                        end_time = end_time + timedelta(days=1)
-                    result["end_time"] = end_time
-                    logger.info(f"Скорректирован end_time для диапазона: start={start_time}, end={end_time}")
-                else:
-                    # Если end_time >= start_time, но даты разные, убеждаемся что end_time в правильном формате
-                    # Если end_time имеет только время без даты (сегодняшняя дата), используем дату start_time
-                    if end_time.date() == now.date() and start_time.date() != now.date():
-                        # end_time имеет сегодняшнюю дату, но start_time - другую, переносим end_time на дату start_time
-                        end_time = start_time.replace(hour=end_time.hour, minute=end_time.minute, second=end_time.second, microsecond=end_time.microsecond)
-                        result["end_time"] = end_time
-                        logger.info(f"Скорректирована дата end_time для диапазона: start={start_time}, end={end_time}")
+                    logger.info(f"Синхронизирована дата end_time с start_time: {end_time}")
+
+                # Если время окончания раньше времени начала, добавляем день
+                if end_time < start_time:
+                    end_time = end_time + timedelta(days=1)
+                    logger.info(f"end_time перенесён на следующий день: {end_time}")
+
+                result["end_time"] = end_time
             elif start_time and not end_time:
                 # Если есть start_time но нет end_time, добавляем час по умолчанию
                 result["end_time"] = start_time + timedelta(hours=1)

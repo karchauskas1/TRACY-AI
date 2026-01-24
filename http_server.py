@@ -104,6 +104,14 @@ from nlp_extractor import NLPExtractor
 from decision_engine import DecisionEngine
 import config
 
+# Импорт модулей аутентификации (опциональный для обратной совместимости)
+try:
+    from tracy.api.auth import JWTAuthService, TelegramInitDataVerifier, setup_auth_routes
+    from tracy.core.security import TelegramAuthVerifier
+    AUTH_AVAILABLE = True
+except ImportError:
+    AUTH_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 # Глобальная ссылка на БД
@@ -1554,7 +1562,29 @@ def create_app():
     
     # Telegram Mini App Proxy - универсальный прокси для всех запросов
     app.router.add_post('/api/telegram-proxy', telegram_proxy_handler)
-    
+
+    # =========================================================================
+    # Authentication API (если модули доступны)
+    # =========================================================================
+    if AUTH_AVAILABLE:
+        try:
+            # Инициализируем auth сервисы
+            auth_service = JWTAuthService()
+            telegram_verifier = TelegramInitDataVerifier(config.TELEGRAM_BOT_TOKEN)
+
+            # Сохраняем в app для использования в handlers
+            app['auth_service'] = auth_service
+            app['telegram_verifier'] = telegram_verifier
+
+            # Регистрируем auth routes
+            setup_auth_routes(app)
+
+            logger.info("✓ Auth API endpoints зарегистрированы: /api/auth/token, /api/auth/refresh")
+        except Exception as e:
+            logger.warning(f"⚠️ Auth API не инициализирован: {e}")
+    else:
+        logger.info("ℹ️ Auth модули не доступны, API работает без аутентификации")
+
     return app
 
 

@@ -63,7 +63,21 @@ import config
 
 logger = logging.getLogger(__name__)
 
-# OpenAI клиент для Whisper (высококачественная расшифровка)
+# Groq клиент для Whisper (приоритетный - бесплатный и быстрый)
+groq_client = None
+GROQ_AVAILABLE = False
+try:
+    from groq import Groq
+    if config.GROQ_API_KEY:
+        groq_client = Groq(api_key=config.GROQ_API_KEY)
+        GROQ_AVAILABLE = True
+        logger.info("✅ Groq Whisper API доступен")
+except ImportError:
+    logger.warning("Groq SDK не установлен. Установите: pip install groq")
+except Exception as e:
+    logger.warning(f"Ошибка инициализации Groq: {e}")
+
+# OpenAI клиент для Whisper (fallback через OpenRouter - обычно не работает)
 try:
     from openai import OpenAI
     whisper_client = OpenAI(
@@ -113,10 +127,16 @@ class MeetingProcessor:
                 return None
             logger.info(f"Аудиофайл загружен, размер: {file_size} bytes")
             
-            # Пробуем использовать Whisper API для качественной расшифровки
-            if WHISPER_AVAILABLE and whisper_client:
+            # Пробуем использовать Groq Whisper API (приоритет) или OpenRouter Whisper (fallback)
+            use_groq = GROQ_AVAILABLE and groq_client
+            use_openrouter = WHISPER_AVAILABLE and whisper_client
+
+            if use_groq or use_openrouter:
                 try:
-                    logger.info("Используем Whisper API для расшифровки встречи...")
+                    if use_groq:
+                        logger.info("🚀 Используем Groq Whisper API для расшифровки встречи...")
+                    else:
+                        logger.info("Используем OpenRouter Whisper API для расшифровки встречи...")
                     
                     # Определяем формат и конвертируем при необходимости
                     audio_io.seek(0)
@@ -138,11 +158,28 @@ class MeetingProcessor:
                             # Конвертируем в MP3 для Whisper (если не MP3 уже)
                             if fmt != 'mp3':
                                 logger.info(f"Конвертирую {fmt} в MP3 для Whisper...")
-                                converted_io = io.BytesIO()
-                                test_audio.export(converted_io, format="mp3", bitrate="128k")
-                                converted_io.seek(0)
-                                audio_data = converted_io.read()
-                                logger.info(f"✅ Конвертация {fmt} -> MP3 завершена, размер: {len(audio_data)} bytes")
+
+                                # Конвертируем в mono 16kHz для оптимального размера (Whisper работает с 16kHz)
+                                test_audio = test_audio.set_channels(1)  # Mono
+                                test_audio = test_audio.set_frame_rate(16000)  # 16kHz - оптимально для speech
+
+                                # Пробуем разные битрейты
+                                # Groq лимит 25 MB, OpenRouter ~20 MB
+                                MAX_WHISPER_SIZE = 25 * 1024 * 1024 if use_groq else 20 * 1024 * 1024
+
+                                for bitrate in ["48k", "32k", "24k", "16k"]:
+                                    converted_io = io.BytesIO()
+                                    test_audio.export(converted_io, format="mp3", bitrate=bitrate)
+                                    converted_io.seek(0)
+                                    audio_data = converted_io.read()
+                                    logger.info(f"Конвертация {fmt} -> MP3 ({bitrate}): {len(audio_data)} bytes ({len(audio_data) / (1024*1024):.1f} MB)")
+
+                                    if len(audio_data) <= MAX_WHISPER_SIZE:
+                                        logger.info(f"✅ Конвертация {fmt} -> MP3 завершена, размер: {len(audio_data)} bytes, bitrate: {bitrate}")
+                                        break
+                                else:
+                                    # Если даже 32k не помогло, используем как есть
+                                    logger.warning(f"⚠️ Файл всё ещё большой после сжатия: {len(audio_data)} bytes")
                             else:
                                 audio_io.seek(0)
                                 audio_data = audio_io.read()
@@ -157,12 +194,24 @@ class MeetingProcessor:
                             audio_io.seek(0)
                             logger.info("Пробую автоопределение формата...")
                             test_audio = AudioSegment.from_file(audio_io)
-                            converted_io = io.BytesIO()
-                            test_audio.export(converted_io, format="mp3", bitrate="128k")
-                            converted_io.seek(0)
-                            audio_data = converted_io.read()
+
+                            # Конвертируем в mono 16kHz для оптимального размера
+                            test_audio = test_audio.set_channels(1)
+                            test_audio = test_audio.set_frame_rate(16000)
+
+                            MAX_WHISPER_SIZE = 25 * 1024 * 1024 if use_groq else 20 * 1024 * 1024
+
+                            for bitrate in ["48k", "32k", "24k", "16k"]:
+                                converted_io = io.BytesIO()
+                                test_audio.export(converted_io, format="mp3", bitrate=bitrate)
+                                converted_io.seek(0)
+                                audio_data = converted_io.read()
+                                logger.info(f"Автоопределение -> MP3 ({bitrate}): {len(audio_data) / (1024*1024):.1f} MB")
+                                if len(audio_data) <= MAX_WHISPER_SIZE:
+                                    break
+
                             audio_format = "mp3"
-                            logger.info("Формат определен автоматически, конвертировано в MP3")
+                            logger.info(f"Формат определен автоматически, конвертировано в MP3: {len(audio_data)} bytes")
                         except Exception as e:
                             logger.warning(f"Не удалось определить формат, используем как есть: {e}")
                             audio_io.seek(0)
@@ -193,46 +242,82 @@ class MeetingProcessor:
                                 mime_type = 'audio/flac'
                             
                             file_tuple = (os.path.basename(temp_file_path), audio_file_obj, mime_type)
-                            
-                            # Используем Whisper с временными метками
-                            # Пробуем использовать verbose_json если доступен
-                            try:
-                                response = whisper_client.audio.transcriptions.create(
-                                    model="openai/whisper-1",
-                                    file=file_tuple,
-                                    language=language if language != "ru-RU" else "ru",
-                                    response_format="verbose_json",
-                                    timestamp_granularities=["segment"]
-                                )
-                                
-                                # Парсим результат с сегментами
-                                if isinstance(response, dict):
-                                    transcript = response.get('text', '')
-                                    segments = response.get('segments', [])
-                                elif hasattr(response, 'text') and hasattr(response, 'segments'):
-                                    transcript = response.text
-                                    segments = response.segments if hasattr(response, 'segments') else []
-                                elif hasattr(response, 'text'):
-                                    transcript = response.text
+
+                            # Используем Groq или OpenRouter Whisper
+                            transcript = ""
+                            segments = []
+
+                            if use_groq:
+                                # Groq Whisper API
+                                try:
+                                    logger.info("📤 Отправляю аудио в Groq Whisper API...")
+                                    response = groq_client.audio.transcriptions.create(
+                                        model="whisper-large-v3",
+                                        file=audio_file_obj,
+                                        language=language if language != "ru-RU" else "ru",
+                                        response_format="verbose_json",
+                                        timestamp_granularities=["segment"]
+                                    )
+
+                                    # Парсим результат
+                                    if hasattr(response, 'text'):
+                                        transcript = response.text
+                                    if hasattr(response, 'segments') and response.segments:
+                                        segments = [{'start': s.start, 'end': s.end, 'text': s.text}
+                                                    for s in response.segments]
+
+                                    logger.info(f"✅ Groq Whisper: получено {len(transcript)} символов, {len(segments)} сегментов")
+
+                                except Exception as groq_error:
+                                    logger.warning(f"⚠️ Groq verbose_json не сработал: {groq_error}")
+                                    # Пробуем простой формат
+                                    try:
+                                        audio_file_obj.seek(0)
+                                        response = groq_client.audio.transcriptions.create(
+                                            model="whisper-large-v3",
+                                            file=audio_file_obj,
+                                            language=language if language != "ru-RU" else "ru",
+                                            response_format="text"
+                                        )
+                                        transcript = str(response).strip()
+                                        segments = []
+                                        logger.info(f"✅ Groq Whisper (text): получено {len(transcript)} символов")
+                                    except Exception as groq_text_error:
+                                        logger.error(f"❌ Groq Whisper полностью не сработал: {groq_text_error}")
+                                        raise groq_text_error
+                            else:
+                                # OpenRouter Whisper API (fallback)
+                                try:
+                                    response = whisper_client.audio.transcriptions.create(
+                                        model="openai/whisper-1",
+                                        file=file_tuple,
+                                        language=language if language != "ru-RU" else "ru",
+                                        response_format="verbose_json",
+                                        timestamp_granularities=["segment"]
+                                    )
+
+                                    if isinstance(response, dict):
+                                        transcript = response.get('text', '')
+                                        segments = response.get('segments', [])
+                                    elif hasattr(response, 'text'):
+                                        transcript = response.text
+                                        segments = response.segments if hasattr(response, 'segments') else []
+                                    else:
+                                        transcript = str(response)
+                                        segments = []
+
+                                except Exception as verbose_error:
+                                    logger.warning(f"Verbose JSON не поддерживается: {verbose_error}")
+                                    audio_file_obj.seek(0)
+                                    file_tuple = (os.path.basename(temp_file_path), audio_file_obj, mime_type)
+                                    response = whisper_client.audio.transcriptions.create(
+                                        model="openai/whisper-1",
+                                        file=file_tuple,
+                                        language=language if language != "ru-RU" else "ru",
+                                        response_format="text"
+                                    )
+                                    transcript = str(response).strip()
                                     segments = []
-                                else:
-                                    # Если формат другой, используем строковое представление
-                                    transcript = str(response)
-                                    segments = []
-                            
-                            except Exception as verbose_error:
-                                # Fallback на обычный формат если verbose_json не поддерживается
-                                logger.warning(f"Verbose JSON не поддерживается, используем обычный формат: {verbose_error}")
-                                audio_file_obj.seek(0)
-                                file_tuple = (os.path.basename(temp_file_path), audio_file_obj, mime_type)
-                                response = whisper_client.audio.transcriptions.create(
-                                    model="openai/whisper-1",
-                                    file=file_tuple,
-                                    language=language if language != "ru-RU" else "ru",
-                                    response_format="text"
-                                )
-                                transcript = str(response).strip()
-                                segments = []
                             
                             # Форматируем расшифровку с тайм-кодами (если есть сегменты)
                             if segments:
@@ -245,9 +330,12 @@ class MeetingProcessor:
                             duration = 0
                             if segments and len(segments) > 0:
                                 duration = segments[-1].get('end', 0) if isinstance(segments[-1], dict) else 0
-                            
-                            logger.info(f"Расшифровка завершена: {len(transcript)} символов, {len(segments)} сегментов, длительность: {duration}с")
-                            
+
+                            # Логируем полную информацию о расшифровке для диагностики
+                            formatted_len = len(formatted_transcript) if formatted_transcript else 0
+                            raw_len = len(transcript) if transcript else 0
+                            logger.info(f"✅ Расшифровка завершена: raw_text={raw_len} символов, formatted_transcript={formatted_len} символов, {len(segments)} сегментов, длительность: {duration}с")
+
                             return {
                                 'transcript': formatted_transcript,
                                 'raw_text': transcript,

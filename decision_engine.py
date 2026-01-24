@@ -883,23 +883,28 @@ class DecisionEngine:
         # ВАЖНО: Если время явно указано (has_explicit_time = True), НЕ создаем draft, даже если confidence низкая
         # Только если время НЕ указано явно - создаем draft
         if not has_explicit_time:
+            # 🔴 По умолчанию событие длится 1 час если end_time не указан
+            draft_end_time = extracted_data.get('end_time')
+            if not draft_end_time and start_time:
+                draft_end_time = start_time + timedelta(hours=1)
+
             # Сохраняем как draft в БД
             event_id = self.db.save_event(
                 user_id=user_id,
                 title=title,
                 description=extracted_data.get('description'),
                 start_time=start_time,
-                end_time=extracted_data.get('end_time'),
+                end_time=draft_end_time,
                 location=extracted_data.get('location'),
                 priority=extracted_data.get('priority', 0),
                 status='needs_confirmation'
             )
-            
+
             # Используем тот же формат, но с пометкой о черновике
             message = self._format_event_confirmation(
                 title=title,
                 start_time=start_time,
-                end_time=extracted_data.get('end_time'),
+                end_time=draft_end_time,
                 location=extracted_data.get('location'),
                 description=extracted_data.get('description'),
                 timezone=timezone,
@@ -917,13 +922,21 @@ class DecisionEngine:
         
         # КРИТИЧЕСКИ ВАЖНО: События ВСЕГДА должны сохраняться в БД, независимо от подключения календарей
         # Это необходимо для отображения событий в веб-приложении
+
+        # 🔴 По умолчанию событие длится 1 час если end_time не указан
+        end_time = extracted_data.get('end_time')
+        if not end_time and start_time:
+            end_time = start_time + timedelta(hours=1)
+            extracted_data['end_time'] = end_time  # Обновляем в dict для использования везде
+            logger.info(f"⏰ end_time не указан, устанавливаем +1 час: {end_time}")
+
         # Сначала сохраняем событие в БД (локально)
         db_event_id = self.db.save_event(
             user_id=user_id,
             title=title,
             description=extracted_data.get('description'),
             start_time=start_time,
-            end_time=extracted_data.get('end_time'),
+            end_time=end_time,
             location=extracted_data.get('location'),
             priority=extracted_data.get('priority', 0),
             status='confirmed'  # События с явным временем считаются подтвержденными

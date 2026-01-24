@@ -90,24 +90,33 @@ try:
 except ImportError:
     TESSERACT_AVAILABLE = False
 
-# OpenAI клиент для Vision API и Whisper
+# OpenAI клиент для Vision API
 try:
     from openai import OpenAI
     vision_client = OpenAI(
         api_key=config.OPENROUTER_API_KEY,
         base_url=config.OPENROUTER_BASE_URL
     )
-    whisper_client = OpenAI(
-        api_key=config.OPENROUTER_API_KEY,
-        base_url=config.OPENROUTER_BASE_URL
-    )
     VISION_AVAILABLE = True
-    WHISPER_AVAILABLE = True
 except Exception:
     vision_client = None
-    whisper_client = None
     VISION_AVAILABLE = False
-    WHISPER_AVAILABLE = False
+
+# Groq клиент для Whisper (бесплатный и быстрый)
+try:
+    from groq import Groq
+    if config.GROQ_API_KEY:
+        groq_client = Groq(api_key=config.GROQ_API_KEY)
+        GROQ_WHISPER_AVAILABLE = True
+        logger.info("✅ Groq Whisper API доступен для распознавания голоса")
+    else:
+        groq_client = None
+        GROQ_WHISPER_AVAILABLE = False
+        logger.info("ℹ️ GROQ_API_KEY не настроен, используется Google Speech Recognition")
+except ImportError:
+    groq_client = None
+    GROQ_WHISPER_AVAILABLE = False
+    logger.info("ℹ️ Groq SDK не установлен, используется Google Speech Recognition")
 
 
 class MediaProcessor:
@@ -118,96 +127,125 @@ class MediaProcessor:
     
     async def process_voice(self, voice_file, language: str = "ru") -> Optional[str]:
         """
-        Конвертировать голосовое сообщение в текст через Google Speech Recognition.
-        
+        Конвертировать голосовое сообщение в текст.
+
+        Приоритет:
+        1. Groq Whisper (бесплатный, быстрый, высокое качество)
+        2. Google Speech Recognition (fallback)
+
         Args:
             voice_file: Файл голосового сообщения из Telegram
             language: Язык для распознавания (по умолчанию русский)
-        
+
         Returns:
             Распознанный текст или None при ошибке
         """
         try:
-            # Настраиваем pydub перед импортом
-            import subprocess
-            if 'FFPROBE_BINARY' not in os.environ:
-                # Пробуем найти ffprobe
-                for path in ['/usr/bin/ffprobe', '/usr/local/bin/ffprobe']:
-                    if os.path.exists(path):
-                        os.environ['FFPROBE_BINARY'] = path
-                        break
-            
-            from pydub import AudioSegment
-            from pydub.utils import which
-            
+            import tempfile
+
             # Скачать файл
             voice_io = io.BytesIO()
             await voice_file.download_to_memory(voice_io)
             voice_io.seek(0)
-            
+
             # Проверяем размер файла
             file_size = len(voice_io.getvalue())
             if file_size == 0:
                 logger.error("Загруженный голосовой файл пуст")
                 return None
             logger.info(f"Голосовой файл загружен, размер: {file_size} bytes")
-            
-            # ПРИМЕЧАНИЕ: OpenRouter не поддерживает Whisper через audio.transcriptions endpoint
-            # Используем только Google Speech Recognition для распознавания голоса
-            # Whisper через OpenRouter отключен из-за ошибки 405 Method Not Allowed
-            
-            # Fallback: используем Google Speech Recognition
+
+            # ═══════════════════════════════════════════════════════════════════
+            # ПРИОРИТЕТ 1: Groq Whisper (бесплатный, быстрый, высокое качество)
+            # ═══════════════════════════════════════════════════════════════════
+            if GROQ_WHISPER_AVAILABLE and groq_client:
+                try:
+                    logger.info("🎤 Используем Groq Whisper для распознавания голоса...")
+
+                    # Сохраняем во временный файл (Groq требует файл)
+                    voice_io.seek(0)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.ogg') as temp_file:
+                        temp_file.write(voice_io.getvalue())
+                        temp_file_path = temp_file.name
+
+                    try:
+                        with open(temp_file_path, 'rb') as audio_file:
+                            transcription = groq_client.audio.transcriptions.create(
+                                model="whisper-large-v3",
+                                file=audio_file,
+                                language=language,
+                                response_format="text"
+                            )
+
+                        if transcription and transcription.strip():
+                            logger.info(f"✅ Groq Whisper распознал: {transcription[:100]}...")
+                            return transcription.strip()
+                        else:
+                            logger.warning("Groq Whisper вернул пустой результат")
+                    finally:
+                        if os.path.exists(temp_file_path):
+                            os.unlink(temp_file_path)
+
+                except Exception as e:
+                    logger.warning(f"⚠️ Ошибка Groq Whisper: {e}, пробуем Google Speech...")
+
+            # ═══════════════════════════════════════════════════════════════════
+            # ПРИОРИТЕТ 2: Google Speech Recognition (fallback)
+            # ═══════════════════════════════════════════════════════════════════
             try:
-                logger.info("Используем Google Speech Recognition для распознавания голоса...")
+                logger.info("🎤 Используем Google Speech Recognition...")
+
+                # Настраиваем pydub
+                if 'FFPROBE_BINARY' not in os.environ:
+                    for path in ['/usr/bin/ffprobe', '/usr/local/bin/ffprobe']:
+                        if os.path.exists(path):
+                            os.environ['FFPROBE_BINARY'] = path
+                            break
+
+                from pydub import AudioSegment
+
                 voice_io.seek(0)
                 audio_data = None
-                supported_formats = ['m4a', 'mp3', 'wav', 'ogg', 'opus', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
-                
+                supported_formats = ['ogg', 'opus', 'm4a', 'mp3', 'wav', 'flac', 'aac', 'wma', 'amr', '3gp', 'mka']
+
                 # Пробуем разные форматы
                 for fmt in supported_formats:
                     try:
                         voice_io.seek(0)
-                        logger.debug(f"Пробую определить формат голосового как {fmt}...")
                         audio_data = AudioSegment.from_file(voice_io, format=fmt)
-                        logger.info(f"✅ Определен формат аудио для Google Speech: {fmt}")
+                        logger.info(f"✅ Определен формат аудио: {fmt}")
                         break
-                    except Exception as e:
-                        logger.debug(f"Формат {fmt} не подошел: {str(e)[:50]}")
+                    except Exception:
                         continue
-                
-                # Если не удалось определить, пробуем автоопределение
+
+                # Автоопределение формата
                 if audio_data is None:
                     try:
                         voice_io.seek(0)
                         audio_data = AudioSegment.from_file(voice_io)
-                        logger.info("Формат определен автоматически для Google Speech")
                     except Exception as e:
                         logger.error(f"Не удалось определить формат аудио: {e}")
                         return None
-                
-                # Конвертируем в WAV для Google Speech Recognition
-                import tempfile
+
+                # Конвертируем в WAV
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
                     audio_data.export(temp_file.name, format="wav")
                     temp_file_path = temp_file.name
-                
+
                 try:
-                    # Используем WAV для распознавания
                     with sr.AudioFile(temp_file_path) as source:
                         self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                         audio = self.recognizer.record(source)
-                
-                    # Распознавание через Google Speech Recognition
+
                     text = self.recognizer.recognize_google(
-                        audio, 
-                        language=language if language != "ru" else "ru-RU"
+                        audio,
+                        language="ru-RU" if language == "ru" else language
                     )
-                    
+
                     if text and text.strip():
-                        logger.info(f"Распознан текст через Google: {text[:50]}...")
+                        logger.info(f"✅ Google Speech распознал: {text[:100]}...")
                         return text.strip()
                 finally:
-                    # Удаляем временный файл
                     if os.path.exists(temp_file_path):
                         os.unlink(temp_file_path)
                     

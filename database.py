@@ -1791,7 +1791,12 @@ class Database:
         try:
             import json
             segments_json = json.dumps(segments) if segments else None
-            
+
+            # Логируем размеры для диагностики
+            transcript_len = len(transcript) if transcript else 0
+            raw_text_len = len(raw_text) if raw_text else 0
+            logger.info(f"💾 БД: Сохранение встречи для user_id={user_id} - transcript={transcript_len} символов, raw_text={raw_text_len} символов")
+
             if self.use_postgresql:
                 cursor.execute("""
                     INSERT INTO meetings (user_id, title, transcript, raw_text, summary, summary_extended, segments, duration, created_at, updated_at)

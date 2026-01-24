@@ -124,6 +124,23 @@ from conversation_memory import ConversationMemory
 from conversation_handler import ConversationHandler
 import config
 
+# Agent модуль - самопрограммирующееся ядро
+# LLM сам решает какие инструменты использовать
+try:
+    from tracy.agent import AgentCore, create_agent, AgentStatus
+    AGENT_AVAILABLE = True
+except ImportError:
+    AGENT_AVAILABLE = False
+    AgentCore = None
+
+# Intelligence модуль (deprecated, используется для извлечения контекста)
+try:
+    from tracy.intelligence import SmartRouter, create_smart_router
+    SMART_ROUTER_AVAILABLE = True
+except ImportError:
+    SMART_ROUTER_AVAILABLE = False
+    SmartRouter = None
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -144,6 +161,8 @@ reminder_scheduler = None   # → ReminderScheduler: фоновая отправ
 decision_engine = None      # → DecisionEngine: логика создания/изменения событий
 conversation_memory = None  # → ConversationMemory: история диалога для контекста NLP
 conversation_handler = None # → ConversationHandler: multi-turn диалоги (уточняющие вопросы)
+smart_router = None         # → SmartRouter: умная обработка сообщений (deprecated)
+agent = None                # → AgentCore: самопрограммирующееся ядро (LLM сам решает что делать)
 
 
 async def notify_super_user_about_feedback(user_id: int, feedback_type: str, comment: str):
@@ -517,10 +536,48 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback от кнопок настроек."""
     query = update.callback_query
     await query.answer()
-    
+
     user_id = query.from_user.id
     data = query.data
-    
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Agent callbacks (agent_option_*)
+    # ─────────────────────────────────────────────────────────────────────────
+    if data.startswith("agent_option_") and agent:
+        try:
+            # Получаем индекс выбранной опции
+            option_index = int(data.replace("agent_option_", ""))
+
+            # Получаем контекст из памяти агента
+            from tracy.agent import get_memory
+            memory = get_memory()
+            ctx = memory.get_context(user_id)
+
+            if ctx.pending_options and option_index < len(ctx.pending_options):
+                selected_option = ctx.pending_options[option_index]
+
+                # Обрабатываем выбранный ответ как новое сообщение
+                user_settings = db.get_user_settings(user_id)
+                user_timezone = user_settings.get('timezone', 'Europe/Moscow') if user_settings else 'Europe/Moscow'
+
+                agent_result = await agent.process(
+                    user_id=user_id,
+                    text=selected_option,
+                    user_timezone=user_timezone
+                )
+
+                if agent_result.message:
+                    await query.edit_message_text(
+                        agent_result.message,
+                        reply_markup=agent_result.keyboard,
+                        parse_mode='HTML'
+                    )
+                return
+
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка обработки Agent callback: {e}")
+            # Продолжаем обработку в стандартном режиме
+
     if data == "list_events_all":
         # Показываем список всех событий
         user = db.get_or_create_user(user_id)
@@ -2316,6 +2373,105 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"📝 TEXT: {msg.text[:100] if len(msg.text) > 100 else msg.text}")
 
     # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ 0: AgentCore - самопрограммирующееся ядро
+    # LLM сам решает какие инструменты использовать на основе сообщения
+    # ─────────────────────────────────────────────────────────────────────────
+    if agent and update.message and update.message.text:
+        try:
+            # Получаем timezone пользователя
+            user_settings = db.get_user_settings(user_id)
+            user_timezone = user_settings.get('timezone', 'Europe/Moscow') if user_settings else 'Europe/Moscow'
+
+            # Извлекаем event_id из reply сообщения (если есть)
+            reply_event_id = None
+            reply_event_title = None
+            if update.message.reply_to_message:
+                reply_msg = update.message.reply_to_message
+                # Проверяем callback_data в inline кнопках
+                if reply_msg.reply_markup and hasattr(reply_msg.reply_markup, 'inline_keyboard'):
+                    for row in reply_msg.reply_markup.inline_keyboard:
+                        for btn in row:
+                            if btn.callback_data:
+                                # Паттерны: confirm_event_123, delete_event_123, event_123, etc.
+                                import re
+                                match = re.search(r'(?:confirm_event_|delete_event_|event_|reschedule_event_)(\d+)', btn.callback_data)
+                                if match:
+                                    reply_event_id = int(match.group(1))
+                                    # Получаем название события
+                                    event = db.get_event(reply_event_id)
+                                    if event:
+                                        reply_event_title = event.get('title')
+                                    break
+                        if reply_event_id:
+                            break
+
+                # 🔴 Если не нашли в кнопках, пробуем извлечь из текста сообщения
+                if not reply_event_id and reply_msg.text:
+                    import re
+                    # Первая строка обычно содержит эмодзи и название события
+                    # Формат: "☕ Встреча с Настей питья"
+                    first_line = reply_msg.text.split('\n')[0].strip()
+                    # Убираем эмодзи в начале (любые символы до первой буквы)
+                    title_match = re.match(r'^[^\w]*(.+)$', first_line, re.UNICODE)
+                    if title_match:
+                        potential_title = title_match.group(1).strip()
+                        if potential_title and len(potential_title) > 2:
+                            # Ищем событие по названию у этого пользователя
+                            user_events = db.get_events(user_id, limit=50)
+                            for evt in user_events:
+                                if evt.get('title', '').lower() == potential_title.lower():
+                                    reply_event_id = evt.get('id')
+                                    reply_event_title = evt.get('title')
+                                    logger.info(f"📍 Найдено событие из reply текста: ID={reply_event_id}, title='{reply_event_title}'")
+                                    break
+
+            # Обрабатываем через Agent
+            logger.info(f"🤖 Agent processing: text='{update.message.text[:50]}...', reply_event_id={reply_event_id}")
+            agent_result = await agent.process(
+                user_id=user_id,
+                text=update.message.text,
+                user_timezone=user_timezone,
+                reply_event_id=reply_event_id,
+                reply_event_title=reply_event_title
+            )
+
+            if agent_result.status == AgentStatus.SUCCESS:
+                # Агент успешно обработал
+                logger.info(f"✅ Agent обработал: iterations={agent_result.iterations}, tools={agent_result.tool_calls}")
+
+                await update.message.reply_text(
+                    agent_result.message,
+                    reply_markup=agent_result.keyboard,
+                    parse_mode='HTML'
+                )
+                return
+
+            elif agent_result.status == AgentStatus.WAITING:
+                # Агент ожидает ответа пользователя
+                logger.info(f"⏳ Agent ожидает ответа: {agent_result.pending_question}")
+
+                await update.message.reply_text(
+                    agent_result.message,
+                    reply_markup=agent_result.keyboard,
+                    parse_mode='HTML'
+                )
+                return
+
+            elif agent_result.status == AgentStatus.ERROR:
+                # Ошибка агента - пробуем стандартную обработку
+                logger.warning(f"⚠️ Agent error: {agent_result.message}, пробуем стандартную обработку")
+                # Продолжаем выполнение handle_message
+
+            else:
+                # MAX_ITERATIONS или другое - продолжаем стандартную обработку
+                logger.debug(f"Agent: status={agent_result.status}, продолжаем стандартную обработку")
+                # Продолжаем выполнение handle_message
+
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка Agent: {e}, продолжаем стандартную обработку")
+            # При ошибке продолжаем стандартную обработку
+
+    # ─────────────────────────────────────────────────────────────────────────
     # ПРИОРИТЕТ 1: Данные от веб-приложения (Telegram Mini App)
     # СВЯЗЬ: Веб-приложение (web-app/) отправляет данные через tg.sendData()
     # ─────────────────────────────────────────────────────────────────────────
@@ -2447,12 +2603,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 feedback_list = db.get_all_feedback(limit=limit, offset=offset)
                 total_count = db.get_feedback_count()
                 
-                # Формируем ответ
-                from datetime import datetime
+                # Формируем ответ (используем глобальный datetime из line 104)
                 web_feedback = []
                 for item in feedback_list:
                     created_at = item.get('created_at')
-                    if isinstance(created_at, datetime):
+                    if hasattr(created_at, 'isoformat'):
                         created_at_str = created_at.isoformat()
                     elif isinstance(created_at, str):
                         created_at_str = created_at
@@ -3916,7 +4071,7 @@ def main():
     # ШАГ 2: Инициализация глобальных объектов
     # ВАЖНО: Эти объекты используются во всём приложении
     # ─────────────────────────────────────────────────────────────────────────
-    global reminder_scheduler, decision_engine, conversation_memory, conversation_handler
+    global reminder_scheduler, decision_engine, conversation_memory, conversation_handler, agent
     # Инициализируем AI клиент для reminder_scheduler
     from openai import OpenAI
     ai_client = OpenAI(
@@ -3930,7 +4085,58 @@ def main():
     # Инициализируем систему диалогов
     conversation_memory = ConversationMemory(db)
     conversation_handler = ConversationHandler(db, nlp_extractor, decision_engine, conversation_memory)
-    
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ШАГ 2.5: Интеграция с DI контейнером (опционально)
+    # ВАЖНО: Это обеспечивает совместимость с новой архитектурой tracy/
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        from tracy.core.container import Container, set_container
+        from tracy.core.database import DatabaseService
+
+        # Создаём контейнер с существующими сервисами
+        container = Container(
+            config=config,
+            legacy_db=db,
+            database=DatabaseService(db),
+            nlp_extractor=nlp_extractor,
+            media_processor=media_processor,
+            meeting_processor=meeting_processor,
+            reminder_scheduler=reminder_scheduler,
+            intent_processor=decision_engine,
+            conversation_memory=conversation_memory,
+            conversation_handler=conversation_handler,
+        )
+
+        # Сохраняем контейнер в bot_data для доступа из handlers
+        application.bot_data['container'] = container
+        set_container(container)
+
+        logger.info("✅ DI Container интегрирован с существующими сервисами")
+    except ImportError as e:
+        logger.info(f"ℹ️ DI Container не инициализирован (tracy модули не найдены): {e}")
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка инициализации DI Container: {e}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ШАГ 2.6: Инициализация AgentCore - самопрограммирующееся ядро
+    # ВАЖНО: LLM сам решает какие инструменты использовать
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        if AGENT_AVAILABLE:
+            agent = create_agent(
+                db=db,
+                llm_client=nlp_extractor.client,
+                model=config.OPENROUTER_MODEL or "gpt-4o-mini"
+            )
+            logger.info("✅ AgentCore инициализирован - самопрограммирующееся ядро активно")
+        else:
+            logger.info("ℹ️ AgentCore не доступен (tracy.agent не найден)")
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка инициализации AgentCore: {e}")
+        import traceback
+        traceback.print_exc()
+
     # Запускаем планировщик напоминаний через post_init хук
     async def post_init(app: Application) -> None:
         """Инициализация после запуска бота."""
