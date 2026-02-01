@@ -274,10 +274,13 @@ class ReminderScheduler:
             elif reminder_type == 'before':
                 # Напоминание за X времени до события
                 if minutes_before:
-                    if minutes_before >= 60:
+                    if minutes_before >= 1440:  # Дни (24 * 60 = 1440 минут)
+                        days = minutes_before // 1440
+                        time_str = f"{days} {self._pluralize(days, 'день', 'дня', 'дней')}"
+                    elif minutes_before >= 60:  # Часы
                         hours = minutes_before // 60
                         time_str = f"{hours} {self._pluralize(hours, 'час', 'часа', 'часов')}"
-                    else:
+                    else:  # Минуты
                         time_str = f"{minutes_before} {self._pluralize(minutes_before, 'минуту', 'минуты', 'минут')}"
                 else:
                     time_str = "некоторое время"
