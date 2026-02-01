@@ -69,16 +69,25 @@ def check_reminders(user_id=None):
             
             if time_diff < 0:
                 status = "⚠️ ПРОСРОЧЕНО"
-                time_info = f"{-time_diff/60:.1f} минут назад"
+                abs_diff = -time_diff
+                if abs_diff >= 86400:  # Дни
+                    time_info = f"{abs_diff/86400:.1f} дней назад"
+                elif abs_diff >= 3600:  # Часы
+                    time_info = f"{abs_diff/3600:.1f} часов назад"
+                else:
+                    time_info = f"{abs_diff/60:.1f} минут назад"
             elif time_diff < 60:
                 status = "⏰ СЕЙЧАС"
                 time_info = f"через {time_diff:.0f} секунд"
             elif time_diff < 3600:
                 status = "🔔 СКОРО"
                 time_info = f"через {time_diff/60:.1f} минут"
-            else:
+            elif time_diff < 86400:  # Часы (менее 1 дня)
                 status = "📅 БУДУЩЕЕ"
                 time_info = f"через {time_diff/3600:.1f} часов"
+            else:  # Дни (1 день и более)
+                status = "📅 БУДУЩЕЕ"
+                time_info = f"через {time_diff/86400:.1f} дней"
             
             print(f"{status} ID: {reminder_id}")
             print(f"   Событие: {event_title}")
