@@ -540,6 +540,8 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = query.data
 
+    logger.info(f"🔔 CALLBACK: user={user_id}, data={data}")
+
     # ─────────────────────────────────────────────────────────────────────────
     # Agent callbacks (agent_option_*)
     # ─────────────────────────────────────────────────────────────────────────
@@ -578,65 +580,288 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"⚠️ Ошибка обработки Agent callback: {e}")
             # Продолжаем обработку в стандартном режиме
 
-    if data == "list_events_all":
-        # Показываем список всех событий
-        user = db.get_or_create_user(user_id)
-        timezone = user.get('timezone', 'Europe/Moscow')
-        calendar_connections = db.get_calendar_connections(user_id)
-        
-        # Создаем extracted_data для запроса всех событий
-        extracted_data = {
-            'intent': 'list_events',
-            'time_period': 'all',
-            '_original_text': 'покажи все события'
-        }
-        
-        # Получаем список всех событий через decision_engine
-        if not decision_engine:
-            logger.error("decision_engine не инициализирован")
-            await query.answer("Ошибка инициализации. Попробуй перезапустить бота.", show_alert=True)
-            return
-        
-        # Показываем индикатор загрузки
+    if data == "list_events_all" or data.startswith("list_events_page_"):
+        # Показываем список событий в виде кнопок с пагинацией
         await query.answer("Загружаю список событий...")
-        
-        result = await decision_engine._handle_list_events(user_id, extracted_data, calendar_connections, timezone)
-        
-        # Отправляем результат пользователю
-        reply_keyboard = get_reply_keyboard(context)
-        message_text = result['message']
-        
-        # Разбиваем сообщение на части, если оно слишком длинное (Telegram лимит 4096 символов)
-        if len(message_text) > 4000:
-            # Разбиваем на части по строкам
-            parts = []
-            current_part = ""
-            lines = message_text.split('\n')
-            for line in lines:
-                if len(current_part) + len(line) + 1 > 4000:
-                    if current_part:
-                        parts.append(current_part)
-                    current_part = line + '\n'
+
+        # Определяем страницу
+        page = 0
+        if data.startswith("list_events_page_"):
+            try:
+                page = int(data.split("_")[-1])
+            except:
+                page = 0
+
+        EVENTS_PER_PAGE = 5
+
+        # Получаем все события из БД (будущие и сегодняшние)
+        from datetime import datetime, timedelta
+        import pytz
+
+        user = db.get_or_create_user(user_id)
+        tz_name = user.get('timezone', 'Europe/Moscow')
+        try:
+            tz = pytz.timezone(tz_name)
+        except:
+            tz = pytz.timezone('Europe/Moscow')
+
+        now = datetime.now(tz)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Получаем события начиная с сегодня
+        all_events = db.get_events(user_id, limit=200, start_from=today_start)
+
+        # Сортируем по дате (раньше = выше)
+        all_events.sort(key=lambda e: e.get('start_time') or e.get('date') or datetime.min)
+
+        total_events = len(all_events)
+        total_pages = (total_events + EVENTS_PER_PAGE - 1) // EVENTS_PER_PAGE if total_events > 0 else 1
+
+        if total_events == 0:
+            keyboard = [[InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]]
+            await query.edit_message_text(
+                "📋 У тебя пока нет предстоящих событий.\n\n"
+                "Напиши мне что-нибудь вроде:\n"
+                "• \"Встреча завтра в 15:00\"\n"
+                "• \"Обед с Катей в пятницу в 13:00\"",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+
+        # Получаем события для текущей страницы
+        start_idx = page * EVENTS_PER_PAGE
+        end_idx = start_idx + EVENTS_PER_PAGE
+        page_events = all_events[start_idx:end_idx]
+
+        # Создаём кнопки с событиями
+        keyboard = []
+        weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+        for event in page_events:
+            event_id = event.get('id')
+            title = event.get('title', 'Без названия')
+
+            # Получаем дату
+            start_time = event.get('start_time')
+            if isinstance(start_time, str):
+                try:
+                    start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                except:
+                    start_time = None
+
+            if start_time:
+                # Локализуем время
+                if start_time.tzinfo is None:
+                    start_time = tz.localize(start_time)
                 else:
-                    current_part += line + '\n'
-            if current_part:
-                parts.append(current_part)
-            
-            # Отправляем первую часть, редактируя исходное сообщение
-            await query.edit_message_text(parts[0], parse_mode="Markdown", reply_markup=None)
-            
-            # Отправляем остальные части как отдельные сообщения
-            for part in parts[1:]:
-                await query.message.reply_text(part, parse_mode="Markdown")
+                    start_time = start_time.astimezone(tz)
+
+                day_name = weekdays[start_time.weekday()]
+                date_str = start_time.strftime(f"{day_name}, %d.%m %H:%M")
+            else:
+                date_str = "Дата не указана"
+
+            # Обрезаем название если слишком длинное
+            max_title_len = 25
+            if len(title) > max_title_len:
+                title = title[:max_title_len-2] + ".."
+
+            button_text = f"📅 {title} — {date_str}"
+            keyboard.append([InlineKeyboardButton(button_text, callback_data=f"event_action_{event_id}")])
+
+        # Кнопки навигации
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"list_events_page_{page-1}"))
+        if page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton("Вперёд ➡️", callback_data=f"list_events_page_{page+1}"))
+
+        if nav_buttons:
+            keyboard.append(nav_buttons)
+
+        # Кнопка в меню
+        keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="menu_show")])
+
+        header_text = f"📋 *Твои события* (стр. {page+1}/{total_pages})\n\n" \
+                      f"Всего событий: {total_events}\n" \
+                      f"Выбери событие для действий:"
+
+        await query.edit_message_text(
+            header_text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    elif data.startswith("event_action_"):
+        # Показываем действия для конкретного события
+        logger.info(f"📌 event_action_ callback: data={data}")
+        try:
+            event_id = int(data.split("_")[-1])
+            logger.info(f"📌 Parsed event_id={event_id}")
+        except Exception as e:
+            logger.error(f"📌 Error parsing event_id: {e}")
+            await query.answer("Ошибка: неверный ID события", show_alert=True)
+            return
+
+        # Получаем событие из БД
+        event = db.get_event(event_id)
+        logger.info(f"📌 db.get_event result: {event}")
+
+        if not event:
+            await query.answer("Событие не найдено", show_alert=True)
+            return
+
+        # Проверяем что событие принадлежит пользователю
+        if event.get('user_id') != user_id:
+            await query.answer("Это не твоё событие", show_alert=True)
+            return
+
+        title = event.get('title', 'Без названия')
+        description = event.get('description', '')
+
+        # Форматируем время
+        import pytz
+        user = db.get_or_create_user(user_id)
+        tz_name = user.get('timezone', 'Europe/Moscow')
+        try:
+            tz = pytz.timezone(tz_name)
+        except:
+            tz = pytz.timezone('Europe/Moscow')
+
+        start_time = event.get('start_time')
+        end_time = event.get('end_time')
+
+        if isinstance(start_time, str):
+            try:
+                start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            except:
+                start_time = None
+
+        if isinstance(end_time, str):
+            try:
+                end_time = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            except:
+                end_time = None
+
+        time_str = ""
+        if start_time:
+            if start_time.tzinfo is None:
+                start_time = tz.localize(start_time)
+            else:
+                start_time = start_time.astimezone(tz)
+
+            weekdays = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+            day_name = weekdays[start_time.weekday()]
+            time_str = f"📆 {day_name.capitalize()}, {start_time.strftime('%d.%m.%Y')}\n"
+            time_str += f"🕐 {start_time.strftime('%H:%M')}"
+
+            if end_time:
+                if end_time.tzinfo is None:
+                    end_time = tz.localize(end_time)
+                else:
+                    end_time = end_time.astimezone(tz)
+                time_str += f" — {end_time.strftime('%H:%M')}"
+
+        event_text = f"📅 *{title}*\n\n"
+        if time_str:
+            event_text += f"{time_str}\n\n"
+        if description:
+            event_text += f"📝 {description}\n\n"
+        event_text += "Что хочешь сделать?"
+
+        keyboard = [
+            [InlineKeyboardButton("🗑 Удалить", callback_data=f"event_delete_{event_id}")],
+            [InlineKeyboardButton("📝 Перенести", callback_data=f"event_reschedule_{event_id}")],
+            [InlineKeyboardButton("⬅️ К списку", callback_data="list_events_all")],
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="menu_show")]
+        ]
+
+        await query.edit_message_text(
+            event_text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    elif data.startswith("event_delete_"):
+        # Удаляем событие
+        try:
+            event_id = int(data.split("_")[-1])
+        except:
+            await query.answer("Ошибка: неверный ID события", show_alert=True)
+            return
+
+        # Получаем событие для проверки
+        event = db.get_event(event_id)
+
+        if not event:
+            await query.answer("Событие уже удалено", show_alert=True)
+            return
+
+        if event.get('user_id') != user_id:
+            await query.answer("Это не твоё событие", show_alert=True)
+            return
+
+        title = event.get('title', 'Событие')
+
+        # Удаляем
+        success = db.delete_event(event_id, user_id)
+
+        if success:
+            await query.answer(f"✅ \"{title}\" удалено!", show_alert=True)
+
+            # Возвращаемся к списку событий
+            # Имитируем нажатие на list_events_all
+            keyboard = [[InlineKeyboardButton("📋 К списку событий", callback_data="list_events_all")],
+                       [InlineKeyboardButton("🏠 Главное меню", callback_data="menu_show")]]
+
+            await query.edit_message_text(
+                f"✅ Событие *\"{title}\"* успешно удалено!",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         else:
-            # Сообщение помещается в одно - отправляем его
-            await query.edit_message_text(message_text, parse_mode="Markdown", reply_markup=None)
-        
-        # Добавляем кнопку "Назад в меню" в отдельном сообщении
-        keyboard = [[InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_show")]]
-        inline_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.reply_text("⬅️ Назад в меню:", reply_markup=inline_markup)
-        
+            await query.answer("Ошибка при удалении", show_alert=True)
+        return
+
+    elif data.startswith("event_reschedule_"):
+        # Запрашиваем новую дату/время для переноса
+        try:
+            event_id = int(data.split("_")[-1])
+        except:
+            await query.answer("Ошибка: неверный ID события", show_alert=True)
+            return
+
+        event = db.get_event(event_id)
+
+        if not event:
+            await query.answer("Событие не найдено", show_alert=True)
+            return
+
+        if event.get('user_id') != user_id:
+            await query.answer("Это не твоё событие", show_alert=True)
+            return
+
+        title = event.get('title', 'Событие')
+
+        # Сохраняем в user_data что ожидаем новую дату
+        context.user_data['reschedule_event_id'] = event_id
+        context.user_data['reschedule_event_title'] = title
+        logger.info(f"📝 Set reschedule_event_id={event_id} in user_data for user {user_id}")
+
+        keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data=f"event_action_{event_id}")]]
+
+        await query.edit_message_text(
+            f"📝 *Перенос события*\n\n"
+            f"Событие: *{title}*\n\n"
+            f"Напиши новую дату и время, например:\n"
+            f"• \"завтра в 15:00\"\n"
+            f"• \"в пятницу в 10:30\"\n"
+            f"• \"25 января в 14:00\"",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return
     
     elif data == "settings_google":
@@ -2371,6 +2596,129 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"📄 DOCUMENT: file_name={doc.file_name}, mime_type={doc.mime_type}, file_size={doc.file_size}")
         if msg.text:
             logger.info(f"📝 TEXT: {msg.text[:100] if len(msg.text) > 100 else msg.text}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ПРИОРИТЕТ -1: Обработка переноса события (reschedule)
+    # Если пользователь вводит новую дату после нажатия "Перенести"
+    # ─────────────────────────────────────────────────────────────────────────
+    logger.info(f"🔄 reschedule check: reschedule_event_id={context.user_data.get('reschedule_event_id')}")
+    if context.user_data.get('reschedule_event_id') and update.message and update.message.text:
+        logger.info(f"🔄 Processing reschedule for event {context.user_data.get('reschedule_event_id')}")
+        event_id = context.user_data.get('reschedule_event_id')
+        event_title = context.user_data.get('reschedule_event_title', 'Событие')
+        new_datetime_text = update.message.text.strip()
+
+        # Очищаем состояние
+        del context.user_data['reschedule_event_id']
+        if 'reschedule_event_title' in context.user_data:
+            del context.user_data['reschedule_event_title']
+
+        # Парсим новую дату/время
+        import dateparser
+        import pytz
+
+        user = db.get_or_create_user(user_id)
+        tz_name = user.get('timezone', 'Europe/Moscow')
+        try:
+            tz = pytz.timezone(tz_name)
+        except:
+            tz = pytz.timezone('Europe/Moscow')
+
+        now = datetime.now(tz)
+
+        parsed_dt = dateparser.parse(
+            new_datetime_text,
+            languages=['ru', 'en'],
+            settings={
+                'TIMEZONE': tz_name,
+                'RETURN_AS_TIMEZONE_AWARE': False,
+                'RELATIVE_BASE': now.replace(tzinfo=None),
+                'PREFER_DATES_FROM': 'future'
+            }
+        )
+
+        if not parsed_dt:
+            # Не удалось распарсить
+            keyboard = [
+                [InlineKeyboardButton("📝 Попробовать снова", callback_data=f"event_reschedule_{event_id}")],
+                [InlineKeyboardButton("❌ Отмена", callback_data=f"event_action_{event_id}")]
+            ]
+            await update.message.reply_text(
+                f"❌ Не удалось распознать дату/время: *{new_datetime_text}*\n\n"
+                f"Попробуй другой формат:\n"
+                f"• \"завтра в 15:00\"\n"
+                f"• \"в пятницу в 10:30\"\n"
+                f"• \"25.01 в 14:00\"",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+
+        # Если время в прошлом - переносим на следующий день
+        if tz.localize(parsed_dt) < now:
+            parsed_dt = parsed_dt + timedelta(days=1)
+
+        # Получаем старое событие для расчёта длительности
+        old_event = db.get_event(event_id)
+        if not old_event:
+            await update.message.reply_text("❌ Событие не найдено")
+            return
+
+        # Рассчитываем длительность и новое время окончания
+        old_start = old_event.get('start_time')
+        old_end = old_event.get('end_time')
+
+        if isinstance(old_start, str):
+            try:
+                old_start = datetime.fromisoformat(old_start.replace('Z', '+00:00'))
+                if old_start.tzinfo:
+                    old_start = old_start.replace(tzinfo=None)
+            except:
+                old_start = None
+
+        if isinstance(old_end, str):
+            try:
+                old_end = datetime.fromisoformat(old_end.replace('Z', '+00:00'))
+                if old_end.tzinfo:
+                    old_end = old_end.replace(tzinfo=None)
+            except:
+                old_end = None
+
+        # Считаем длительность (по умолчанию 1 час)
+        if old_start and old_end:
+            duration = old_end - old_start
+        else:
+            duration = timedelta(hours=1)
+
+        new_start = parsed_dt
+        new_end = parsed_dt + duration
+
+        # Обновляем событие в БД
+        success = db.update_event(event_id, start_time=new_start, end_time=new_end)
+
+        if success:
+            weekdays = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+            day_name = weekdays[new_start.weekday()]
+
+            keyboard = [
+                [InlineKeyboardButton("📋 К списку событий", callback_data="list_events_all")],
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="menu_show")]
+            ]
+
+            await update.message.reply_text(
+                f"✅ *Событие перенесено!*\n\n"
+                f"📅 *{event_title}*\n"
+                f"📆 {day_name.capitalize()}, {new_start.strftime('%d.%m.%Y')}\n"
+                f"🕐 {new_start.strftime('%H:%M')} — {new_end.strftime('%H:%M')}",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Ошибка при обновлении события. Попробуй ещё раз.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_show")]])
+            )
+        return
 
     # ─────────────────────────────────────────────────────────────────────────
     # ПРИОРИТЕТ 0: AgentCore - самопрограммирующееся ядро
@@ -4271,6 +4619,9 @@ def main():
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^reschedule_event_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^feedback_"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern="^list_events_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^event_action_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^event_delete_"))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern="^event_reschedule_"))
     
     # Обработчик голосовых сообщений (отдельно для лучшей отладки)
     application.add_handler(MessageHandler(

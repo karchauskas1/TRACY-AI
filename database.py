@@ -1096,7 +1096,37 @@ class Database:
             return []
         finally:
             self.return_connection(conn)
-    
+
+    def get_event(self, event_id: int) -> Optional[Dict]:
+        """Получить одно событие по ID."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        try:
+            param_placeholder = "%s" if self.use_postgresql else "?"
+            query = f"SELECT * FROM events WHERE id = {param_placeholder}"
+
+            cursor.execute(query, (event_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            # Конвертируем в словарь
+            if self.use_postgresql:
+                # PostgreSQL возвращает кортеж, нужно получить имена колонок
+                columns = [desc[0] for desc in cursor.description]
+                return dict(zip(columns, row))
+            else:
+                # SQLite с Row factory
+                return dict(row)
+
+        except Exception as e:
+            logger.error(f"Ошибка get_event: {e}", exc_info=True)
+            return None
+        finally:
+            self.return_connection(conn)
+
     def get_events(self, user_id: int, limit: int = 50, start_from: Optional[datetime] = None,
                    start_to: Optional[datetime] = None) -> List[Dict]:
         """Получить события пользователя в заданном диапазоне."""
