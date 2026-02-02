@@ -43,9 +43,12 @@ FLOW ДИАЛОГА:
 
 ==============================================================================
 """
+import json
 import logging
 from typing import Dict, Optional
 
+from calendar_google import GoogleCalendar
+from calendar_icloud import ICloudCalendar
 
 logger = logging.getLogger(__name__)
 
@@ -303,11 +306,25 @@ class ConversationHandler:
         if event.get('external_id') and event.get('provider'):
             try:
                 if event['provider'] == 'google':
-                    # TODO: Вызвать GoogleCalendar.delete_event()
-                    pass
+                    calendar = GoogleCalendar(user_id)
+                    calendar.delete_event(event['external_id'])
+                    logger.info(f"✓ Событие удалено из Google Calendar: {event['external_id']}")
                 elif event['provider'] == 'icloud':
-                    # TODO: Вызвать ICloudCalendar.delete_event()
-                    pass
+                    # Получаем подключения календарей пользователя
+                    calendar_connections = self.db.get_calendar_connections(user_id)
+                    conn = next((c for c in calendar_connections if c['provider'] == 'icloud'), None)
+                    if conn:
+                        # Загружаем credentials из БД
+                        credentials = json.loads(conn['credentials'])
+                        calendar = ICloudCalendar(
+                            user_id=user_id,
+                            caldav_url=credentials.get('caldav_url', 'https://caldav.icloud.com'),
+                            username=credentials.get('username'),
+                            password=credentials.get('password')
+                        )
+
+                        calendar.delete_event(event['external_id'])
+                        logger.info(f"✓ Событие удалено из iCloud Calendar: {event['external_id']}")
             except Exception as e:
                 logger.error(f"Ошибка удаления из внешнего календаря: {e}")
 
